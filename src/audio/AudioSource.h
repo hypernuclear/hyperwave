@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 
+#include "audio/AudioDevice.h"
 #include "audio/AudioProcess.h"
 #include "audio/AudioRing.h"
 #include "dsp/FrameState.h"
@@ -53,23 +54,25 @@ public:
     // cannot say.
     virtual AudioProcessList audioProcesses() const { return {}; }
 
-    // Listen to one application instead of the whole system mix. An empty
-    // bundle id means everything, which is the default.
+    // Every output device the system knows about.
+    virtual AudioDeviceList audioDevices() const { return {}; }
+    // Listen to one output device instead of the whole system mix. An empty uid
+    // means everything, which is the default and follows the default output
+    // device as the user changes it.
     //
-    // Keyed by bundle id rather than by process object id, because the object
-    // ids are only meaningful within a single run and this is a preference that
-    // has to survive a relaunch of both this app and the one being listened to.
-    virtual bool setSourceBundleId(const QString &bundleId)
+    // Keyed by device uid because that is stable across launches, unlike the
+    // AudioObjectID, and this is a preference that has to survive a restart.
+    virtual bool setSourceDeviceUid(const QString &uid)
     {
-        Q_UNUSED(bundleId);
+        Q_UNUSED(uid);
         return false;
     }
-    virtual QString sourceBundleId() const { return {}; }
+    virtual QString sourceDeviceUid() const { return {}; }
 
 Q_SIGNALS:
     void permissionStateChanged(int state);
     void formatChanged(double sampleRate, unsigned epoch);
-    void sourceChanged(const QString &bundleId);
+    void sourceChanged(const QString &uid);
     void processesChanged();
 };
 

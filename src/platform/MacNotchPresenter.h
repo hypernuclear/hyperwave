@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "audio/AudioProcess.h"
+#include "audio/AudioDevice.h"
 #include "app/NowPlaying.h"
 #include "platform/BarPresenter.h"
 
@@ -86,8 +86,8 @@ public:
     void emitMenuAction(const QString &actionId);
     void handleHover(bool inside);
     void handleTransport(int command);
-    void handleSourcePick(const QString &bundleId);
-    void setSources(const AudioProcessList &processes, const QString &current);
+    void handleSourcePick(const QString &uid);
+    void setDevices(const AudioDeviceList &devices, const QString &current);
     void showMenu();
 
 Q_SIGNALS:

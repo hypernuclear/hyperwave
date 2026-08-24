@@ -46,8 +46,9 @@ public:
     }
     QString statusDetail() const override { return m_statusDetail; }
     AudioProcessList audioProcesses() const override;
-    bool setSourceBundleId(const QString &bundleId) override;
-    QString sourceBundleId() const override { return m_sourceBundleId; }
+    AudioDeviceList audioDevices() const override;
+    bool setSourceDeviceUid(const QString &uid) override;
+    QString sourceDeviceUid() const override { return m_sourceDeviceUid; }
 
     // True when the aggregate had to include the default output device, which
     // makes us an output client of the user's speakers. Surfaced because it
@@ -93,7 +94,7 @@ private:
     bool m_running = false;
     bool m_isOutputClient = false;
     PermissionState m_permission = PermissionState::Unknown;
-    QString m_sourceBundleId;   // empty means the whole system mix
+    QString m_sourceDeviceUid;  // empty means the whole system mix
     QString m_sourceNote;       // why the requested source was not honoured
     QString m_statusDetail;
 };

@@ -33,11 +33,11 @@ public:
     // Halves the frame rate. Default on when the machine is in Low Power Mode.
     bool halfRateOnBattery() const;
     void setHalfRateOnBattery(bool enabled);
-    // Bundle id of the app to listen to; empty means the whole system mix.
-    // Stored rather than the process object id, which is only meaningful for
-    // the run that produced it.
-    QString sourceBundleId() const;
-    void setSourceBundleId(const QString &bundleId);
+    // UID of the output device to listen to; empty means the whole system mix.
+    // Stored rather than the AudioObjectID, which is only meaningful for the run
+    // that produced it.
+    QString sourceDeviceUid() const;
+    void setSourceDeviceUid(const QString &uid);
     // Track titles and transport controls need an Automation grant per
     // controlled app, so they stay off until asked for. The app's whole first
     // run is otherwise a single clean permission question.
@@ -52,7 +52,7 @@ public:
 Q_SIGNALS:
     void gradientIdChanged(const QString &id);
     void compactChanged(bool compact);
-    void sourceBundleIdChanged(const QString &bundleId);
+    void sourceDeviceUidChanged(const QString &uid);
     void nowPlayingEnabledChanged(bool enabled);
     void notchAutoHideChanged(bool enabled);
 

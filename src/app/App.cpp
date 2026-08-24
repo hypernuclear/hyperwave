@@ -109,11 +109,9 @@ bool App::start()
         // Print what the audio system will admit to and exit. Cheaper than
         // guessing bundle ids, and it doubles as a check that the process probe
         // is returning un-redacted names.
-        for (const AudioProcess &process : m_audio->source()->audioProcesses()) {
-            if (!process.isNamed() && !process.playingOutput)
-                continue;
-            qInfo("%-9s %-42s %s", process.playingOutput ? "PLAYING" : "-",
-                  qPrintable(process.bundleId), qPrintable(process.name));
+        for (const AudioDevice &device : m_audio->source()->audioDevices()) {
+            qInfo("%-8s %-34s %s", device.isDefaultOutput ? "OUTPUT" : "-",
+                  qPrintable(device.name), qPrintable(device.uid));
         }
         QTimer::singleShot(0, qApp, &QCoreApplication::quit);
         return true;
@@ -135,10 +133,10 @@ bool App::start()
 
     // The source is chosen before capture starts, so the first tap is built for
     // the right processes rather than being torn down and rebuilt immediately.
-    const QString source = m_options.sourceBundleId.isEmpty() ? m_settings.sourceBundleId()
+    const QString source = m_options.sourceBundleId.isEmpty() ? m_settings.sourceDeviceUid()
                                                               : m_options.sourceBundleId;
     if (!source.isEmpty())
-        m_audio->source()->setSourceBundleId(source);
+        m_audio->source()->setSourceDeviceUid(source);
 
     m_audio->start();
     QMetaObject::invokeMethod(m_worker, &DspWorker::setFormat, Qt::QueuedConnection,
@@ -402,43 +400,31 @@ void App::onPermissionChanged(int state)
 MenuModel App::buildMenu() const
 {
     MenuModel menu;
-
-    const QString source = m_audio->source()->sourceBundleId();
-    menu.append(MenuItem::action(QLatin1String(MenuAction::kSourcePrefix),
-                                 QStringLiteral("All system audio"))
-                    .withCheck(source.isEmpty()));
-
-    AudioProcessList processes = m_audio->source()->audioProcesses();
-
-    // Named applications only. The list is otherwise mostly faceless helpers
-    // and CLI tools -- afplay, for one, has no bundle id at all and so cannot
-    // be selected by one even though it happily makes noise.
-    processes.removeIf(
-        [](const AudioProcess &p) { return !p.isNamed() || p.bundleId.isEmpty(); });
-
-    // Things currently making noise first, then alphabetically. Sorting by name
-    // alone buries whatever you actually want to pick.
-    std::sort(processes.begin(), processes.end(),
-              [](const AudioProcess &a, const AudioProcess &b) {
-                  if (a.playingOutput != b.playingOutput)
-                      return a.playingOutput;
-                  return a.name.localeAwareCompare(b.name) < 0;
-              });
-
-    if (!processes.isEmpty()) {
-        menu.append(MenuItem::separator());
-        for (const AudioProcess &process : processes) {
-            menu.append(
-                MenuItem::action(QLatin1String(MenuAction::kSourcePrefix) + process.bundleId,
-                                 process.name)
-                    .withCheck(process.bundleId == source)
-                    .withIcon(process.bundleId)
-                    .withDetail(process.playingOutput ? QStringLiteral("playing") : QString()));
-        }
+    // Sources as a submenu, not a flat list.
+    //
+    // Inline, ten output devices pushed everything else off the bottom of the
+    // menu; one row that opens on demand keeps the menu the size of the app.
+    const QString source = m_audio->source()->sourceDeviceUid();
+    const AudioDeviceList devices = m_audio->source()->audioDevices();
+    MenuModel sources;
+    sources.append(MenuItem::action(QLatin1String(MenuAction::kSourcePrefix),
+                                    QStringLiteral("All system audio"))
+                       .withCheck(source.isEmpty()));
+    if (!devices.isEmpty())
+        sources.append(MenuItem::separator());
+    QString activeName = QStringLiteral("All system audio");
+    for (const AudioDevice &device : devices) {
+        sources.append(
+            MenuItem::action(QLatin1String(MenuAction::kSourcePrefix) + device.uid, device.name)
+                .withCheck(device.uid == source)
+                .withDetail(device.isDefaultOutput ? QStringLiteral("output") : QString()));
+        if (device.uid == source)
+            activeName = device.name;
     }
-
+    // The submenu's own row says what is selected, so the answer is visible
+    // without opening it.
+    menu.append(MenuItem::submenu(QStringLiteral("Source"), sources).withDetail(activeName));
     menu.append(MenuItem::separator());
-
     MenuModel gradients;
     const QString activeGradient = m_settings.gradientId();
     for (const GradientPreset &preset : Palette::presets()) {
@@ -450,27 +436,28 @@ MenuModel App::buildMenu() const
     gradients.append(MenuItem::action(QLatin1String(MenuAction::kToggleCompact),
                                       QStringLiteral("Compact strip"))
                          .withCheck(m_settings.compact()));
+    if (m_notchSurface) {
+        gradients.append(MenuItem::action(QLatin1String(MenuAction::kToggleAutoHide),
+                                          QStringLiteral("Hide notch panel when silent"))
+                             .withCheck(m_settings.notchAutoHide()));
+    }
     menu.append(MenuItem::submenu(QStringLiteral("Appearance"), gradients));
-
     menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleNowPlaying),
                                  QStringLiteral("Track info and controls"))
                     .withCheck(m_settings.nowPlayingEnabled()));
-    if (m_notchSurface) {
-        menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleAutoHide),
-                                     QStringLiteral("Hide notch panel when silent"))
-                        .withCheck(m_settings.notchAutoHide()));
+    // Always offered, never conditional on an accusation.
+    //
+    // This used to appear only when the app had concluded it was being denied,
+    // which was worse than useless: the conclusion was unreliable, so it turned
+    // up on a working install and stayed hidden on the one occasion someone
+    // would want it. One permanent row costs nothing and is always correct.
+    menu.append(MenuItem::separator());
+    menu.append(MenuItem::action(QLatin1String(MenuAction::kRequestPermission),
+                                 QStringLiteral("System Audio Access…")));
+    if (m_audio->needsRestartToRecover()) {
+        menu.append(MenuItem::action(QLatin1String(MenuAction::kRestart),
+                                     QStringLiteral("Restart hyperlight")));
     }
-
-    if (m_audio->permission() == PermissionState::LikelyDenied) {
-        menu.append(MenuItem::separator());
-        menu.append(MenuItem::action(QLatin1String(MenuAction::kRequestPermission),
-                                     QStringLiteral("Enable System Audio Access…")));
-        if (m_audio->needsRestartToRecover()) {
-            menu.append(MenuItem::action(QLatin1String(MenuAction::kRestart),
-                                         QStringLiteral("Restart hyperlight")));
-        }
-    }
-
     menu.append(MenuItem::separator());
     menu.append(
         MenuItem::action(QLatin1String(MenuAction::kAbout), QStringLiteral("About hyperlight")));
@@ -478,7 +465,6 @@ MenuModel App::buildMenu() const
         MenuItem::action(QLatin1String(MenuAction::kQuit), QStringLiteral("Quit hyperlight")));
     return menu;
 }
-
 void App::refreshMenu()
 {
     const MenuModel menu = buildMenu();
@@ -488,8 +474,8 @@ void App::refreshMenu()
     }
     if (m_notchSurface) {
         auto *notch = static_cast<MacNotchPresenter *>(m_notchSurface->presenter.get());
-        notch->setSources(m_audio->source()->audioProcesses(),
-                          m_audio->source()->sourceBundleId());
+        notch->setDevices(m_audio->source()->audioDevices(),
+                          m_audio->source()->sourceDeviceUid());
     }
 }
 
@@ -499,24 +485,22 @@ void App::refreshNowPlaying()
     if (!m_notchSurface)
         return;
 
-    // Which app to ask about. When a specific source is selected that is the
-    // obvious answer; otherwise the loudest thing on the machine is whatever is
-    // currently producing output, and if several are, the first named one will
-    // do -- guessing between two simultaneous players is not worth the code.
-    QString bundleId = m_audio->source()->sourceBundleId();
+    // Which app to ask about.
+    //
+    // Deliberately not "whichever process reports IsRunningOutput": that
+    // property means a process holds an open output stream, not that it is
+    // making a sound, so it picks the 3D editor that has had an idle audio
+    // context open since launch. Asking only the apps we can actually read, in
+    // a fixed order, is less clever and more often right.
+    QString bundleId;
     QString appName;
-
     for (const AudioProcess &process : m_audio->source()->audioProcesses()) {
-        if (!process.playingOutput || !process.isNamed())
+        if (!process.isNamed() || !NowPlaying::isSupported(process.bundleId))
             continue;
-        if (bundleId.isEmpty())
-            bundleId = process.bundleId;
-        if (process.bundleId == bundleId) {
-            appName = process.name;
-            break;
-        }
+        bundleId = process.bundleId;
+        appName = process.name;
+        break;
     }
-
     m_nowPlaying->setBundleId(bundleId);
 
     auto *notch = static_cast<MacNotchPresenter *>(m_notchSurface->presenter.get());
@@ -530,9 +514,9 @@ void App::onMenuAction(const QString &actionId)
     const QLatin1String gradientPrefix(MenuAction::kGradientPrefix);
 
     if (actionId.startsWith(sourcePrefix)) {
-        const QString bundleId = actionId.mid(sourcePrefix.size());
-        m_settings.setSourceBundleId(bundleId);
-        m_audio->source()->setSourceBundleId(bundleId);
+        const QString uid = actionId.mid(sourcePrefix.size());
+        m_settings.setSourceDeviceUid(uid);
+        m_audio->source()->setSourceDeviceUid(uid);
         // The tap was torn down and rebuilt, so the analysis is looking at a
         // stale rolling buffer at a possibly different rate.
         QMetaObject::invokeMethod(m_worker, &DspWorker::setFormat, Qt::QueuedConnection,

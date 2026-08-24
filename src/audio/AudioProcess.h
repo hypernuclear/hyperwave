@@ -19,6 +19,10 @@ struct AudioProcess
     qint64 pid = 0;
     QString bundleId;
     QString name;      // localised application name, empty for faceless helpers
+    // CAUTION: this is kAudioProcessPropertyIsRunningOutput, which means the
+    // process holds an open output stream -- NOT that it is making a sound. An
+    // app that opened an audio context at launch and has been silent ever since
+    // still reports true. Do not present it to anyone as "playing".
     bool playingOutput = false;
 
     bool isNamed() const { return !name.isEmpty(); }

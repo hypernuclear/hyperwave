@@ -8,7 +8,7 @@ namespace {
 constexpr const char *kGradientKey = "appearance/gradient";
 constexpr const char *kCompactKey = "appearance/compact";
 constexpr const char *kHalfRateKey = "power/halfRateOnBattery";
-constexpr const char *kSourceKey = "audio/sourceBundleId";
+constexpr const char *kSourceKey = "audio/sourceDeviceUid";
 constexpr const char *kNowPlayingKey = "nowPlaying/enabled";
 constexpr const char *kNotchAutoHideKey = "notch/autoHide";
 } // namespace
@@ -54,16 +54,16 @@ void Settings::setHalfRateOnBattery(bool enabled)
 {
     m_store.setValue(QLatin1String(kHalfRateKey), enabled);
 }
-QString Settings::sourceBundleId() const
+QString Settings::sourceDeviceUid() const
 {
     return m_store.value(QLatin1String(kSourceKey), QString()).toString();
 }
-void Settings::setSourceBundleId(const QString &bundleId)
+void Settings::setSourceDeviceUid(const QString &uid)
 {
-    if (sourceBundleId() == bundleId)
+    if (sourceDeviceUid() == uid)
         return;
-    m_store.setValue(QLatin1String(kSourceKey), bundleId);
-    Q_EMIT sourceBundleIdChanged(bundleId);
+    m_store.setValue(QLatin1String(kSourceKey), uid);
+    Q_EMIT sourceDeviceUidChanged(uid);
 }
 bool Settings::nowPlayingEnabled() const
 {

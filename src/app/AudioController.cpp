@@ -94,33 +94,23 @@ void AudioController::evaluatePermission()
     if (m_permission == PermissionState::Unsupported)
         return;
 
-    if (m_sinceStart.elapsed() < kGraceMs)
-        return;
-
-    if (m_silenceRun < kDeniedSilenceFrames)
-        return;
-
-    // Signal A says we are hearing exact zeros. On its own that is worthless --
-    // a machine with nothing playing produces exactly the same thing. Signal B
-    // is the independent oracle: if some other process is demonstrably
-    // outputting audio and we are still hearing nothing, the difference is us.
-#ifdef Q_OS_MACOS
-    if (!AudioProcessProbe::isAvailable())
-        return;
-    if (!AudioProcessProbe::isAnyOtherProcessOutputting()) {
-        // Nothing is playing. That is the ordinary resting state of a machine
-        // and it is not a problem, so say nothing at all.
-        return;
-    }
-#else
-    return;
-#endif
-
-    if (m_permission != PermissionState::LikelyDenied) {
-        qInfo("hyperlight: something is playing but the tap is silent; "
-              "treating system audio access as denied");
-        setPermission(PermissionState::LikelyDenied);
-    }
+    // And that is as far as it goes. Silence is never treated as denial.
+    //
+    // The original design cross-checked a run of exact zeros against
+    // kAudioProcessPropertyIsRunningOutput, on the theory that "we hear nothing
+    // while something else is demonstrably playing" could only mean we were
+    // being refused. That theory was wrong about the property: it reports
+    // whether a process holds an open output IO, not whether it is making a
+    // sound. Measured on an idle machine, a 3D editor and a paused music player
+    // both reported yes with the room silent -- so the probe concluded denial
+    // on a working, granted, perfectly healthy tap.
+    //
+    // There is no property that answers "is this process audible", so there is
+    // no second signal to be had. The honest position is that a silent tap is
+    // indistinguishable from a silent machine, and the only hard evidence of
+    // denial is AudioHardwareCreateProcessTap failing outright, which start()
+    // already reports. Everything else stays Probing, and the menu offers a way
+    // to check the permission at any time rather than waiting to accuse.
 }
 
 void AudioController::requestPermission()

@@ -39,8 +39,7 @@ too crowded for more than 14.
 ![expanded](docs/notch-expanded.png)
 
 Hover and it drops down: bigger bars, what is playing, transport controls, and a
-row of every app currently producing audio — click one to point the visualiser
-at it.
+dropdown for the audio source.
 **Right-click the panel for the menu.** That is not a convenience; it is the
 only way in on the display this panel exists for. If the status item has been
 crowded under the notch, "click the status item" is not an available answer.
@@ -50,29 +49,44 @@ physical cutout, so nothing shows — which keeps the notch hoverable. Hovering 
 retracted panel still opens it, so there is always a route to the menu and the
 app list even when the status item is invisible and nothing is making noise.
 
-## What is playing
-
-Clicking the status item lists every application currently producing audio, by
-name and icon, and lets you point the visualiser at one of them instead of the
-whole system mix. Watching only Spotify means Slack pings and Zoom joins stop
-jolting the bars.
-
-Track titles and transport controls are **off by default**, behind "Track info
-and controls" in the menu, because switching them on is what triggers a second
-permission prompt.
-
+## Choosing a source
+The source list is **output devices**, not applications.
+Applications were the wrong axis twice over. CoreAudio will tell you whether a
+process holds an open output stream — `kAudioProcessPropertyIsRunningOutput` —
+but not whether it is actually making a sound, and there is no property that
+does. Measured on an idle machine, a 3D editor and a paused music player both
+reported "playing" with the room silent. And a Mac with a virtual device, an
+audio interface and three monitors has a genuinely interesting choice of *where*
+sound is going, which an app list cannot express at all.
+So: `Source ▸` in the menu, and a dropdown in the notch panel, both listing
+every device with output channels and marking the current one. Picking one taps
+`CATapDescription initExcludingProcesses:andDeviceUID:withStream:` — still a
+whole-system mix, restricted to one destination. Verified by tapping the
+built-in speakers while audio was routed to a virtual device: the tap stayed
+alive and reported −120 dB.
+**Right-click the notch panel for the menu.** That is not a convenience; it is
+the only way in on the display the panel exists for. If the status item has been
+crowded under the notch, "click the status item" is not an available answer.
+Off by default, behind "Track info and controls", because switching it on is
+what triggers a second permission prompt.
 That is not where this was meant to land. `MediaRemote` is the private framework
 every app used for this, and on macOS 26 it still loads and every symbol still
 resolves — but since 15.4 it is gated behind
 `com.apple.mediaremote.send-command`, an entitlement Apple does not issue to
 third parties. `MRMediaRemoteGetNowPlayingInfo` fires its callback with an empty
 dictionary while music is demonstrably playing.
-
 The fallback is AppleScript, which works but is per-application: Spotify and
-Music publish scripting dictionaries, browsers do not. Audio from a YouTube tab
-gets its name from the audio process list and nothing else, and the transport
-buttons stay disabled rather than pretending.
-
+Music publish scripting dictionaries, browsers do not. Anything else shows its
+name and leaves the transport buttons disabled rather than pretending.
+"System Audio Access…" is always in the menu, not conditional.
+It used to appear only when the app had concluded it was being denied — which
+was worse than useless, because the conclusion was unreliable. The probe
+cross-checked silence against `IsRunningOutput` on the theory that hearing
+nothing while something else plays could only mean refusal; since that property
+just means "has a stream open", the probe accused a working install on any quiet
+machine. Silence is now treated as silence, the only hard evidence of denial is
+`AudioHardwareCreateProcessTap` failing outright, and the permission pane is one
+menu row away whenever you want it.
 ## Requirements
 
 - macOS 14.2 or later (process taps landed in 14.2)
@@ -110,7 +124,7 @@ ctest --preset dev
 | `--windowed` | Render into a window instead of the menu bar, for iterating on the visuals |
 | `--hud` | Diagnostics window alongside the menu bar item: OSStatus, callback count, RMS, AGC, sample rate, overruns |
 | `--shot <path>` | Render one settled frame to a PNG and exit |
-| `--source <id>` | Listen to one app by bundle id. `--source list` prints what is available |
+| `--source <uid>` | Listen to one output device by UID. `--source list` prints them |
 | `--fake-notch` | Pretend the display has a notch, for developing the panel on an external monitor |
 | `HYPERLIGHT_FAKE_AUDIO=1` | Drive the DSP from a synthetic sweep, so the renderer can be worked on with no audio and no permission |
 

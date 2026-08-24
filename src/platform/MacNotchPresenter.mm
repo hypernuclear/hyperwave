@@ -94,12 +94,12 @@ CGFloat expandedHeight(CGFloat notchHeight)
 @property (nonatomic, strong) NSTextField *titleField;
 @property (nonatomic, strong) NSTextField *artistField;
 @property (nonatomic, strong) NSStackView *transport;
-@property (nonatomic, strong) NSStackView *sources;
+@property (nonatomic, strong) NSPopUpButton *sources;
 @property (nonatomic, assign) CGFloat notchHeight;
 @property (nonatomic, assign) CGFloat notchWidth;
 @property (nonatomic, assign) BOOL expanded;
 - (void)layoutContent;
-- (void)setSources:(const hyperlight::AudioProcessList &)processes current:(const QString &)currentBundleId;
+- (void)setDevices:(const hyperlight::AudioDeviceList &)devices current:(const QString &)currentUid;
 @end
 
 @implementation HLNotchView {
@@ -167,9 +167,12 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _transport.spacing = 18.0;
         _transport.hidden = YES;
         [self addSubview:_transport];
-        _sources = [NSStackView stackViewWithViews:@[]];
-        _sources.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-        _sources.spacing = 10.0;
+        _sources = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
+        _sources.bezelStyle = NSBezelStyleRoundRect;
+        _sources.controlSize = NSControlSizeSmall;
+        _sources.font = [NSFont systemFontOfSize:11.0];
+        _sources.target = self;
+        _sources.action = @selector(sourcePicked:);
         _sources.hidden = YES;
         [self addSubview:_sources];
     }
@@ -208,10 +211,13 @@ CGFloat expandedHeight(CGFloat notchHeight)
     y -= kExpandedPad + kExpandedTransportHeight;
     _transport.frame = NSMakeRect((b.size.width - transportSize.width) / 2.0, y,
                                   transportSize.width, kExpandedTransportHeight);
-    const NSSize sourcesSize = _sources.fittingSize;
+    // The popup is given a fixed generous width rather than its fitting size,
+    // so the panel does not change shape every time the selected device's name
+    // changes length.
+    const CGFloat sourcesWidth = std::min<CGFloat>(b.size.width - 2 * pad, 240.0);
     y -= kExpandedPad + kExpandedSourcesHeight;
-    _sources.frame = NSMakeRect((b.size.width - sourcesSize.width) / 2.0, y,
-                                sourcesSize.width, kExpandedSourcesHeight);
+    _sources.frame = NSMakeRect((b.size.width - sourcesWidth) / 2.0, y, sourcesWidth,
+                                kExpandedSourcesHeight);
 }
 
 - (void)setFrameSize:(NSSize)size
@@ -281,65 +287,46 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _presenter->showMenu();
 }
 
-// Alpha alone is not enough to say which source is active: a colourful app
-// icon at 45% still reads brighter than a thin white glyph at 100%. A pill
-// behind the active one is unambiguous regardless of what the icon looks like.
-- (void)markSource:(NSButton *)button active:(BOOL)active
-{
-    button.wantsLayer = YES;
-    button.alphaValue = active ? 1.0 : 0.5;
-    button.layer.cornerRadius = 5.0;
-    button.layer.backgroundColor =
-        active ? [NSColor colorWithWhite:1.0 alpha:0.18].CGColor : NSColor.clearColor.CGColor;
-}
-- (void)sourcePicked:(NSButton *)sender
-{
-    if (_presenter && [sender.identifier isKindOfClass:[NSString class]])
-        _presenter->handleSourcePick(QString::fromNSString(sender.identifier));
-}
 
-// Rebuilds the row of apps currently producing audio.
+// Fills the source popup.
 //
-// Icons rather than a list: at this width names would truncate to nothing, and
-// an icon is what people actually recognise anyway. The active source is drawn
-// at full opacity and everything else dimmed.
-- (void)setSources:(const hyperlight::AudioProcessList &)processes
-           current:(const QString &)currentBundleId
+// A popup rather than a row of buttons: with ten output devices on this
+// machine the row was wider than the panel, and a device is a name rather than
+// an icon anyway -- "Scarlett Solo USB" does not have a face.
+- (void)setDevices:(const hyperlight::AudioDeviceList &)devices
+           current:(const QString &)currentUid
 {
-    for (NSView *view in [_sources.views copy])
-        [_sources removeView:view];
-
-    // "Everything" first, so there is always a way back to the system mix.
-    NSButton *all = [NSButton
-        buttonWithImage:[NSImage imageWithSystemSymbolName:@"waveform"
-                                  accessibilityDescription:@"All system audio"]
-                 target:self
-                 action:@selector(sourcePicked:)];
-    all.bordered = NO;
-    all.identifier = @"";
-    all.toolTip = @"All system audio";
-    all.contentTintColor = NSColor.whiteColor;
-    [self markSource:all active:currentBundleId.isEmpty()];
-    [_sources addView:all inGravity:NSStackViewGravityCenter];
-
-    for (const hyperlight::AudioProcess &process : processes) {
-        if (!process.playingOutput || !process.isNamed() || process.bundleId.isEmpty())
-            continue;
-        NSImage *icon = hyperlight::appIconForBundle(process.bundleId, 18.0);
-        if (!icon)
-            continue;
-
-        NSButton *button = [NSButton buttonWithImage:icon
-                                              target:self
-                                              action:@selector(sourcePicked:)];
-        button.bordered = NO;
-        button.identifier = process.bundleId.toNSString();
-        button.toolTip = process.name.toNSString();
-        [self markSource:button active:(process.bundleId == currentBundleId)];
-        [_sources addView:button inGravity:NSStackViewGravityCenter];
+    [_sources removeAllItems];
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Source"];
+    NSMenuItem *all = [[NSMenuItem alloc] initWithTitle:@"All system audio"
+                                                 action:nil
+                                          keyEquivalent:@""];
+    all.representedObject = @"";
+    [menu addItem:all];
+    if (!devices.isEmpty())
+        [menu addItem:[NSMenuItem separatorItem]];
+    NSMenuItem *selected = all;
+    for (const hyperlight::AudioDevice &device : devices) {
+        NSString *title = device.isDefaultOutput
+            ? [NSString stringWithFormat:@"%@  ·  output", device.name.toNSString()]
+            : device.name.toNSString();
+        NSMenuItem *entry = [[NSMenuItem alloc] initWithTitle:title
+                                                       action:nil
+                                                keyEquivalent:@""];
+        entry.representedObject = device.uid.toNSString();
+        [menu addItem:entry];
+        if (device.uid == currentUid)
+            selected = entry;
     }
+    _sources.menu = menu;
+    [_sources selectItem:selected];
 }
-
+- (void)sourcePicked:(NSPopUpButton *)sender
+{
+    id represented = sender.selectedItem.representedObject;
+    if (_presenter && [represented isKindOfClass:[NSString class]])
+        _presenter->handleSourcePick(QString::fromNSString(represented));
+}
 @end
 
 // A target for the display link, since a C++ object cannot be one.
@@ -747,10 +734,10 @@ void MacNotchPresenter::handleSourcePick(const QString &bundleId)
     Q_EMIT menuActionTriggered(QLatin1String(MenuAction::kSourcePrefix) + bundleId);
 }
 
-void MacNotchPresenter::setSources(const AudioProcessList &processes, const QString &current)
+void MacNotchPresenter::setDevices(const AudioDeviceList &devices, const QString &current)
 {
     if (m_impl->view)
-        [m_impl->view setSources:processes current:current];
+        [m_impl->view setDevices:devices current:current];
 }
 
 void MacNotchPresenter::emitFrameDue()

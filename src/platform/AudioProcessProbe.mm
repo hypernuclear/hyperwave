@@ -1,5 +1,6 @@
 #include "platform/AudioProcessProbe.h"
 
+#include <algorithm>
 #include <unistd.h>
 #include <vector>
 
@@ -73,24 +74,6 @@ bool isAvailable()
     return ok;
 }
 
-bool isAnyOtherProcessOutputting()
-{
-    bool ok = false;
-    const std::vector<AudioObjectID> objects = processObjects(&ok);
-    if (!ok)
-        return false;
-
-    const pid_t self = getpid();
-    for (AudioObjectID object : objects) {
-        pid_t pid = 0;
-        if (!readPid(object, pid) || pid == self)
-            continue;   // our own aggregate would otherwise count as playback
-        if (readIsPlaying(object))
-            return true;
-    }
-    return false;
-}
-
 AudioProcessList listProcesses()
 {
     bool ok = false;
@@ -126,23 +109,80 @@ AudioProcessList listProcesses()
     return result;
 }
 
-QVector<quint32> objectIdsForBundle(const QString &bundleId)
+AudioDeviceList listOutputDevices()
 {
-    QVector<quint32> ids;
-    if (bundleId.isEmpty())
-        return ids;
+    AudioObjectPropertyAddress a = addr(kAudioHardwarePropertyDevices);
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &a, 0, nullptr, &size) != noErr)
+        return {};
 
-    // Deliberately every match, not the first. A browser plays through a media
-    // helper with the same bundle prefix as its main process, and which one
-    // actually carries the audio is not something to guess at -- tapping all of
-    // them costs nothing and gets it right.
-    for (const AudioProcess &process : listProcesses()) {
-        if (process.bundleId == bundleId
-            || process.bundleId.startsWith(bundleId + QLatin1Char('.'))) {
-            ids.append(process.objectId);
-        }
+    std::vector<AudioObjectID> devices(size / sizeof(AudioObjectID));
+    if (devices.empty())
+        return {};
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &a, 0, nullptr, &size, devices.data())
+        != noErr) {
+        return {};
     }
-    return ids;
+
+    AudioObjectID defaultOutput = kAudioObjectUnknown;
+    UInt32 defaultSize = sizeof(defaultOutput);
+    AudioObjectPropertyAddress da = addr(kAudioHardwarePropertyDefaultOutputDevice);
+    AudioObjectGetPropertyData(kAudioObjectSystemObject, &da, 0, nullptr, &defaultSize,
+                               &defaultOutput);
+
+    AudioDeviceList result;
+    for (AudioObjectID device : devices) {
+        // Output channels are the whole test. Microphones and the input half of
+        // duplex interfaces have no business in a list of places sound goes.
+        AudioObjectPropertyAddress ca{kAudioDevicePropertyStreamConfiguration,
+                                      kAudioDevicePropertyScopeOutput,
+                                      kAudioObjectPropertyElementMain};
+        UInt32 configSize = 0;
+        if (AudioObjectGetPropertyDataSize(device, &ca, 0, nullptr, &configSize) != noErr
+            || configSize == 0) {
+            continue;
+        }
+        std::vector<std::uint8_t> storage(configSize);
+        auto *list = reinterpret_cast<AudioBufferList *>(storage.data());
+        if (AudioObjectGetPropertyData(device, &ca, 0, nullptr, &configSize, list) != noErr)
+            continue;
+
+        UInt32 channels = 0;
+        for (UInt32 i = 0; i < list->mNumberBuffers; ++i)
+            channels += list->mBuffers[i].mNumberChannels;
+        if (channels == 0)
+            continue;
+
+        AudioDevice entry;
+        entry.objectId = static_cast<quint32>(device);
+        entry.isDefaultOutput = (device == defaultOutput);
+
+        CFStringRef value = nullptr;
+        UInt32 valueSize = sizeof(value);
+        AudioObjectPropertyAddress ua = addr(kAudioDevicePropertyDeviceUID);
+        if (AudioObjectGetPropertyData(device, &ua, 0, nullptr, &valueSize, &value) == noErr
+            && value) {
+            entry.uid = QString::fromNSString((__bridge_transfer NSString *)value);
+        }
+
+        value = nullptr;
+        valueSize = sizeof(value);
+        AudioObjectPropertyAddress na = addr(kAudioObjectPropertyName);
+        if (AudioObjectGetPropertyData(device, &na, 0, nullptr, &valueSize, &value) == noErr
+            && value) {
+            entry.name = QString::fromNSString((__bridge_transfer NSString *)value);
+        }
+
+        if (!entry.uid.isEmpty() && !entry.name.isEmpty())
+            result.append(entry);
+    }
+
+    std::sort(result.begin(), result.end(), [](const AudioDevice &a, const AudioDevice &b) {
+        if (a.isDefaultOutput != b.isDefaultOutput)
+            return a.isDefaultOutput;   // wherever sound is going now, first
+        return a.name.localeAwareCompare(b.name) < 0;
+    });
+    return result;
 }
 
 } // namespace hyperlight::AudioProcessProbe

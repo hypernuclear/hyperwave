@@ -207,8 +207,8 @@ bool CoreAudioTapSource::start()
     // being available; it would otherwise be lost to the line above.
     if (!m_sourceNote.isEmpty())
         m_statusDetail += QStringLiteral(" — ") + m_sourceNote;
-    else if (!m_sourceBundleId.isEmpty())
-        m_statusDetail += QStringLiteral(" — listening to ") + m_sourceBundleId;
+    else if (!m_sourceDeviceUid.isEmpty())
+        m_statusDetail += QStringLiteral(" — device ") + m_sourceDeviceUid;
 
     installListeners();
     m_running = true;
@@ -242,30 +242,24 @@ bool CoreAudioTapSource::createTap()
     CATapDescription *desc = nil;
     m_sourceNote.clear();
 
-    if (m_sourceBundleId.isEmpty()) {
+    if (m_sourceDeviceUid.isEmpty()) {
         // An empty exclusion list is what makes this a global tap: every
-        // process that outputs audio is included. We exclude nothing, because
-        // hyperlight never plays anything -- if that ever changes, our own
-        // process object belongs in this array or the meter reacts to itself.
+        // process that outputs audio is included, wherever it is going. This is
+        // the default, and it follows the default output device as the user
+        // changes it.
+        //
+        // We exclude nothing, because hyperlight never plays anything -- if that
+        // ever changes, our own process object belongs in this array or the
+        // meter reacts to itself.
         desc = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
     } else {
-        // Listening to one app. The object ids are resolved now rather than
-        // stored, because they are only meaningful for this run.
-        NSMutableArray<NSNumber *> *processes = [NSMutableArray array];
-        for (quint32 objectId : AudioProcessProbe::objectIdsForBundle(m_sourceBundleId))
-            [processes addObject:@(objectId)];
-
-        if (processes.count == 0) {
-            // The app is not running, or is not registered with the audio
-            // system yet. A mixdown of nothing produces a tap that never
-            // delivers a sample, which is indistinguishable from a broken one,
-            // so fall back to the system mix and say why.
-            m_sourceNote = QStringLiteral("%1 is not producing audio, listening to everything")
-                               .arg(m_sourceBundleId);
-            desc = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
-        } else {
-            desc = [[CATapDescription alloc] initStereoMixdownOfProcesses:processes];
-        }
+        // Everything destined for one device. Excluding nobody, so this is
+        // still a whole-system mix, just restricted to one destination -- which
+        // on a Mac with a virtual device, an audio interface and three monitors
+        // is a meaningful thing to ask for.
+        desc = [[CATapDescription alloc] initExcludingProcesses:@[]
+                                                   andDeviceUID:m_sourceDeviceUid.toNSString()
+                                                     withStream:0];
     }
     desc.name = @(kTapName);
     desc.UUID = [NSUUID UUID];
@@ -473,27 +467,32 @@ AudioProcessList CoreAudioTapSource::audioProcesses() const
     return AudioProcessProbe::listProcesses();
 }
 
-bool CoreAudioTapSource::setSourceBundleId(const QString &bundleId)
+AudioDeviceList CoreAudioTapSource::audioDevices() const
 {
-    if (bundleId == m_sourceBundleId)
+    return AudioProcessProbe::listOutputDevices();
+}
+
+bool CoreAudioTapSource::setSourceDeviceUid(const QString &uid)
+{
+    if (uid == m_sourceDeviceUid)
         return true;
 
-    m_sourceBundleId = bundleId;
+    m_sourceDeviceUid = uid;
 
-    // Unlike a device change, this one really does need the tap rebuilt: which
-    // processes are mixed into it is baked into the CATapDescription and there
-    // is no property to change afterwards. Recreating a tap re-runs the TCC
-    // evaluation, but the grant is already in place by the time anyone can
+    // Unlike an output-device change, this one really does need the tap
+    // rebuilt: which device it follows is baked into the CATapDescription and
+    // there is no property to change afterwards. Recreating a tap re-runs the
+    // TCC evaluation, but the grant is already in place by the time anyone can
     // reach the source picker, so in practice it is silent.
     if (m_running && !restartCapture()) {
         qWarning("hyperlight: could not switch source, falling back to the system mix");
-        m_sourceBundleId.clear();
+        m_sourceDeviceUid.clear();
         restartCapture();
-        Q_EMIT sourceChanged(m_sourceBundleId);
+        Q_EMIT sourceChanged(m_sourceDeviceUid);
         return false;
     }
 
-    Q_EMIT sourceChanged(m_sourceBundleId);
+    Q_EMIT sourceChanged(m_sourceDeviceUid);
     return true;
 }
 
