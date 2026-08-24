@@ -404,11 +404,25 @@ void MacBarPresenter::showMenu()
 {
     if (!m_impl->menu || !m_impl->statusItem)
         return;
-    [m_impl->menu popUpMenuPositioningItem:nil
-                                atLocation:NSMakePoint(0, 0)
-                                    inView:m_impl->statusItem.button];
+    // popUpContextMenu, not popUpMenuPositioningItem:atLocation:inView:.
+    //
+    // The latter anchors the menu's corner at a point we choose, and choosing
+    // one inside a status item put the menu's top edge above the top of the
+    // screen: AppKit responded by making it scrollable, so the first item --
+    // the source picker -- was hidden behind a scroll arrow. popUpContextMenu
+    // lets AppKit place it the way it places every other status item menu.
+    NSEvent *event = [NSApp currentEvent]
+        ?: [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown
+                              location:NSZeroPoint
+                         modifierFlags:0
+                             timestamp:0
+                          windowNumber:m_impl->statusItem.button.window.windowNumber
+                               context:nil
+                           eventNumber:0
+                            clickCount:1
+                              pressure:1];
+    [NSMenu popUpContextMenu:m_impl->menu withEvent:event forView:m_impl->statusItem.button];
 }
-
 void MacBarPresenter::emitMenuAction(const QString &actionId)
 {
     Q_EMIT menuActionTriggered(actionId);

@@ -14,8 +14,8 @@ of dots when nothing is playing. Roughly 118 × 22 points of menu bar.
 hyperlight uses one: `CATapDescription` with an empty exclusion list gives a
 global mix of everything the system is playing. There is no BlackHole to
 install, no output device to switch to, and no Screen Recording permission to
-grant — just a single "System Audio Recording" prompt on first launch, and the
-audio path is untouched.
+grant — just a single "System Audio Recording" grant, and the audio path is
+untouched.
 
 ## The notch panel
 
@@ -40,17 +40,21 @@ too crowded for more than 14.
 
 Hover and it drops down: bigger bars, what is playing, transport controls, and a
 dropdown for the audio source.
+
 **Right-click the panel for the menu.** That is not a convenience; it is the
 only way in on the display this panel exists for. If the status item has been
 crowded under the notch, "click the status item" is not an available answer.
+
 By default the tab retracts when nothing is playing, so the notch looks stock on
 a quiet machine. The window stays alive at exactly the housing's size — a
 physical cutout, so nothing shows — which keeps the notch hoverable. Hovering a
-retracted panel still opens it, so there is always a route to the menu and the
-app list even when the status item is invisible and nothing is making noise.
+retracted panel still opens it, so there is always a route to the menu even when
+the status item is invisible and nothing is making noise.
 
 ## Choosing a source
+
 The source list is **output devices**, not applications.
+
 Applications were the wrong axis twice over. CoreAudio will tell you whether a
 process holds an open output stream — `kAudioProcessPropertyIsRunningOutput` —
 but not whether it is actually making a sound, and there is no property that
@@ -58,35 +62,72 @@ does. Measured on an idle machine, a 3D editor and a paused music player both
 reported "playing" with the room silent. And a Mac with a virtual device, an
 audio interface and three monitors has a genuinely interesting choice of *where*
 sound is going, which an app list cannot express at all.
+
 So: `Source ▸` in the menu, and a dropdown in the notch panel, both listing
 every device with output channels and marking the current one. Picking one taps
 `CATapDescription initExcludingProcesses:andDeviceUID:withStream:` — still a
 whole-system mix, restricted to one destination. Verified by tapping the
 built-in speakers while audio was routed to a virtual device: the tap stayed
-alive and reported −120 dB.
-**Right-click the notch panel for the menu.** That is not a convenience; it is
-the only way in on the display the panel exists for. If the status item has been
-crowded under the notch, "click the status item" is not an available answer.
+alive at 463 callbacks and reported −120 dB, against −14.2 dB for the device
+actually in use.
+
+## What is using audio
+
+`Using audio ▸` lists every application holding an open output stream, with its
+icon. It is informational and deliberately not selectable: which apps have audio
+going is a different question from where the visualiser listens, and conflating
+the two is what produced a source list full of things that had merely opened a
+device once.
+
+The entries say "using audio", not "playing", because that is all CoreAudio will
+support. The one exception is an app with a scripting dictionary, which can say
+for certain — so only those get a definite "playing" or "paused".
+
+## Track info
+
 Off by default, behind "Track info and controls", because switching it on is
-what triggers a second permission prompt.
+what triggers a second permission prompt. When on, the track, artist and
+transport appear in the menu **and** in the notch panel — the panel is one
+consumer of it, not the reason for it.
+
 That is not where this was meant to land. `MediaRemote` is the private framework
 every app used for this, and on macOS 26 it still loads and every symbol still
 resolves — but since 15.4 it is gated behind
 `com.apple.mediaremote.send-command`, an entitlement Apple does not issue to
 third parties. `MRMediaRemoteGetNowPlayingInfo` fires its callback with an empty
 dictionary while music is demonstrably playing.
+
 The fallback is AppleScript, which works but is per-application: Spotify and
 Music publish scripting dictionaries, browsers do not. Anything else shows its
-name and leaves the transport buttons disabled rather than pretending.
-"System Audio Access…" is always in the menu, not conditional.
-It used to appear only when the app had concluded it was being denied — which
-was worse than useless, because the conclusion was unreliable. The probe
-cross-checked silence against `IsRunningOutput` on the theory that hearing
-nothing while something else plays could only mean refusal; since that property
-just means "has a stream open", the probe accused a working install on any quiet
-machine. Silence is now treated as silence, the only hard evidence of denial is
-`AudioHardwareCreateProcessTap` failing outright, and the permission pane is one
-menu row away whenever you want it.
+name and leaves the transport disabled rather than pretending.
+
+## Permission
+
+The system-audio grant is **required and silently enforced**. Without it
+`AudioHardwareCreateProcessTap` still succeeds, the IOProc still fires, and
+every sample is zero. Verified by running the same signed binary at the same
+moment under two bundle ids: the granted one read −14.2 dB, the ungranted one
+−120 dB with the tap alive at 39 callbacks. macOS did not prompt.
+
+Two things follow.
+
+**"System Audio Access…" is always in the menu**, never conditional. It used to
+appear only when the app had concluded it was being denied — worse than useless,
+because the conclusion was unreliable and because macOS may never prompt on its
+own. Silence is now treated as silence; the only hard evidence of denial is the
+tap creation failing outright.
+
+**Running from a terminal masks all of this.** TCC attributes a capture request
+to the *responsible* process, and a binary exec'd from a shell inherits the
+terminal's grant rather than using its own. So running the executable directly
+works even with no grant of its own — and hyperlight will not appear in System
+Settings, because the permission in play belongs to the terminal. To exercise
+the real path, launch through LaunchServices:
+
+```sh
+open build/hyperlight.app
+```
+
 ## Requirements
 
 - macOS 14.2 or later (process taps landed in 14.2)
@@ -122,7 +163,7 @@ ctest --preset dev
 |---|---|
 | `--verify-audio` | Print capture levels for five seconds and exit. The fastest answer to "can it hear the system?" |
 | `--windowed` | Render into a window instead of the menu bar, for iterating on the visuals |
-| `--hud` | Diagnostics window alongside the menu bar item: OSStatus, callback count, RMS, AGC, sample rate, overruns |
+| `--hud` | Diagnostics window: OSStatus, callback count, RMS, AGC, sample rate, overruns |
 | `--shot <path>` | Render one settled frame to a PNG and exit |
 | `--source <uid>` | Listen to one output device by UID. `--source list` prints them |
 | `--fake-notch` | Pretend the display has a notch, for developing the panel on an external monitor |
@@ -135,8 +176,8 @@ src/
   dsp/        FFT, band mapping, ballistics, config     -- no platform code
   audio/      lock-free ring, downmix, source interface -- no platform code
   render/     the one renderer, QPainter -> QImage      -- no platform code
-  platform/   CoreAudio tap, NSStatusItem, stubs for Windows and Linux
-  app/        wiring: controller, DSP thread, settings, HUD
+  platform/   CoreAudio tap, NSStatusItem, notch panel, stubs for Windows/Linux
+  app/        wiring: controller, DSP thread, settings, menu model, HUD
 tests/        headless, links only the shared core
 ```
 
@@ -150,9 +191,9 @@ chase "the bars look different on Windows" for a day.
 **`QSystemTrayIcon` cannot do this on macOS.** Qt's Cocoa plugin calls
 `setTemplate:` on the status-item image, and a template image is a monochrome
 mask — the gradient would arrive as a flat silhouette. hyperlight uses a native
-`NSStatusItem` hosting a layer-backed view, and never assigns
-`button.image`. `QSystemTrayIcon` remains the right answer on Windows and Linux,
-where nothing flattens the icon.
+`NSStatusItem` hosting a layer-backed view, and never assigns `button.image`.
+`QSystemTrayIcon` remains the right answer on Windows and Linux, where nothing
+flattens the icon.
 
 **The IOProc zeroes its output buffer unconditionally.** If the tap-only
 aggregate ever fails and we fall back to including the default output device as
@@ -161,13 +202,11 @@ whatever sits in that buffer is what they hear. The HAL does not promise to hand
 it over zeroed. One `memset` per callback is the cheapest insurance in the
 project.
 
-**Silence and denial look identical from the tap.** A tap without permission
-delivers digital silence, and so does a machine with nothing playing. hyperlight
-never concludes denial from silence alone: it cross-checks
-`kAudioProcessPropertyIsRunningOutput` for an independent "something *is*
-playing" signal, and it says nothing at all for the first eight seconds, because
-the permission prompt is asynchronous and accusing someone of denying a
-permission they have not yet been asked for is the worst thing it could do.
+**Silence is never treated as denial.** A tap without permission delivers
+digital silence, and so does a machine with nothing playing, and CoreAudio
+exposes no per-process level that could tell them apart. The original design
+thought `IsRunningOutput` could; it cannot, and the resulting probe accused a
+working install on any quiet desktop.
 
 ## Cost
 

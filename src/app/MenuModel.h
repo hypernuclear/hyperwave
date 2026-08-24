@@ -87,6 +87,9 @@ inline constexpr const char *kRestart = "restart";
 inline constexpr const char *kAbout = "about";
 inline constexpr const char *kQuit = "quit";
 inline constexpr const char *kToggleAutoHide = "toggle-auto-hide";
+inline constexpr const char *kTransportPlayPause = "transport-playpause";
+inline constexpr const char *kTransportNext = "transport-next";
+inline constexpr const char *kTransportPrevious = "transport-previous";
 } // namespace MenuAction
 
 } // namespace hyperlight
