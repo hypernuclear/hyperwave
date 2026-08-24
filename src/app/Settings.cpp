@@ -10,6 +10,7 @@ constexpr const char *kCompactKey = "appearance/compact";
 constexpr const char *kHalfRateKey = "power/halfRateOnBattery";
 constexpr const char *kSourceKey = "audio/sourceBundleId";
 constexpr const char *kNowPlayingKey = "nowPlaying/enabled";
+constexpr const char *kNotchAutoHideKey = "notch/autoHide";
 } // namespace
 
 Settings::Settings(QObject *parent, const QString &application)
@@ -74,6 +75,17 @@ void Settings::setNowPlayingEnabled(bool enabled)
         return;
     m_store.setValue(QLatin1String(kNowPlayingKey), enabled);
     Q_EMIT nowPlayingEnabledChanged(enabled);
+}
+bool Settings::notchAutoHide() const
+{
+    return m_store.value(QLatin1String(kNotchAutoHideKey), true).toBool();
+}
+void Settings::setNotchAutoHide(bool enabled)
+{
+    if (notchAutoHide() == enabled)
+        return;
+    m_store.setValue(QLatin1String(kNotchAutoHideKey), enabled);
+    Q_EMIT notchAutoHideChanged(enabled);
 }
 
 } // namespace hyperlight

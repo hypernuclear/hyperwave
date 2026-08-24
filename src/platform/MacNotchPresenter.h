@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "audio/AudioProcess.h"
 #include "app/NowPlaying.h"
 #include "platform/BarPresenter.h"
 
@@ -56,6 +57,15 @@ public:
     bool isClockRunning() const override;
 
     void setMenu(const MenuModel &menu) override;
+    // Whether the tab is shown at all.
+    //
+    // Idle, the tab retracts and only the housing-sized window remains, so the
+    // notch looks stock when nothing is playing. The window stays alive and
+    // hoverable so the panel is still reachable -- otherwise, on a display
+    // crowded enough to hide the status item, there would be no way to open
+    // anything at all.
+    void setTabVisible(bool visible);
+    bool isTabVisible() const;
 
     // How wide the strip may be inside the tab, in points. The notch decides
     // this, not the style -- unlike a status item, the panel cannot grow.
@@ -76,11 +86,16 @@ public:
     void emitMenuAction(const QString &actionId);
     void handleHover(bool inside);
     void handleTransport(int command);
+    void handleSourcePick(const QString &bundleId);
+    void setSources(const AudioProcessList &processes, const QString &current);
+    void showMenu();
 
 Q_SIGNALS:
     void transportRequested(int command);
 
 private:
+    void applyFrame();
+
     struct Impl;
     std::unique_ptr<Impl> m_impl;
 };

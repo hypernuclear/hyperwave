@@ -7,6 +7,9 @@
 
 #include <QDebug>
 
+#include "audio/AudioProcess.h"
+#include "platform/MacMenuBuilder.h"
+
 namespace {
 
 // Geometry of the camera housing on the screen that owns the menu bar.
@@ -70,13 +73,14 @@ constexpr CGFloat kExpandedStripHeight = 54.0;
 constexpr CGFloat kExpandedTitleHeight = 18.0;
 constexpr CGFloat kExpandedArtistHeight = 15.0;
 constexpr CGFloat kExpandedTransportHeight = 26.0;
+constexpr CGFloat kExpandedSourcesHeight = 22.0;
 constexpr CGFloat kExpandedPad = 10.0;
 constexpr CGFloat kCornerRadius = 14.0;
 CGFloat expandedHeight(CGFloat notchHeight)
 {
     return notchHeight + kExpandedPad + kExpandedTitleHeight + kExpandedArtistHeight
-        + kExpandedPad + kExpandedTransportHeight + kExpandedPad + kExpandedStripHeight
-        + kExpandedPad;
+        + kExpandedPad + kExpandedTransportHeight + kExpandedPad + kExpandedSourcesHeight
+        + kExpandedPad + kExpandedStripHeight + kExpandedPad;
 }
 
 } // namespace
@@ -90,10 +94,12 @@ CGFloat expandedHeight(CGFloat notchHeight)
 @property (nonatomic, strong) NSTextField *titleField;
 @property (nonatomic, strong) NSTextField *artistField;
 @property (nonatomic, strong) NSStackView *transport;
+@property (nonatomic, strong) NSStackView *sources;
 @property (nonatomic, assign) CGFloat notchHeight;
 @property (nonatomic, assign) CGFloat notchWidth;
 @property (nonatomic, assign) BOOL expanded;
 - (void)layoutContent;
+- (void)setSources:(const hyperlight::AudioProcessList &)processes current:(const QString &)currentBundleId;
 @end
 
 @implementation HLNotchView {
@@ -161,6 +167,11 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _transport.spacing = 18.0;
         _transport.hidden = YES;
         [self addSubview:_transport];
+        _sources = [NSStackView stackViewWithViews:@[]];
+        _sources.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+        _sources.spacing = 10.0;
+        _sources.hidden = YES;
+        [self addSubview:_sources];
     }
     return self;
 }
@@ -175,6 +186,7 @@ CGFloat expandedHeight(CGFloat notchHeight)
     _titleField.hidden = !show || _titleField.stringValue.length == 0;
     _artistField.hidden = !show || _artistField.stringValue.length == 0;
     _transport.hidden = !show;
+    _sources.hidden = !show;
 
     if (!show)
         return;
@@ -196,6 +208,10 @@ CGFloat expandedHeight(CGFloat notchHeight)
     y -= kExpandedPad + kExpandedTransportHeight;
     _transport.frame = NSMakeRect((b.size.width - transportSize.width) / 2.0, y,
                                   transportSize.width, kExpandedTransportHeight);
+    const NSSize sourcesSize = _sources.fittingSize;
+    y -= kExpandedPad + kExpandedSourcesHeight;
+    _sources.frame = NSMakeRect((b.size.width - sourcesSize.width) / 2.0, y,
+                                sourcesSize.width, kExpandedSourcesHeight);
 }
 
 - (void)setFrameSize:(NSSize)size
@@ -255,12 +271,82 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _presenter->emitClicked();
 }
 
+- (void)rightMouseDown:(NSEvent *)event
+{
+    (void)event;
+    // The panel's route to the menu, and it has to have one: this surface
+    // exists for displays where the status item has been crowded off the bar
+    // entirely, so "click the status item" is not an answer here.
+    if (_presenter)
+        _presenter->showMenu();
+}
+
+// Alpha alone is not enough to say which source is active: a colourful app
+// icon at 45% still reads brighter than a thin white glyph at 100%. A pill
+// behind the active one is unambiguous regardless of what the icon looks like.
+- (void)markSource:(NSButton *)button active:(BOOL)active
+{
+    button.wantsLayer = YES;
+    button.alphaValue = active ? 1.0 : 0.5;
+    button.layer.cornerRadius = 5.0;
+    button.layer.backgroundColor =
+        active ? [NSColor colorWithWhite:1.0 alpha:0.18].CGColor : NSColor.clearColor.CGColor;
+}
+- (void)sourcePicked:(NSButton *)sender
+{
+    if (_presenter && [sender.identifier isKindOfClass:[NSString class]])
+        _presenter->handleSourcePick(QString::fromNSString(sender.identifier));
+}
+
+// Rebuilds the row of apps currently producing audio.
+//
+// Icons rather than a list: at this width names would truncate to nothing, and
+// an icon is what people actually recognise anyway. The active source is drawn
+// at full opacity and everything else dimmed.
+- (void)setSources:(const hyperlight::AudioProcessList &)processes
+           current:(const QString &)currentBundleId
+{
+    for (NSView *view in [_sources.views copy])
+        [_sources removeView:view];
+
+    // "Everything" first, so there is always a way back to the system mix.
+    NSButton *all = [NSButton
+        buttonWithImage:[NSImage imageWithSystemSymbolName:@"waveform"
+                                  accessibilityDescription:@"All system audio"]
+                 target:self
+                 action:@selector(sourcePicked:)];
+    all.bordered = NO;
+    all.identifier = @"";
+    all.toolTip = @"All system audio";
+    all.contentTintColor = NSColor.whiteColor;
+    [self markSource:all active:currentBundleId.isEmpty()];
+    [_sources addView:all inGravity:NSStackViewGravityCenter];
+
+    for (const hyperlight::AudioProcess &process : processes) {
+        if (!process.playingOutput || !process.isNamed() || process.bundleId.isEmpty())
+            continue;
+        NSImage *icon = hyperlight::appIconForBundle(process.bundleId, 18.0);
+        if (!icon)
+            continue;
+
+        NSButton *button = [NSButton buttonWithImage:icon
+                                              target:self
+                                              action:@selector(sourcePicked:)];
+        button.bordered = NO;
+        button.identifier = process.bundleId.toNSString();
+        button.toolTip = process.name.toNSString();
+        [self markSource:button active:(process.bundleId == currentBundleId)];
+        [_sources addView:button inGravity:NSStackViewGravityCenter];
+    }
+}
+
 @end
 
 // A target for the display link, since a C++ object cannot be one.
 @interface HLNotchHook : NSObject
 @property (nonatomic, assign) hyperlight::MacNotchPresenter *presenter;
 - (void)step:(id)sender;
+- (void)menuItemChosen:(NSMenuItem *)sender;
 - (void)screenParametersChanged:(NSNotification *)note;
 @end
 
@@ -292,8 +378,10 @@ struct MacNotchPresenter::Impl
     CADisplayLink *link = nil;
     CGColorSpaceRef colorSpace = nullptr;
 
+    NSMenu *menu = nil;
     NotchGeometry geometry;
     bool expanded = false;
+    bool tabVisible = true;
     int preferredFps = 60;
     bool clockRunning = false;
 
@@ -501,30 +589,8 @@ void MacNotchPresenter::setExpanded(bool expanded)
         return;
     m_impl->expanded = expanded;
     m_impl->view.expanded = expanded;
-
-    const NotchGeometry &g = m_impl->geometry;
-    const CGFloat width =
-        expanded ? g.notchWidth + 2 * kExpandedOverhang : g.notchWidth;
-    const CGFloat height =
-        expanded ? expandedHeight(g.notchHeight) : g.notchHeight + kTabHeight;
-    const NSRect frame = NSMakeRect(NSMidX(g.screenFrame) - width / 2.0,
-                                    NSMaxY(g.screenFrame) - height, width, height);
-
-    // Set the frame directly, then animate.
-    //
-    // -[NSWindow animator] setFrame: on a borderless window at status level was
-    // measured to leave the frame untouched -- the content relaid itself for a
-    // size the window never took, so the transport buttons appeared outside a
-    // panel that had not grown. Doing the real resize first and treating the
-    // animation as decoration means the wrong outcome is a hard cut rather than
-    // a broken layout.
-    [m_impl->window setFrame:frame display:YES animate:NO];
-    [m_impl->view setFrameSize:frame.size];
-    [m_impl->view layoutContent];
-
-    Q_EMIT geometryChanged();
+    applyFrame();
 }
-
 void MacNotchPresenter::handleHover(bool inside)
 {
     setExpanded(inside);
@@ -604,10 +670,87 @@ bool MacNotchPresenter::isClockRunning() const
     return m_impl->clockRunning;
 }
 
-void MacNotchPresenter::setMenu(const MenuModel &)
+void MacNotchPresenter::setMenu(const MenuModel &model)
 {
-    // The panel has no menu of its own; the status item carries it. Expanding
-    // is what this surface does instead.
+    m_impl->menu = buildNSMenu(model, m_impl->hook, @selector(menuItemChosen:), nil);
+}
+
+void MacNotchPresenter::showMenu()
+{
+    if (!m_impl->menu || !m_impl->view)
+        return;
+
+    // Below the panel rather than at the pointer, so it reads as belonging to
+    // the panel rather than as a context menu that happened to open there.
+    const NSRect b = m_impl->view.bounds;
+    [m_impl->menu popUpMenuPositioningItem:nil
+                                atLocation:NSMakePoint(b.size.width / 2.0, 0)
+                                    inView:m_impl->view];
+}
+
+void MacNotchPresenter::setTabVisible(bool visible)
+{
+    if (visible == m_impl->tabVisible)
+        return;
+    m_impl->tabVisible = visible;
+
+    // Expanded wins: the panel must not retract out from under a pointer that
+    // is hovering it just because the music stopped.
+    if (m_impl->expanded)
+        return;
+
+    applyFrame();
+}
+
+bool MacNotchPresenter::isTabVisible() const
+{
+    return m_impl->tabVisible;
+}
+
+void MacNotchPresenter::applyFrame()
+{
+    if (!m_impl->window)
+        return;
+
+    const NotchGeometry &g = m_impl->geometry;
+    CGFloat width = g.notchWidth;
+    CGFloat height = g.notchHeight;
+
+    if (m_impl->expanded) {
+        width = g.notchWidth + 2 * kExpandedOverhang;
+        height = expandedHeight(g.notchHeight);
+    } else if (m_impl->tabVisible) {
+        height = g.notchHeight + kTabHeight;
+    }
+    // Otherwise: exactly the housing, which is invisible against the housing.
+    // The window stays alive so the notch remains hoverable -- retracting it
+    // entirely would leave no way in on a display crowded enough to have hidden
+    // the status item, which is the situation this panel exists for.
+
+    // Retracted, the window occupies exactly the housing, which is a physical
+    // cutout -- nothing drawn there reaches the panel. Hiding the strip anyway
+    // matters for two reasons: a screen recording DOES capture the notch
+    // region, and there is no point compositing bars nobody can see.
+    const bool showStrip = m_impl->expanded || m_impl->tabVisible;
+    m_impl->view.stripLayer.hidden = !showStrip;
+
+    const NSRect frame = NSMakeRect(NSMidX(g.screenFrame) - width / 2.0,
+                                    NSMaxY(g.screenFrame) - height, width, height);
+    [m_impl->window setFrame:frame display:YES animate:NO];
+    [m_impl->view setFrameSize:frame.size];
+    [m_impl->view layoutContent];
+    Q_EMIT geometryChanged();
+}
+
+void MacNotchPresenter::handleSourcePick(const QString &bundleId)
+{
+    Q_EMIT menuActionTriggered(QLatin1String(MenuAction::kSourcePrefix) + bundleId);
+}
+
+void MacNotchPresenter::setSources(const AudioProcessList &processes, const QString &current)
+{
+    if (m_impl->view)
+        [m_impl->view setSources:processes current:current];
 }
 
 void MacNotchPresenter::emitFrameDue()

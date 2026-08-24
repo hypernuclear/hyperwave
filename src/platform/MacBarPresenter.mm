@@ -8,6 +8,8 @@
 
 #include <QDebug>
 
+#include "platform/MacMenuBuilder.h"
+
 // The Objective-C classes have to sit at global scope -- the language has one
 // flat class namespace and the compiler rejects @interface inside a C++
 // namespace outright. Everything C++ goes back inside hyperlight below.
@@ -380,75 +382,6 @@ bool MacBarPresenter::isClockRunning() const
     return m_impl->clockRunning;
 }
 
-namespace {
-
-// The app icon for a bundle id, scaled to menu size. Returns nil for anything
-// not currently running, which is fine -- the item just goes without.
-NSImage *iconForBundle(const QString &bundleId)
-{
-    if (bundleId.isEmpty())
-        return nil;
-    NSString *wanted = bundleId.toNSString();
-    for (NSRunningApplication *app in [[NSWorkspace sharedWorkspace] runningApplications]) {
-        if ([app.bundleIdentifier isEqualToString:wanted] && app.icon) {
-            NSImage *icon = [app.icon copy];
-            icon.size = NSMakeSize(16, 16);
-            return icon;
-        }
-    }
-    return nil;
-}
-
-void buildInto(NSMenu *menu, const MenuModel &model, HLPresenterHook *hook)
-{
-    for (const MenuItem &item : model) {
-        if (item.kind == MenuItem::Kind::Separator) {
-            [menu addItem:[NSMenuItem separatorItem]];
-            continue;
-        }
-
-        NSMenuItem *entry = [[NSMenuItem alloc] initWithTitle:item.title.toNSString()
-                                                       action:nil
-                                                keyEquivalent:@""];
-
-        if (item.kind == MenuItem::Kind::Submenu) {
-            NSMenu *child = [[NSMenu alloc] initWithTitle:item.title.toNSString()];
-            child.autoenablesItems = NO;
-            buildInto(child, item.children, hook);
-            entry.submenu = child;
-        } else {
-            entry.target = hook;
-            entry.action = @selector(menuItemChosen:);
-            entry.representedObject = item.actionId.toNSString();
-            entry.state = item.checked ? NSControlStateValueOn : NSControlStateValueOff;
-        }
-
-        entry.enabled = item.enabled;
-        if (NSImage *icon = iconForBundle(item.iconBundleId))
-            entry.image = icon;
-
-        // The dimmed trailing text ("playing", "not running") rides along as an
-        // attributed title, since NSMenuItem has no second label of its own.
-        if (!item.detail.isEmpty()) {
-            NSMutableAttributedString *title = [[NSMutableAttributedString alloc]
-                initWithString:item.title.toNSString()];
-            NSAttributedString *detail = [[NSAttributedString alloc]
-                initWithString:[NSString stringWithFormat:@"   %@", item.detail.toNSString()]
-                    attributes:@{
-                        NSForegroundColorAttributeName : [NSColor secondaryLabelColor],
-                        NSFontAttributeName :
-                            [NSFont menuFontOfSize:[NSFont smallSystemFontSize]],
-                    }];
-            [title appendAttributedString:detail];
-            entry.attributedTitle = title;
-        }
-
-        [menu addItem:entry];
-    }
-}
-
-} // namespace
-
 void MacBarPresenter::setMenu(const MenuModel &model)
 {
     if (!m_impl->statusItem)
@@ -457,12 +390,7 @@ void MacBarPresenter::setMenu(const MenuModel &model)
     // Rebuilt wholesale every time. The app list changes as things start and
     // stop playing, and diffing an NSMenu against a model is considerably more
     // code than throwing the old one away.
-    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"hyperlight"];
-    menu.autoenablesItems = NO;
-    menu.delegate = m_impl->hook;
-    buildInto(menu, model, m_impl->hook);
-
-    m_impl->menu = menu;
+    m_impl->menu = buildNSMenu(model, m_impl->hook, @selector(menuItemChosen:), m_impl->hook);
 
     // Deliberately NOT statusItem.menu.
     //

@@ -86,6 +86,7 @@ private:
     bool frameIsAtRest(const FrameState &state) const;
 
     void applyFrameRate();
+    void setNotchTabVisible(bool visible);
     MenuModel buildMenu() const;
     void showAbout();
     void relaunch();

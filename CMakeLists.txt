@@ -171,6 +171,8 @@ qt_add_executable(hyperlight
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioProcessProbe.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacBarPresenter.h>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacBarPresenter.mm>
+    $<$<PLATFORM_ID:Darwin>:src/platform/MacMenuBuilder.h>
+    $<$<PLATFORM_ID:Darwin>:src/platform/MacMenuBuilder.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacNotchPresenter.h>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacNotchPresenter.mm>
     $<$<PLATFORM_ID:Windows>:src/platform/WasapiSource.cpp>
@@ -222,6 +224,7 @@ if(APPLE)
         src/platform/AudioProcessProbe.mm
         src/platform/MacBarPresenter.mm
         src/platform/MacNotchPresenter.mm
+        src/platform/MacMenuBuilder.mm
         src/app/ShellMac.mm
         src/app/NowPlayingMac.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")

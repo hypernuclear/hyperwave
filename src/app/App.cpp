@@ -87,6 +87,10 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
         connect(notch, &MacNotchPresenter::transportRequested, this, [this](int command) {
             m_nowPlaying->sendCommand(static_cast<TransportCommand>(command));
         });
+        // The panel needs its own route to the menu: it exists for displays
+        // where the status item has been crowded off the bar entirely.
+        connect(notch, &BarPresenter::menuActionTriggered, this, &App::onMenuAction);
+        connect(notch, &BarPresenter::geometryChanged, this, &App::refreshNowPlaying);
     }
     if (!isNotch) {
         // The status item carries the menu; the notch panel expands instead.
@@ -324,6 +328,11 @@ void App::onFrameDue(Surface &surface)
     if (surface.presenter && surface.atRestFrames > kAtRestFramesBeforeSleep) {
         surface.presenter->stopClock();
         surface.atRestFrames = 0;
+        // Retract here rather than on the silence edge: the bars and peak dots
+        // are still falling at that point, and pulling the tab out from under
+        // them mid-descent looks like a glitch.
+        if (surface.isNotch)
+            setNotchTabVisible(false);
     }
 
     QImage &target = surface.buffers[surface.nextBuffer];
@@ -358,6 +367,16 @@ void App::onAudioBecameActive()
         if (surface->presenter && !surface->presenter->isClockRunning())
             surface->presenter->startClock();
     }
+    setNotchTabVisible(true);
+    refreshNowPlaying();
+}
+void App::setNotchTabVisible(bool visible)
+{
+    if (!m_notchSurface)
+        return;
+    auto *notch = static_cast<MacNotchPresenter *>(m_notchSurface->presenter.get());
+    notch->setTabVisible(visible || !m_settings.notchAutoHide());
+    Q_UNUSED(visible);
 }
 
 void App::onAudioBecameSilent()
@@ -436,6 +455,11 @@ MenuModel App::buildMenu() const
     menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleNowPlaying),
                                  QStringLiteral("Track info and controls"))
                     .withCheck(m_settings.nowPlayingEnabled()));
+    if (m_notchSurface) {
+        menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleAutoHide),
+                                     QStringLiteral("Hide notch panel when silent"))
+                        .withCheck(m_settings.notchAutoHide()));
+    }
 
     if (m_audio->permission() == PermissionState::LikelyDenied) {
         menu.append(MenuItem::separator());
@@ -457,8 +481,16 @@ MenuModel App::buildMenu() const
 
 void App::refreshMenu()
 {
-    if (m_menuSurface)
-        m_menuSurface->presenter->setMenu(buildMenu());
+    const MenuModel menu = buildMenu();
+    for (auto &surface : m_surfaces) {
+        if (surface->presenter)
+            surface->presenter->setMenu(menu);
+    }
+    if (m_notchSurface) {
+        auto *notch = static_cast<MacNotchPresenter *>(m_notchSurface->presenter.get());
+        notch->setSources(m_audio->source()->audioProcesses(),
+                          m_audio->source()->sourceBundleId());
+    }
 }
 
 void App::refreshNowPlaying()
@@ -522,6 +554,12 @@ void App::onMenuAction(const QString &actionId)
         m_settings.setCompact(!m_settings.compact());
         for (auto &surface : m_surfaces)
             onGeometryChanged(*surface);
+        onAudioBecameActive();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kToggleAutoHide)) {
+        m_settings.setNotchAutoHide(!m_settings.notchAutoHide());
+        setNotchTabVisible(true);
         onAudioBecameActive();
         return;
     }

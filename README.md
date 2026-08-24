@@ -38,7 +38,17 @@ too crowded for more than 14.
 
 ![expanded](docs/notch-expanded.png)
 
-Hover and it drops down: bigger bars, what is playing, and transport controls.
+Hover and it drops down: bigger bars, what is playing, transport controls, and a
+row of every app currently producing audio — click one to point the visualiser
+at it.
+**Right-click the panel for the menu.** That is not a convenience; it is the
+only way in on the display this panel exists for. If the status item has been
+crowded under the notch, "click the status item" is not an available answer.
+By default the tab retracts when nothing is playing, so the notch looks stock on
+a quiet machine. The window stays alive at exactly the housing's size — a
+physical cutout, so nothing shows — which keeps the notch hoverable. Hovering a
+retracted panel still opens it, so there is always a route to the menu and the
+app list even when the status item is invisible and nothing is making noise.
 
 ## What is playing
 
