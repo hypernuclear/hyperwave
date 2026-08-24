@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+	<key>CFBundleIdentifier</key>
+	<string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
+	<key>CFBundleName</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
+	<key>CFBundleVersion</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.music</string>
+	<!-- Process taps are 14.2. See the deployment target comment in
+	     CMakeLists.txt for why this is not 14.0 like the sibling apps. -->
+	<key>LSMinimumSystemVersion</key>
+	<string>14.2</string>
+	<!-- Background agent: no Dock icon, no application menu bar. The status
+	     item IS the entire UI. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<false/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<!-- The key that gates kTCCServiceAudioCapture. Without it the tap is
+	     refused outright and the user never even sees a prompt. The string is
+	     what appears in the "would like access to record your system audio"
+	     dialog, so it has to answer the only question the user actually has,
+	     which is why an app they just launched wants to hear them. -->
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>hyperlight reads the audio your Mac is playing so it can draw it in the menu bar. Nothing is recorded, stored, or sent anywhere.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Hypernuclear LLC. All rights reserved.</string>
+</dict>
+</plist>

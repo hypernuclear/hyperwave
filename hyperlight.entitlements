@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Deliberately near-empty.
+	     Not sandboxed. System audio capture via CoreAudio process taps is
+	     gated by a TCC grant (kTCCServiceAudioCapture), not by an
+	     entitlement, and it is not clear that taps are permitted under App
+	     Sandbox at all. Sandboxing this app would buy nothing and might cost
+	     the one feature it has.
+	     The two below are development conveniences so a debugger can attach
+	     to a Developer-ID-signed build. They should come out of the release
+	     entitlements when there is a release. -->
+	<key>com.apple.security.cs.debugger</key>
+	<true/>
+	<key>com.apple.security.get-task-allow</key>
+	<true/>
+</dict>
+</plist>

@@ -1,0 +1,14 @@
+build/
+build-*/
+.DS_Store
+.cache
+compile_commands.json
+CMakeUserPresets.json
+*.user
+*.user.*
+CMakeLists.txt.user*
+.qtcreator
+
+# Python bytecode from the generator scripts.
+__pycache__/
+*.pyc

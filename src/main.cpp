@@ -1,0 +1,61 @@
+#include <QApplication>
+#include <QCommandLineParser>
+#include <QStringList>
+
+#include "app/App.h"
+
+using namespace hyperlight;
+
+int main(int argc, char **argv)
+{
+    // QApplication rather than QGuiApplication: the settings window and the
+    // debug HUD are Widgets. The menu bar item itself is native AppKit and
+    // wants nothing from Qt at all.
+    QApplication app(argc, argv);
+    app.setApplicationName(QStringLiteral("hyperlight"));
+    app.setOrganizationName(QStringLiteral("Hypernuclear"));
+    app.setApplicationVersion(QStringLiteral(HYPERLIGHT_VERSION));
+
+    // The status item IS the app. Nothing here should die because a window
+    // closed, and most of the time there are no windows at all.
+    QApplication::setQuitOnLastWindowClosed(false);
+
+    QCommandLineParser parser;
+    parser.setApplicationDescription(
+        QStringLiteral("A system audio visualiser that lives in the menu bar."));
+    parser.addHelpOption();
+    parser.addVersionOption();
+
+    const QCommandLineOption windowedOption(
+        QStringLiteral("windowed"),
+        QStringLiteral("Render into a window instead of the menu bar, for iterating on the "
+                       "visuals without fighting the shell."));
+    const QCommandLineOption hudOption(
+        QStringLiteral("hud"),
+        QStringLiteral("Show the diagnostics window alongside the menu bar item."));
+    const QCommandLineOption verifyOption(
+        QStringLiteral("verify-audio"),
+        QStringLiteral("Print capture levels for five seconds, then exit."));
+    const QCommandLineOption shotOption(
+        QStringLiteral("shot"),
+        QStringLiteral("Render one frame to <path> and exit."), QStringLiteral("path"));
+
+    parser.addOption(windowedOption);
+    parser.addOption(hudOption);
+    parser.addOption(verifyOption);
+    parser.addOption(shotOption);
+    parser.process(app);
+
+    App::Options options;
+    options.windowed = parser.isSet(windowedOption);
+    options.hud = parser.isSet(hudOption);
+    options.verifyAudio = parser.isSet(verifyOption);
+    options.shotPath = parser.value(shotOption);
+    options.fakeAudio = !qEnvironmentVariableIsEmpty("HYPERLIGHT_FAKE_AUDIO");
+
+    App hyperlightApp(options);
+    if (!hyperlightApp.start())
+        return 1;
+
+    return QApplication::exec();
+}
