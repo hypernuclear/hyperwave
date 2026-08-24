@@ -136,15 +136,17 @@ CoreAudioTapSource::CoreAudioTapSource(QObject *parent)
     // Which processes are worth metering changes as apps open and close audio
     // devices, which is rare. A second is plenty, and setProcesses() is a cheap
     // no-op whenever the membership has not actually moved.
-    m_meterRefresh.setInterval(1000);
-    connect(&m_meterRefresh, &QTimer::timeout, this, [this] {
-        QVector<quint32> candidates;
-        for (const AudioProcess &process : AudioProcessProbe::listProcesses()) {
-            if (process.playingOutput)
-                candidates.append(process.objectId);
-        }
-        m_meter.setProcesses(candidates);
-    });
+    // Re-enumerating processes is not free: each one costs three
+    // AudioObjectGetPropertyData round trips to coreaudiod, and at roughly
+    // thirty processes a one-second poll measured as the single most expensive
+    // thing the app did -- more than the FFT, the renderer and the metering
+    // combined. So it is event-driven, with a slow timer only as a backstop in
+    // case a notification is ever missed.
+    m_meterRefresh.setSingleShot(true);
+    m_meterRefresh.setInterval(400);
+    connect(&m_meterRefresh, &QTimer::timeout, this, &CoreAudioTapSource::refreshMeterProcesses);
+    m_meterFallback.setInterval(15000);
+    connect(&m_meterFallback, &QTimer::timeout, this, &CoreAudioTapSource::refreshMeterProcesses);
 }
 
 CoreAudioTapSource::~CoreAudioTapSource()
@@ -227,7 +229,8 @@ bool CoreAudioTapSource::start()
         m_statusDetail += QStringLiteral(" — device ") + m_sourceDeviceUid;
 
     installListeners();
-    m_meterRefresh.start();
+    refreshMeterProcesses();
+    m_meterFallback.start();
     m_running = true;
     setPermissionState(PermissionState::Probing);
     return true;
@@ -245,6 +248,7 @@ void CoreAudioTapSource::stop()
     m_shuttingDown.store(true, std::memory_order_release);
     m_rebuildDebounce.stop();
     m_meterRefresh.stop();
+    m_meterFallback.stop();
     m_meter.stop();
     removeListeners();
     stopIo();
@@ -526,6 +530,62 @@ bool CoreAudioTapSource::restartCapture()
     return start();
 }
 
+void CoreAudioTapSource::refreshMeterProcesses()
+{
+    // Meter every named application, NOT just the ones claiming an open output
+    // stream.
+    //
+    // Chrome is the case that forced this. It plays through a helper process
+    // that never reports kAudioProcessPropertyIsRunningOutput, so filtering
+    // candidates on that property meant no tap was ever pointed at it and a
+    // YouTube tab could not appear in the list however loud it was. That is the
+    // third time this property has silently removed something real; it now only
+    // decides who gets a tap first when there are more candidates than slots.
+    AudioProcessList processes = AudioProcessProbe::listProcesses();
+    processes.removeIf([](const AudioProcess &p) { return !p.isNamed(); });
+    // There are usually more candidates than tap slots -- about thirty named
+    // processes on a working machine against sixteen slots -- so the order
+    // decides who is visible at all. Chrome landed fifth here by luck; that is
+    // not something to leave to luck.
+    //
+    // Anything already claiming an output stream first, then anything that is
+    // not an Apple background process. universalaccessd, loginwindow,
+    // PowerChime and callservicesd are never the answer to "what is playing
+    // music", and they should not displace Slack or a browser helper. Apple's
+    // own media apps keep their place, because Music and QuickTime obviously
+    // can be the answer.
+    const auto priority = [](const AudioProcess &p) {
+        if (p.playingOutput)
+            return 0;
+        if (!p.bundleId.startsWith(QLatin1String("com.apple.")))
+            return 1;
+        static const QStringList kAppleMedia = {
+            QStringLiteral("com.apple.Music"),      QStringLiteral("com.apple.iTunes"),
+            QStringLiteral("com.apple.TV"),         QStringLiteral("com.apple.podcasts"),
+            QStringLiteral("com.apple.QuickTimePlayerX"), QStringLiteral("com.apple.Safari"),
+        };
+        return kAppleMedia.contains(p.bundleId) ? 1 : 2;
+    };
+    std::sort(processes.begin(), processes.end(),
+              [&priority](const AudioProcess &a, const AudioProcess &b) {
+                  const int pa = priority(a), pb = priority(b);
+                  if (pa != pb)
+                      return pa < pb;
+                  return a.objectId < b.objectId;
+              });
+    QVector<quint32> candidates;
+    candidates.reserve(processes.size());
+    for (const AudioProcess &process : processes)
+        candidates.append(process.objectId);
+    m_meter.setProcesses(candidates);
+    if (qEnvironmentVariableIsSet("HYPERLIGHT_METER_DEBUG")) {
+        QStringList names;
+        for (const AudioProcess &p : processes)
+            names << p.name;
+        qInfo("hyperlight: metering %d app(s): %s", int(names.size()),
+              qPrintable(names.join(QStringLiteral(", "))));
+    }
+}
 void CoreAudioTapSource::refreshOutputDevice()
 {
     m_impl->outputDevice = defaultOutputDevice();
@@ -592,6 +652,19 @@ void CoreAudioTapSource::installListeners()
         }
     };
 
+    // A process appearing or disappearing is what changes the metering set --
+    // Chrome spawning its audio helper when a video starts, for instance.
+    {
+        AudioObjectPropertyAddress a = addr(kAudioHardwarePropertyProcessObjectList);
+        AudioObjectPropertyListenerBlock block =
+            ^(UInt32, const AudioObjectPropertyAddress *) { m_meterRefresh.start(); };
+        if (AudioObjectAddPropertyListenerBlock(kAudioObjectSystemObject, &a,
+                                                dispatch_get_main_queue(), block)
+            == noErr) {
+            m_impl->listeners.emplace_back(kAudioObjectSystemObject, a);
+            m_impl->listenerBlocks.push_back([block copy]);
+        }
+    }
     add(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice);
     add(kAudioObjectSystemObject, kAudioHardwarePropertyDevices);
     add(m_impl->outputDevice, kAudioDevicePropertyNominalSampleRate);

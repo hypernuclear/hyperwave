@@ -78,10 +78,11 @@ their icons. Informational and deliberately not selectable: which apps have
 audio going is a different question from where the visualiser listens.
 
 The list is built from a **measurement**, not from
-`kAudioProcessPropertyIsRunningOutput`. That property only says a process holds
-an open output stream, which a 3D editor does for hours while emitting digital
-silence — it got reported as "playing" three separate times before this was
-measured properly.
+`kAudioProcessPropertyIsRunningOutput`. That property is wrong in both
+directions: a 3D editor holds a stream open for hours while emitting digital
+silence, and Chrome plays a YouTube tab through a helper that never claims one
+at all. Every application is metered, and that property now only decides who
+gets a tap first when there are more candidates than slots.
 
 The measurement is cheap because one private aggregate device can hold *several*
 taps at once: `kAudioAggregateDeviceTapListKey` takes an array, and each tap
@@ -193,6 +194,7 @@ task for checking the other side of that.
 | `--source <uid>` | Listen to one output device by UID. `--source list` prints them |
 | `--fake-notch` | Pretend the display has a notch, for developing the panel on an external monitor |
 | `HYPERLIGHT_FAKE_AUDIO=1` | Drive the DSP from a synthetic sweep, so the renderer can be worked on with no audio and no permission |
+| `HYPERLIGHT_METER_DEBUG=1` | Log which applications are being metered, in priority order. The fastest way to check whether an app that should be in the "Playing" list is even a candidate |
 
 ## Layout
 
@@ -239,9 +241,14 @@ Measured on an M-series Mac, Release build, 60 fps, one P-core:
 
 | | |
 |---|---|
-| Visualising at 60 fps | ~7% |
-| Visualising at 30 fps | ~2.9% |
+| Visualising at 60 fps | ~9% |
+| Visualising at 30 fps | ~4% |
 | Nothing playing | display link stops; the strip holds its resting frame |
+About 2 points of that is the per-application metering — twenty live taps, which
+is what it costs to answer "what is playing" honestly. The metering IOProc
+itself is free (8 samples in a 4-second profile); the cost is the HAL delivering
+twenty streams. Turning the source picker's `--source list` on a quiet machine
+is the cheapest way to see the same information without it.
 
 Halving the frame rate saves more than half, because most of the per-callback
 cost is AppKit's display-link dispatch rather than anything hyperlight draws.

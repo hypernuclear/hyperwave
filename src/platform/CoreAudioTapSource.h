@@ -76,6 +76,7 @@ private:
     void removeListeners();
     void sweepOrphanedTaps();
     void refreshOutputDevice();
+    void refreshMeterProcesses();
     bool restartCapture();
     void noteHardwareChange();
 
@@ -89,7 +90,8 @@ private:
     // per candidate process, so "which apps are audible" is measured rather
     // than inferred from a property that cannot answer it.
     mutable AudioLevelMeter m_meter;
-    QTimer m_meterRefresh;
+    QTimer m_meterRefresh;    // debounce after a process-list change
+    QTimer m_meterFallback;   // slow backstop in case a notification is missed
 
     std::atomic<std::uint64_t> m_callbackCount{0};
     std::atomic<std::uint64_t> m_overruns{0};

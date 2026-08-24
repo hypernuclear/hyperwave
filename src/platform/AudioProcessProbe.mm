@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <vector>
 
+#include <QHash>
+
 #import <AppKit/AppKit.h>
 #import <CoreAudio/AudioHardware.h>
 
@@ -54,6 +56,34 @@ bool readIsPlaying(AudioObjectID object)
     return AudioObjectGetPropertyData(object, &a, 0, nullptr, &size, &running) == noErr && running;
 }
 
+// pid -> localised application name, cached.
+//
+// NSRunningApplication::runningApplicationWithProcessIdentifier: goes to
+// LaunchServices, and it is not cheap: profiling the app showed this one lookup
+// dominating everything else it does, ahead of the FFT, the renderer and the
+// per-application metering combined, purely because it ran for every process
+// once a second. Names do not change for the life of a process, so ask once.
+QString cachedName(pid_t pid)
+{
+    static QHash<qint64, QString> cache;
+    const auto key = static_cast<qint64>(pid);
+    const auto it = cache.constFind(key);
+    if (it != cache.constEnd())
+        return *it;
+    QString name;
+    if (NSRunningApplication *app =
+            [NSRunningApplication runningApplicationWithProcessIdentifier:pid]) {
+        name = QString::fromNSString(app.localizedName);
+    }
+    // Cached even when empty -- "this pid is not an application" is exactly the
+    // answer that would otherwise be recomputed every second for every daemon.
+    // Pids do get reused, but only after a process exits, and a stale name on a
+    // recycled pid is a cosmetic error in a menu rather than a correctness one.
+    if (cache.size() > 512)
+        cache.clear();
+    cache.insert(key, name);
+    return name;
+}
 QString readBundleId(AudioObjectID object)
 {
     CFStringRef bundle = nullptr;
@@ -99,10 +129,7 @@ AudioProcessList listProcesses()
         // NSRunningApplication is what turns "com.spotify.client" into
         // "Spotify". Faceless helpers have no running application and keep an
         // empty name, which is how callers filter them out.
-        if (NSRunningApplication *app =
-                [NSRunningApplication runningApplicationWithProcessIdentifier:pid]) {
-            process.name = QString::fromNSString(app.localizedName);
-        }
+        process.name = cachedName(pid);
 
         result.append(process);
     }

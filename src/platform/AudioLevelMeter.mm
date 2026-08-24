@@ -22,13 +22,22 @@ namespace {
 // threshold is nowhere near either edge.
 constexpr float kAudibleDb = -80.0f;
 
-// Applied once per IO callback (~10 ms), giving roughly a two-second tail. The
-// meter answers "has this been making noise lately", which is the question the
+// Applied once per IO callback. The buffer is deliberately large (see the frame
+// size below), so a callback is roughly 85 ms and this gives about a two-second
+// tail. The meter answers "has this been making noise lately", which is what the
 // menu is really asking; tracking the instantaneous level would make apps
 // flicker in and out between beats.
-constexpr float kDecayPerCallback = 0.997f;
+//
+// This constant is tied to the buffer size. Change one and the tail length
+// changes with it.
+constexpr float kDecayPerCallback = 0.96f;
 
-constexpr int kMaxMetered = 12;
+// Sixteen was not enough: a working machine has about thirty named processes
+// registered with the audio system, and a browser helper can easily fall
+// outside a smaller window. Twenty covers every third-party app on this machine
+// with room to spare, and the caller orders candidates so the ones that matter
+// take the slots.
+constexpr int kMaxMetered = 20;
 
 AudioObjectPropertyAddress addr(AudioObjectPropertySelector selector)
 {
@@ -39,7 +48,12 @@ AudioObjectPropertyAddress addr(AudioObjectPropertySelector selector)
 
 struct AudioLevelMeter::Impl
 {
-    QVector<quint32> processes;                 // in stream order
+    QVector<quint32> processes;   // accepted, in stream order -- indexes peak[]
+    // What was last asked for, which is not the same thing: a tap can fail to
+    // be created. Comparing against `processes` instead would see a mismatch
+    // every time that happened and rebuild the whole aggregate once a second,
+    // forever.
+    QVector<quint32> requested;
     std::vector<AudioObjectID> taps;
     AudioObjectID aggregate = kAudioObjectUnknown;
     AudioDeviceIOProcID ioProc = nullptr;
@@ -69,6 +83,7 @@ struct AudioLevelMeter::Impl
             AudioHardwareDestroyProcessTap(tap);
         taps.clear();
         processes.clear();
+        requested.clear();
         for (auto &p : peak)
             p.store(0.0f, std::memory_order_relaxed);
     }
@@ -151,7 +166,7 @@ void AudioLevelMeter::setProcesses(const QVector<quint32> &objectIds)
         wanted.resize(kMaxMetered);
     std::sort(wanted.begin(), wanted.end());
 
-    QVector<quint32> current = m_impl->processes;
+    QVector<quint32> current = m_impl->requested;
     std::sort(current.begin(), current.end());
     if (wanted == current)
         return;   // nothing to do, and rebuilding would cost far more than this check
@@ -218,14 +233,28 @@ void AudioLevelMeter::setProcesses(const QVector<quint32> &objectIds)
     }
     m_impl->aggregate = aggregate;
     m_impl->processes = accepted;   // stream order matches tap order
+    m_impl->requested = wanted;
 
+    // A big buffer, deliberately.
+    //
+    // Capture wants small buffers because latency shows on screen. A meter does
+    // not: it answers "has this been making noise lately" and is read when a
+    // menu opens. Asking for 4096 frames drops the callback rate from ~94/s to
+    // ~11/s, and with sixteen taps to deliver each time that is most of what
+    // this costs. Failure is non-fatal -- the device keeps whatever it had.
+    UInt32 frames = 4096;
+    AudioObjectPropertyAddress bs = addr(kAudioDevicePropertyBufferFrameSize);
+    (void)AudioObjectSetPropertyData(aggregate, &bs, 0, nullptr, sizeof(frames), &frames);
     if (AudioDeviceCreateIOProcID(aggregate, meterProc, m_impl.get(), &m_impl->ioProc) != noErr
         || !m_impl->ioProc) {
         m_impl->teardown();
         return;
     }
-    if (AudioDeviceStart(aggregate, m_impl->ioProc) != noErr)
+    if (AudioDeviceStart(aggregate, m_impl->ioProc) != noErr) {
         m_impl->teardown();
+        return;
+    }
+    m_impl->requested = wanted;
 }
 
 float AudioLevelMeter::levelDb(quint32 objectId) const
