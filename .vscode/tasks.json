@@ -1,0 +1,81 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Every launch config depends on this, and it is not housekeeping.
+      //
+      // hyperlight is a background agent with no window and no Dock icon, so a
+      // previous debug session that was stopped rather than quit leaves an
+      // invisible process behind. That process still owns a status item, a
+      // CoreAudio process tap, an aggregate device, and one metering tap per
+      // audible app. Start a second one and you get two strips in the menu bar
+      // and two sets of taps, which is confusing at best.
+      //
+      // SIGTERM first so the teardown ordering in App::~App actually runs --
+      // that is what stops the IOProc before the ring it writes into is freed.
+      // Wait up to three seconds, then insist. Always exits 0, so "nothing was
+      // running" does not abort the launch.
+      "label": "Kill running hyperlight",
+      "type": "shell",
+      "command": "pkill -x hyperlight 2>/dev/null; for i in $(seq 1 30); do pgrep -x hyperlight >/dev/null || exit 0; sleep 0.1; done; pkill -9 -x hyperlight 2>/dev/null; exit 0",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Run tests (ctest)",
+      "type": "shell",
+      "command": "ctest",
+      "args": ["--test-dir", "${command:cmake.buildDirectory}", "--output-on-failure"],
+      // Marks this as THE test task, so Terminal > Run Test Task picks it with
+      // no further prompting, and so it can be bound to a key via
+      // Preferences > Keyboard Shortcuts, "Tasks: Run Test Task".
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      // Always show it. A test run that reports only on failure is
+      // indistinguishable from one that never started.
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      // The one thing the debugger cannot do for you.
+      //
+      // Launching under a debugger runs hyperlight as a child of VS Code, so
+      // TCC uses VS Code's system-audio grant. This task runs the real bundle
+      // through LaunchServices, where hyperlight is its own responsible process
+      // and its own permission applies. If it works here and not there, the
+      // grant is the difference.
+      "label": "Run as a real app (LaunchServices)",
+      "type": "shell",
+      "command": "open",
+      "args": ["${workspaceFolder}/build/hyperlight.app"],
+      "dependsOn": "Kill running hyperlight",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      // Prints every output device with its UID, which is what --source takes.
+      "label": "List audio sources",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/hyperlight.app/Contents/MacOS/hyperlight",
+      "args": ["--source", "list"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

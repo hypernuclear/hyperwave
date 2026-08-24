@@ -1,0 +1,35 @@
+{
+  // No machine-specific paths here. Qt's location lives in
+  // CMakeUserPresets.json, which is git-ignored -- see CMakePresets.json.
+  "cmake.useCMakePresets": "always",
+  "cmake.configureOnOpen": true,
+  "cmake.buildBeforeRun": true,
+
+  // Put every CTest test in the Testing panel (the flask in the activity bar),
+  // individually runnable.
+  "cmake.ctest.testExplorerIntegrationEnabled": true,
+  // Four binaries, all headless, all well under a second. Nothing to serialise.
+  "cmake.ctest.allowParallelJobs": true,
+
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+  "C_Cpp.default.cppStandard": "c++20",
+  "C_Cpp.errorSquiggles": "enabled",
+  "C_Cpp.files.exclude": {
+    "${workspaceFolder}/build": true,
+    "${workspaceFolder}/build-rel": true
+  },
+
+  // Objective-C++ by extension. Without this the .mm files open as plain
+  // Objective-C and every C++ construct in them squiggles.
+  "files.associations": {
+    "*.mm": "objective-cpp",
+    "*.qml": "qml"
+  },
+
+  "search.exclude": {
+    "**/build": true,
+    "**/build-*": true
+  },
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true
+}

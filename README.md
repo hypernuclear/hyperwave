@@ -168,6 +168,20 @@ would look like a brand new app and re-prompt for the audio permission forever.
 ctest --preset dev
 ```
 
+### In VS Code
+
+`.vscode/` is committed and carries no machine-specific paths. F5 gives you the
+menu bar item; the drop-down also has windowed mode for renderer work, a HUD
+configuration, a faked notch for developing the panel in clamshell, a
+capture-only run, and one entry per test binary for stepping into a failure.
+
+One wrinkle worth knowing before it costs you an afternoon: a debugger launches
+hyperlight as a child of VS Code, so **TCC uses VS Code's system-audio grant,
+not hyperlight's**. If VS Code has not been granted "System Audio Recording",
+the tap is created, the IOProc fires, and every sample is zero — the app looks
+alive and the bars stay flat. There is a "Run as a real app (LaunchServices)"
+task for checking the other side of that.
+
 ## Flags and env
 
 | | |

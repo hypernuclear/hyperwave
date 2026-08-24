@@ -19,7 +19,10 @@ struct NotchGeometry
     NSScreen *screen = nil;
     CGFloat notchWidth = 0;
     CGFloat notchHeight = 0;
-    CGFloat menuBarHeight = 0;
+    // frame minus visibleFrame, so this is menu bar PLUS Dock, not the menu
+    // bar alone. Only used as a floor for the faked geometry and in logging;
+    // nothing lays anything out with it.
+    CGFloat screenChromeHeight = 0;
     NSRect screenFrame = NSZeroRect;
 };
 
@@ -37,7 +40,7 @@ NotchGeometry notchGeometry()
 
     geometry.screen = screen;
     geometry.screenFrame = screen.frame;
-    geometry.menuBarHeight = screen.frame.size.height - screen.visibleFrame.size.height;
+    geometry.screenChromeHeight = screen.frame.size.height - screen.visibleFrame.size.height;
 
     if (@available(macOS 12.0, *)) {
         const CGFloat inset = screen.safeAreaInsets.top;
@@ -57,7 +60,7 @@ NotchGeometry notchGeometry()
         // A 14-inch MacBook Pro, for developing on an external monitor.
         geometry.notchWidth = 185.0;
         geometry.notchHeight = 32.0;
-        geometry.menuBarHeight = std::max<CGFloat>(geometry.menuBarHeight, 33.0);
+        geometry.screenChromeHeight = std::max<CGFloat>(geometry.screenChromeHeight, 33.0);
         geometry.valid = true;
     }
     return geometry;
@@ -460,8 +463,8 @@ bool MacNotchPresenter::install()
                name:NSApplicationDidChangeScreenParametersNotification
              object:nil];
 
-    qInfo("hyperlight: notch panel installed (%.0f x %.0f pt notch, menu bar %.0f pt)",
-          g.notchWidth, g.notchHeight, g.menuBarHeight);
+    qInfo("hyperlight: notch panel installed (%.0f x %.0f pt notch)", g.notchWidth,
+          g.notchHeight);
     return true;
 }
 

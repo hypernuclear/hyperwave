@@ -1,0 +1,187 @@
+{
+  // Debugging hyperlight has one wrinkle that is not obvious and will waste an
+  // afternoon if you meet it cold.
+  //
+  // TCC attributes a system-audio capture request to the RESPONSIBLE process,
+  // not to the binary that made it. A debugger launches the executable as a
+  // child, so every configuration below runs under Visual Studio Code's grant
+  // rather than hyperlight's own. Two consequences:
+  //
+  //   * If VS Code has not been granted "System Audio Recording", the tap will
+  //     be created, the IOProc will fire, and every sample will be zero. The
+  //     app looks alive and the bars stay flat. macOS does not prompt for this.
+  //     Grant it to VS Code once, in System Settings > Privacy & Security.
+  //   * Conversely, hyperlight can appear to work here while having no grant of
+  //     its own at all. To exercise the real path, run the bundle through
+  //     LaunchServices instead: `open build/hyperlight.app`.
+  //
+  // Everything else -- rendering, the DSP, the menu, the notch panel -- behaves
+  // identically either way.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // The everyday one: the real menu bar item, exactly as it ships.
+      "name": "hyperlight: Menu bar",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Kill running hyperlight",
+      "args": [],
+      "environment": [
+        // cppdbg wants {"name","value"} pairs and silently ignores any other
+        // shape, so {"VAR": "1"} looks right and does nothing.
+        //
+        // { "name": "HYPERLIGHT_FAKE_AUDIO", "value": "1" },
+        // { "name": "QT_LOGGING_RULES", "value": "*.debug=true" },
+        // { "name": "QSG_INFO", "value": "1" }
+      ],
+      "osx": {
+        "MIMode": "lldb",
+        "targetArchitecture": "arm64",
+        "logging": { "moduleLoad": false }
+      }
+    },
+    {
+      // Renderer work. Draws the strip into an ordinary window instead of the
+      // menu bar, so the visuals can be iterated on without fighting the shell
+      // or squinting at 22 points. The HUD comes with it.
+      "name": "hyperlight: Windowed (renderer)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Kill running hyperlight",
+      "args": ["--windowed"],
+      "environment": [],
+      "osx": {
+        "MIMode": "lldb",
+        "targetArchitecture": "arm64",
+        "logging": { "moduleLoad": false }
+      }
+    },
+    {
+      // Menu bar item plus the diagnostics window: OSStatus, callback count,
+      // the ASBD, RMS, AGC, sample rate, ring overruns, permission state.
+      //
+      // This is the configuration to reach for when the bars are flat. It
+      // distinguishes "the tap is dead" from "the tap is fine and the machine
+      // is quiet" from "we are being handed silence", which look identical from
+      // the outside.
+      "name": "hyperlight: Menu bar + HUD",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Kill running hyperlight",
+      "args": ["--hud"],
+      "environment": [],
+      "osx": {
+        "MIMode": "lldb",
+        "targetArchitecture": "arm64",
+        "logging": { "moduleLoad": false }
+      }
+    },
+    {
+      // The notch panel on a display that has no notch.
+      //
+      // Synthesises 14-inch MacBook Pro geometry (185 x 32 pt) at the top
+      // centre of the main display. Necessary because the panel cannot
+      // otherwise be developed in clamshell, and because on a real notched Mac
+      // the top half of the panel is hidden behind the camera housing -- here
+      // the whole shape is visible, which is what you want while laying it out.
+      "name": "hyperlight: Notch panel (faked)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Kill running hyperlight",
+      "args": ["--fake-notch", "--hud"],
+      "environment": [],
+      "osx": {
+        "MIMode": "lldb",
+        "targetArchitecture": "arm64",
+        "logging": { "moduleLoad": false }
+      }
+    },
+    {
+      // Capture only: prints RMS, AGC, presence, loudest band, callback and
+      // overrun counts for five seconds, then exits. No UI at all.
+      //
+      // The fastest answer to "can it hear the system", and the right place to
+      // put a breakpoint when the answer is no.
+      "name": "hyperlight: Verify capture",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Kill running hyperlight",
+      "args": ["--verify-audio"],
+      "environment": [],
+      "osx": {
+        "MIMode": "lldb",
+        "targetArchitecture": "arm64",
+        "logging": { "moduleLoad": false }
+      }
+    },
+
+    // --- tests -------------------------------------------------------------
+    //
+    // For RUNNING these, use the Testing panel (the flask in the activity bar)
+    // -- CMake Tools populates it from CTest, so all four appear there with
+    // pass/fail beside each. These entries are for the other job: stopping
+    // inside a failing one.
+    //
+    // A Qt Test binary with no arguments runs every slot it has. Pass a slot
+    // name in "args" to run just that one, e.g. ["peakFallAccelerates"].
+    {
+      "name": "Test: ring buffer + downmix",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/tests/tst_ring",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build",
+      "args": [],
+      "environment": [],
+      "osx": { "MIMode": "lldb", "targetArchitecture": "arm64" }
+    },
+    {
+      "name": "Test: FFT (vs naive DFT)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/tests/tst_fft",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build",
+      "args": [],
+      "environment": [],
+      "osx": { "MIMode": "lldb", "targetArchitecture": "arm64" }
+    },
+    {
+      "name": "Test: spectrum analyser",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/tests/tst_spectrum",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build",
+      "args": [],
+      "environment": [],
+      "osx": { "MIMode": "lldb", "targetArchitecture": "arm64" }
+    },
+    {
+      "name": "Test: ballistics",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/tests/tst_ballistics",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build",
+      "args": [],
+      "environment": [],
+      "osx": { "MIMode": "lldb", "targetArchitecture": "arm64" }
+    }
+  ]
+}
