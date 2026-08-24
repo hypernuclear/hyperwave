@@ -97,6 +97,27 @@ QString readBundleId(AudioObjectID object)
 
 } // namespace
 
+QString appNameForBundleId(const QString &bundleId)
+{
+    if (bundleId.isEmpty())
+        return {};
+    static QHash<QString, QString> cache;
+    const auto it = cache.constFind(bundleId);
+    if (it != cache.constEnd())
+        return *it;
+    QString name;
+    NSString *identifier = bundleId.toNSString();
+    if (NSURL *url = [[NSWorkspace sharedWorkspace]
+            URLForApplicationWithBundleIdentifier:identifier]) {
+        name = QString::fromNSString([[NSFileManager defaultManager] displayNameAtPath:url.path]);
+        if (name.endsWith(QLatin1String(".app")))
+            name.chop(4);
+    }
+    // Cached even when empty: "there is no application with this bundle id" is
+    // the answer for every daemon on the system and the one most often asked.
+    cache.insert(bundleId, name);
+    return name;
+}
 bool isAvailable()
 {
     bool ok = false;

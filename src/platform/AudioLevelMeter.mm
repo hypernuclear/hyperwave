@@ -17,10 +17,6 @@ namespace hyperlight {
 
 namespace {
 
-// Below this an app is not making a sound anyone can hear. Digital silence
-// reads as -120, and anything genuinely playing sits far above -80, so the
-// threshold is nowhere near either edge.
-constexpr float kAudibleDb = -80.0f;
 
 // Applied once per IO callback. The buffer is deliberately large (see the frame
 // size below), so a callback is roughly 85 ms and this gives about a two-second
@@ -32,12 +28,7 @@ constexpr float kAudibleDb = -80.0f;
 // changes with it.
 constexpr float kDecayPerCallback = 0.96f;
 
-// Sixteen was not enough: a working machine has about thirty named processes
-// registered with the audio system, and a browser helper can easily fall
-// outside a smaller window. Twenty covers every third-party app on this machine
-// with room to spare, and the caller orders candidates so the ones that matter
-// take the slots.
-constexpr int kMaxMetered = 20;
+constexpr int kMaxMetered = AudioLevelMeter::kMaxMeteredProcesses;
 
 AudioObjectPropertyAddress addr(AudioObjectPropertySelector selector)
 {
@@ -270,7 +261,7 @@ float AudioLevelMeter::levelDb(quint32 objectId) const
 
 bool AudioLevelMeter::isAudible(quint32 objectId) const
 {
-    return levelDb(objectId) > kAudibleDb;
+    return levelDb(objectId) > AudioLevelMeter::kAudibleDb;
 }
 
 } // namespace hyperlight

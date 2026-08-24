@@ -22,6 +22,18 @@ namespace hyperlight {
 class AudioLevelMeter
 {
 public:
+    // Below this an app is not making a sound anyone can hear. Digital silence
+    // reads as -120 and anything genuinely playing sits far above -80, so the
+    // threshold is nowhere near either edge. Public because callers that roll
+    // several processes up into one application have to apply it to the total.
+    static constexpr float kAudibleDb = -80.0f;
+    // How many process taps one aggregate carries. Named processes are no
+    // longer the unit -- helpers are metered too, because a browser's audio is
+    // on a helper -- so this covers applications times helpers rather than
+    // applications. Public because the caller has to know when it is about to
+    // run out and say so.
+    static constexpr int kMaxMeteredProcesses = 40;
+
     AudioLevelMeter();
     ~AudioLevelMeter();
 

@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <thread>
 #include <vector>
 
@@ -13,6 +14,9 @@
 #import <Foundation/Foundation.h>
 
 #include <QDebug>
+#include <QHash>
+#include <QRegularExpression>
+#include <QSet>
 
 #include "audio/Downmix.h"
 #include "platform/AudioProcessProbe.h"
@@ -492,6 +496,92 @@ AudioProcessList CoreAudioTapSource::audioProcesses() const
         process.levelDb = m_meter.levelDb(process.objectId);
         process.audible = m_meter.isAudible(process.objectId);
     }
+
+    // Collapse each application's processes into the one row a menu can show.
+    //
+    // A measured level and a displayable identity almost never live on the same
+    // process. Chrome's audio is on an unnamed com.google.Chrome.helper; the
+    // name and the icon are on com.google.Chrome, which is silent. So take the
+    // loudest member of the group and give it to the member that can be named.
+    QHash<QString, float> loudest;
+    for (const AudioProcess &process : processes) {
+        if (process.bundleId.isEmpty())
+            continue;
+        const QString key = process.appKey();
+        const auto it = loudest.find(key);
+        if (it == loudest.end())
+            loudest.insert(key, process.levelDb);
+        else
+            *it = std::max(*it, process.levelDb);
+    }
+
+    // Prefer the process whose bundle id *is* the application's, because that is
+    // the one carrying the real name and the icon; any named member will do
+    // otherwise. A group with no named member gets no representative and stays
+    // out of the menu entirely -- which is the right answer for the Core Audio
+    // driver host, an unnamed helper that re-renders the whole system mix at
+    // about -41 dB whenever a virtual output device is in use and would
+    // otherwise look like the loudest thing on the machine.
+    QHash<QString, qsizetype> representative;
+    for (qsizetype i = 0; i < processes.size(); ++i) {
+        const AudioProcess &process = processes[i];
+        if (process.bundleId.isEmpty() || !process.isNamed())
+            continue;
+        const QString key = process.appKey();
+        const auto it = representative.constFind(key);
+        if (it == representative.constEnd() || (process.bundleId == key
+                                                && processes[*it].bundleId != key)) {
+            representative.insert(key, i);
+        }
+    }
+    // Groups where no process has a name at all still get one if the bundle id
+    // belongs to an installed application. Electron apps need this: Cursor
+    // registers only com.todesktop....helper processes and never itself, so
+    // there is no named process to promote and LaunchServices is the only thing
+    // that knows the app is called Cursor. Anything that resolves to nothing --
+    // universalaccessd, WebKit's GPU service, the Core Audio driver host --
+    // stays out of the menu, which is the right answer for all three.
+    QHash<QString, qsizetype> fallback;
+    for (qsizetype i = 0; i < processes.size(); ++i) {
+        const AudioProcess &process = processes[i];
+        const QString key = process.appKey();
+        if (key.isEmpty() || representative.contains(key))
+            continue;   // a named process already speaks for this application
+        if (AudioProcessProbe::appNameForBundleId(key).isEmpty())
+            continue;
+        const auto it = fallback.constFind(key);
+        if (it == fallback.constEnd() || process.objectId < processes[*it].objectId)
+            fallback.insert(key, i);
+    }
+    for (auto it = fallback.cbegin(); it != fallback.cend(); ++it)
+        representative.insert(it.key(), it.value());
+
+    QSet<qsizetype> chosen;
+    for (auto it = representative.cbegin(); it != representative.cend(); ++it) {
+        AudioProcess &process = processes[it.value()];
+        process.levelDb = loudest.value(it.key(), process.levelDb);
+        process.audible = process.levelDb > AudioLevelMeter::kAudibleDb;
+        if (!process.isNamed())
+            process.name = AudioProcessProbe::appNameForBundleId(it.key());
+        if (process.bundleId != it.key()) {
+            // Only reached when an application registered helpers but not
+            // itself. "Slack Helper (Renderer)" is not something anyone chose to
+            // play; the app it belongs to is.
+            static const QRegularExpression tail(QStringLiteral("\\s+Helper\\b.*$"),
+                                                 QRegularExpression::CaseInsensitiveOption);
+            process.name.remove(tail);
+            process.bundleId = it.key();   // the icon belongs to the app, not the helper
+        }
+        chosen.insert(it.value());
+    }
+
+    // Everything that is not a representative is silenced for display purposes,
+    // so an application appears once rather than once per helper. The raw level
+    // stays put; only the claim to be worth listing is withdrawn.
+    for (qsizetype i = 0; i < processes.size(); ++i) {
+        if (!chosen.contains(i))
+            processes[i].audible = false;
+    }
     return processes;
 }
 
@@ -532,33 +622,43 @@ bool CoreAudioTapSource::restartCapture()
 
 void CoreAudioTapSource::refreshMeterProcesses()
 {
-    // Meter every named application, NOT just the ones claiming an open output
-    // stream.
+    // Meter every process an application owns, not just the one wearing its name.
     //
-    // Chrome is the case that forced this. It plays through a helper process
-    // that never reports kAudioProcessPropertyIsRunningOutput, so filtering
-    // candidates on that property meant no tap was ever pointed at it and a
-    // YouTube tab could not appear in the list however loud it was. That is the
-    // third time this property has silently removed something real; it now only
-    // decides who gets a tap first when there are more candidates than slots.
+    // Chrome is the case that forced this, and it is worth being precise about
+    // because the same mistake has now been made three different ways. With a
+    // YouTube tab playing, a tap on com.google.Chrome.helper -- pid only, no
+    // application name, the kind of process the old filter dropped on sight --
+    // read -17.0 dB. A tap on com.google.Chrome read -120. A tap on the *named*
+    // "Google Chrome Helper" read -120. A global tap minus Spotify read -16.9,
+    // which is the same signal: Chrome's audio was fully attributable the whole
+    // time, just not to a process anyone would recognise.
+    //
+    // So candidates are grouped by application and every member is metered.
+    // Names and icons still come from the named process, levels from whichever
+    // process is actually producing samples, and neither one alone could have
+    // answered "is Chrome playing".
     AudioProcessList processes = AudioProcessProbe::listProcesses();
-    processes.removeIf([](const AudioProcess &p) { return !p.isNamed(); });
-    // There are usually more candidates than tap slots -- about thirty named
-    // processes on a working machine against sixteen slots -- so the order
-    // decides who is visible at all. Chrome landed fifth here by luck; that is
-    // not something to leave to luck.
+    processes.removeIf([](const AudioProcess &p) { return p.bundleId.isEmpty(); });
+
+    // There are more processes than tap slots -- about fifty against forty --
+    // so the order decides who is visible at all.
     //
-    // Anything already claiming an output stream first, then anything that is
-    // not an Apple background process. universalaccessd, loginwindow,
-    // PowerChime and callservicesd are never the answer to "what is playing
-    // music", and they should not displace Slack or a browser helper. Apple's
-    // own media apps keep their place, because Music and QuickTime obviously
-    // can be the answer.
+    // Note what is *not* here: kAudioProcessPropertyIsRunningOutput. It was the
+    // first tier until a run of this showed what that costs. Apple's background
+    // machinery holds output streams open permanently -- universalaccessd,
+    // loginwindow, PowerChime, cloudpaird all claim one and none of them will
+    // ever be the answer to "what is playing music" -- so promoting stream
+    // holders handed the top of the list to daemons and pushed real
+    // applications, Cursor and Audio Hijack's daemon among them, off the end.
+    // That property has now been wrong as a filter in both directions and wrong
+    // as a priority; it is not consulted here at all.
+    //
+    // Third-party applications first, because they are the entire question.
+    // Then Apple's own media apps, because Music and QuickTime obviously can be
+    // the answer. Then everything else Apple ships, on whatever is left.
     const auto priority = [](const AudioProcess &p) {
-        if (p.playingOutput)
-            return 0;
         if (!p.bundleId.startsWith(QLatin1String("com.apple.")))
-            return 1;
+            return 0;
         static const QStringList kAppleMedia = {
             QStringLiteral("com.apple.Music"),      QStringLiteral("com.apple.iTunes"),
             QStringLiteral("com.apple.TV"),         QStringLiteral("com.apple.podcasts"),
@@ -566,24 +666,76 @@ void CoreAudioTapSource::refreshMeterProcesses()
         };
         return kAppleMedia.contains(p.bundleId) ? 1 : 2;
     };
-    std::sort(processes.begin(), processes.end(),
-              [&priority](const AudioProcess &a, const AudioProcess &b) {
-                  const int pa = priority(a), pb = priority(b);
-                  if (pa != pb)
-                      return pa < pb;
-                  return a.objectId < b.objectId;
-              });
+    struct Group
+    {
+        QVector<quint32> objectIds;
+        int priority = 3;
+        bool named = false;
+        quint32 first = std::numeric_limits<quint32>::max();
+    };
+    QHash<QString, Group> groups;
+    for (const AudioProcess &process : processes) {
+        Group &group = groups[process.appKey()];
+        group.objectIds.append(process.objectId);
+        group.priority = std::min(group.priority, priority(process));
+        group.named = group.named || process.isNamed();
+        group.first = std::min(group.first, process.objectId);
+    }
+    // A group that cannot be named cannot be shown, so it must never hold a tap
+    // that a real application needs.
+    //
+    // This is emphatically not the filter that hid Chrome. That one asked
+    // whether the *process* had a name, and Chrome's audio comes out of one
+    // that does not. This asks whether the *application* has a name, which is a
+    // different question and one LaunchServices can answer from the bundle id
+    // even when every process in the group is faceless -- which is exactly the
+    // Electron case: Cursor and Audio Hijack's daemon register only helpers,
+    // and before the lookup was added both were being turned away for want of a
+    // slot despite being ordinary third-party apps. What is left over here is
+    // the genuinely anonymous: systemsoundserverd, WebKit's shared GPU service,
+    // the Core Audio driver host. None of them can appear in a menu, so none of
+    // them should cost a tap.
+    for (auto it = groups.begin(); it != groups.end(); ++it) {
+        if (!it->named)
+            it->named = !AudioProcessProbe::appNameForBundleId(it.key()).isEmpty();
+        if (!it->named)
+            it->priority = 3;
+    }
+
+    // Whole applications, in priority order. Keeping a group together matters:
+    // metering half of Chrome is how this went wrong in the first place.
+    QVector<QString> keys = groups.keys();
+    std::sort(keys.begin(), keys.end(), [&groups](const QString &a, const QString &b) {
+        const Group &ga = groups[a], &gb = groups[b];
+        if (ga.priority != gb.priority)
+            return ga.priority < gb.priority;
+        return ga.first < gb.first;
+    });
+
     QVector<quint32> candidates;
-    candidates.reserve(processes.size());
-    for (const AudioProcess &process : processes)
-        candidates.append(process.objectId);
+    QStringList metered, dropped;
+    for (const QString &key : keys) {
+        Group &group = groups[key];
+        std::sort(group.objectIds.begin(), group.objectIds.end());
+        if (candidates.size() + group.objectIds.size() > AudioLevelMeter::kMaxMeteredProcesses) {
+            dropped << key;
+            continue;
+        }
+        candidates.append(group.objectIds);
+        metered << QStringLiteral("%1(%2)").arg(key).arg(group.objectIds.size());
+    }
     m_meter.setProcesses(candidates);
+
     if (qEnvironmentVariableIsSet("HYPERLIGHT_METER_DEBUG")) {
-        QStringList names;
-        for (const AudioProcess &p : processes)
-            names << p.name;
-        qInfo("hyperlight: metering %d app(s): %s", int(names.size()),
-              qPrintable(names.join(QStringLiteral(", "))));
+        qInfo("hyperlight: metering %d process(es) across %d app(s): %s", int(candidates.size()),
+              int(metered.size()), qPrintable(metered.join(QStringLiteral(", "))));
+        // Never drop coverage silently: an app missing from the "Playing" list
+        // because it lost a race for a tap slot looks exactly like a bug in the
+        // meter, and this is the line that tells the two apart.
+        if (!dropped.isEmpty()) {
+            qInfo("hyperlight: no tap slots left for %d app(s): %s", int(dropped.size()),
+                  qPrintable(dropped.join(QStringLiteral(", "))));
+        }
     }
 }
 void CoreAudioTapSource::refreshOutputDevice()

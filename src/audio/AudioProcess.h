@@ -30,6 +30,21 @@ struct AudioProcess
     bool audible = false;
 
     bool isNamed() const { return !name.isEmpty(); }
+
+    // The application this process belongs to, as a bundle id.
+    //
+    // A browser is not one process and the interesting half is usually the one
+    // you cannot see. Chrome plays a YouTube tab out of com.google.Chrome.helper
+    // -- measured at -17.0 dB -- while com.google.Chrome and the named "Google
+    // Chrome Helper" both sit at digital silence. The level lives on a process
+    // with no application name; the name and the icon live on a process with no
+    // audio. Grouping by this key is what lets one answer come out of both.
+    QString appKey() const
+    {
+        const qsizetype helper =
+            bundleId.indexOf(QLatin1String(".helper"), 0, Qt::CaseInsensitive);
+        return helper > 0 ? bundleId.left(helper) : bundleId;
+    }
 };
 
 using AudioProcessList = QVector<AudioProcess>;

@@ -34,6 +34,19 @@ bool isAvailable();
 AudioProcessList listProcesses();
 // Every device with output channels, newest state each call.
 AudioDeviceList listOutputDevices();
+// The display name of an installed application, by bundle id, or empty if there
+// is no such application.
+//
+// Needed because a process name is not an application name. Electron apps are
+// the case: Cursor registers three com.todesktop....helper processes with
+// CoreAudio and never registers the app itself, so every process in the group
+// is faceless and nothing in the running-process table can say what it is.
+// LaunchServices can, from the bundle id alone. This also quietly settles which
+// of Apple's background processes are applications at all -- universalaccessd
+// and WebKit's GPU service resolve to nothing, which is the correct answer.
+//
+// Cached: LaunchServices lookups are expensive and installed apps do not move.
+QString appNameForBundleId(const QString &bundleId);
 
 
 } // namespace AudioProcessProbe

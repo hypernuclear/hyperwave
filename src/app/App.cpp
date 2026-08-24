@@ -144,6 +144,32 @@ bool App::start()
                               m_audio->source()->formatEpoch());
     QMetaObject::invokeMethod(m_worker, &DspWorker::start, Qt::QueuedConnection);
 
+    // The "Playing" list, printed on a timer, from the same call the menu uses.
+    //
+    // Worth its few lines: every wrong answer this list has given -- an idle 3D
+    // editor listed as playing, a browser that would not appear at all -- was
+    // found by someone opening a menu and disagreeing with it, which is a slow
+    // and unreliable way to test a measurement. This makes the same question
+    // answerable in one command with no clicking.
+    if (qEnvironmentVariableIsSet("HYPERLIGHT_METER_DEBUG")) {
+        auto *timer = new QTimer(this);
+        timer->setInterval(2000);
+        connect(timer, &QTimer::timeout, this, [this] {
+            AudioProcessList processes = m_audio->source()->audioProcesses();
+            processes.removeIf([](const AudioProcess &p) { return !p.isNamed() || !p.audible; });
+            std::sort(processes.begin(), processes.end(),
+                      [](const AudioProcess &a, const AudioProcess &b) {
+                          return a.levelDb > b.levelDb;
+                      });
+            QStringList playing;
+            for (const AudioProcess &p : processes)
+                playing << QStringLiteral("%1 %2 dB").arg(p.name).arg(p.levelDb, 0, 'f', 1);
+            qInfo("hyperlight: playing: %s",
+                  playing.isEmpty() ? "(nothing)" : qPrintable(playing.join(QStringLiteral(", "))));
+        });
+        timer->start();
+    }
+
     if (m_options.verifyAudio) {
         auto *timer = new QTimer(this);
         timer->setInterval(250);
