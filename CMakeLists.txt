@@ -155,6 +155,9 @@ qt_add_executable(hyperlight
     src/app/DebugHud.cpp
     src/app/DebugHud.h
     src/app/Shell.h
+    src/app/NowPlaying.h
+    $<$<PLATFORM_ID:Darwin>:src/app/NowPlayingMac.mm>
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:src/app/NowPlayingStub.cpp>
     $<$<PLATFORM_ID:Darwin>:src/app/ShellMac.mm>
     $<$<NOT:$<PLATFORM_ID:Darwin>>:src/app/ShellStub.cpp>
     src/platform/BarPresenter.h
@@ -220,6 +223,7 @@ if(APPLE)
         src/platform/MacBarPresenter.mm
         src/platform/MacNotchPresenter.mm
         src/app/ShellMac.mm
+        src/app/NowPlayingMac.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 
     # Sign every build with a STABLE identity.

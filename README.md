@@ -17,6 +17,52 @@ install, no output device to switch to, and no Screen Recording permission to
 grant — just a single "System Audio Recording" prompt on first launch, and the
 audio path is untouched.
 
+## The notch panel
+
+On a notched Mac the status item is not reliable. Measured on a 1728pt built-in
+display with an editor's nine menus on the left and fourteen status items on the
+right, hyperlight's strip gets pushed underneath the camera housing and becomes
+invisible — while macOS still reports `statusItem.visible == true`. The app is
+running, the tap is working, and you see nothing.
+
+So on those Macs hyperlight also draws a panel anchored to the housing. The
+space directly below the notch is the one part of that region no other app
+competes for. It is additional, never a replacement: the status item is still
+what people expect to find and what they can drag.
+
+![collapsed](docs/notch-collapsed.png)
+
+Collapsed, it is a tab hanging below the housing with the strip inside it. The
+notch is 185pt wide, so the panel shows all 28 bands even when the menu bar is
+too crowded for more than 14.
+
+![expanded](docs/notch-expanded.png)
+
+Hover and it drops down: bigger bars, what is playing, and transport controls.
+
+## What is playing
+
+Clicking the status item lists every application currently producing audio, by
+name and icon, and lets you point the visualiser at one of them instead of the
+whole system mix. Watching only Spotify means Slack pings and Zoom joins stop
+jolting the bars.
+
+Track titles and transport controls are **off by default**, behind "Track info
+and controls" in the menu, because switching them on is what triggers a second
+permission prompt.
+
+That is not where this was meant to land. `MediaRemote` is the private framework
+every app used for this, and on macOS 26 it still loads and every symbol still
+resolves — but since 15.4 it is gated behind
+`com.apple.mediaremote.send-command`, an entitlement Apple does not issue to
+third parties. `MRMediaRemoteGetNowPlayingInfo` fires its callback with an empty
+dictionary while music is demonstrably playing.
+
+The fallback is AppleScript, which works but is per-application: Spotify and
+Music publish scripting dictionaries, browsers do not. Audio from a YouTube tab
+gets its name from the audio process list and nothing else, and the transport
+buttons stay disabled rather than pretending.
+
 ## Requirements
 
 - macOS 14.2 or later (process taps landed in 14.2)
@@ -54,6 +100,8 @@ ctest --preset dev
 | `--windowed` | Render into a window instead of the menu bar, for iterating on the visuals |
 | `--hud` | Diagnostics window alongside the menu bar item: OSStatus, callback count, RMS, AGC, sample rate, overruns |
 | `--shot <path>` | Render one settled frame to a PNG and exit |
+| `--source <id>` | Listen to one app by bundle id. `--source list` prints what is available |
+| `--fake-notch` | Pretend the display has a notch, for developing the panel on an external monitor |
 | `HYPERLIGHT_FAKE_AUDIO=1` | Drive the DSP from a synthetic sweep, so the renderer can be worked on with no audio and no permission |
 
 ## Layout

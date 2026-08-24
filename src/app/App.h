@@ -10,6 +10,7 @@
 #include "app/AudioController.h"
 #include "app/DspWorker.h"
 #include "app/MenuModel.h"
+#include "app/NowPlaying.h"
 #include "app/Settings.h"
 #include "dsp/FrameState.h"
 #include "platform/BarPresenter.h"
@@ -45,6 +46,7 @@ public:
 private Q_SLOTS:
     void onMenuAction(const QString &actionId);
     void refreshMenu();
+    void refreshNowPlaying();
     void onPermissionChanged(int state);
     void onAudioBecameActive();
     void onAudioBecameSilent();
@@ -93,12 +95,14 @@ private:
     Settings m_settings;
 
     std::unique_ptr<AudioController> m_audio;
+    std::unique_ptr<NowPlaying> m_nowPlaying;
     std::unique_ptr<DebugHud> m_hud;
 
     // Deque rather than vector: surfaces hand out references that outlive the
     // call, and a vector reallocating on the second push would dangle them.
     std::vector<std::unique_ptr<Surface>> m_surfaces;
     Surface *m_menuSurface = nullptr;   // the one that carries the menu
+    Surface *m_notchSurface = nullptr;
 
     QThread m_dspThread;
     DspWorker *m_worker = nullptr;   // lives on m_dspThread, owned by it

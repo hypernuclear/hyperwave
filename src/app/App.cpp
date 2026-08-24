@@ -37,6 +37,7 @@ App::App(Options options, QObject *parent)
     , m_options(std::move(options))
     , m_settings(this)
     , m_audio(std::make_unique<AudioController>())
+    , m_nowPlaying(std::make_unique<NowPlaying>())
 {
     m_dspThread.setObjectName(QStringLiteral("hyperlight.dsp"));
 }
@@ -80,6 +81,13 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
     connect(p, &BarPresenter::frameDue, this, [this, s] { onFrameDue(*s); });
     connect(p, &BarPresenter::geometryChanged, this, [this, s] { onGeometryChanged(*s); });
 
+    if (isNotch) {
+        m_notchSurface = s;
+        auto *notch = static_cast<MacNotchPresenter *>(p);
+        connect(notch, &MacNotchPresenter::transportRequested, this, [this](int command) {
+            m_nowPlaying->sendCommand(static_cast<TransportCommand>(command));
+        });
+    }
     if (!isNotch) {
         // The status item carries the menu; the notch panel expands instead.
         m_menuSurface = s;
@@ -160,6 +168,10 @@ bool App::start()
 
         applyFrameRate();
         refreshMenu();
+        m_nowPlaying->setEnabled(m_settings.nowPlayingEnabled());
+        connect(m_nowPlaying.get(), &NowPlaying::infoChanged, this,
+                [this](const NowPlayingInfo &) { refreshNowPlaying(); });
+        refreshNowPlaying();
     }
 
     if (m_options.windowed || m_options.hud) {
@@ -194,18 +206,30 @@ void App::rebuildStyle(Surface &surface)
         // The panel is the size of the hole in the display, so the strip fits
         // itself to that rather than the other way round. There is room for the
         // full band count here even when the menu bar is too crowded for it.
-        auto *notch = static_cast<BarPresenter *>(surface.presenter.get());
-        Q_UNUSED(notch);
         surface.style.bandCount = dsp::kBandCount;
-        surface.style.barWidthPt = 2.5;
-        surface.style.barGapPt = 2.5;
         surface.style.insetTopPt = 2.0;
         surface.style.insetBottomPt = 3.0;
 
 #ifdef Q_OS_MACOS
-        const qreal available =
-            static_cast<MacNotchPresenter *>(surface.presenter.get())->availableWidthPt();
+        auto *notch = static_cast<MacNotchPresenter *>(surface.presenter.get());
+        const qreal available = notch->availableWidthPt();
         const int n = surface.style.bandCount;
+
+        // Bars grow to fill whatever width the panel has, rather than staying
+        // menu-bar sized and floating in the middle of an expanded panel. With
+        // equal bar and gap the arithmetic is one division: n bars and n-1 gaps
+        // of the same width fill (2n - 1) slots.
+        const qreal slot = available / (2 * n - 1);
+        surface.style.barWidthPt = std::clamp<qreal>(slot, 2.0, 7.0);
+        surface.style.barGapPt = surface.style.barWidthPt;
+        surface.style.peakRadiusPt = std::max<qreal>(1.0, surface.style.barWidthPt * 0.45);
+
+        if (notch->isExpanded()) {
+            surface.style.minBarPt = surface.style.barWidthPt;
+            surface.style.insetTopPt = 4.0;
+            surface.style.insetBottomPt = 5.0;
+        }
+
         const qreal content =
             n * surface.style.barWidthPt + (n - 1) * surface.style.barGapPt;
         const qreal pad = std::max<qreal>(4.0, (available - content) / 2.0);
@@ -252,6 +276,16 @@ void App::onGeometryChanged(Surface &surface)
     rebuildStyle(surface);
     surface.presenter->setWidthPt(surface.style.stripWidthPt());
     ensureBuffers(surface);
+
+    // Draw one frame right now rather than waiting for the clock.
+    //
+    // The clock sleeps whenever the picture has stopped moving, so a geometry
+    // change while nothing is playing -- collapsing the notch panel, most
+    // obviously -- would otherwise leave the previous, differently sized image
+    // sitting in the layer, clipped by the new bounds. It looked like half the
+    // bars had vanished.
+    surface.lastPresentedSeq = 0;
+    onFrameDue(surface);
 }
 
 bool App::frameIsAtRest(const FrameState &state) const
@@ -427,6 +461,37 @@ void App::refreshMenu()
         m_menuSurface->presenter->setMenu(buildMenu());
 }
 
+void App::refreshNowPlaying()
+{
+#ifdef Q_OS_MACOS
+    if (!m_notchSurface)
+        return;
+
+    // Which app to ask about. When a specific source is selected that is the
+    // obvious answer; otherwise the loudest thing on the machine is whatever is
+    // currently producing output, and if several are, the first named one will
+    // do -- guessing between two simultaneous players is not worth the code.
+    QString bundleId = m_audio->source()->sourceBundleId();
+    QString appName;
+
+    for (const AudioProcess &process : m_audio->source()->audioProcesses()) {
+        if (!process.playingOutput || !process.isNamed())
+            continue;
+        if (bundleId.isEmpty())
+            bundleId = process.bundleId;
+        if (process.bundleId == bundleId) {
+            appName = process.name;
+            break;
+        }
+    }
+
+    m_nowPlaying->setBundleId(bundleId);
+
+    auto *notch = static_cast<MacNotchPresenter *>(m_notchSurface->presenter.get());
+    notch->setNowPlaying(m_nowPlaying->info(), appName);
+#endif
+}
+
 void App::onMenuAction(const QString &actionId)
 {
     const QLatin1String sourcePrefix(MenuAction::kSourcePrefix);
@@ -461,7 +526,12 @@ void App::onMenuAction(const QString &actionId)
         return;
     }
     if (actionId == QLatin1String(MenuAction::kToggleNowPlaying)) {
-        m_settings.setNowPlayingEnabled(!m_settings.nowPlayingEnabled());
+        const bool on = !m_settings.nowPlayingEnabled();
+        m_settings.setNowPlayingEnabled(on);
+        // Turning this on is what triggers the Automation prompt, and only
+        // then: the first run is otherwise a single clean permission question.
+        m_nowPlaying->setEnabled(on);
+        refreshNowPlaying();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kRequestPermission)) {

@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "app/NowPlaying.h"
 #include "platform/BarPresenter.h"
 
 namespace hyperlight {
@@ -63,12 +64,21 @@ public:
     bool isExpanded() const;
     void setExpanded(bool expanded);
 
+    // What the expanded panel shows above the bars. An invalid info falls back
+    // to the app name alone, which is all the audio process list can offer for
+    // anything without a scripting dictionary.
+    void setNowPlaying(const NowPlayingInfo &info, const QString &fallbackAppName);
+
     // Reached from the Objective-C helper.
     void emitFrameDue();
     void emitGeometryChanged();
     void emitClicked();
     void emitMenuAction(const QString &actionId);
     void handleHover(bool inside);
+    void handleTransport(int command);
+
+Q_SIGNALS:
+    void transportRequested(int command);
 
 private:
     struct Impl;
