@@ -1,0 +1,118 @@
+name: ci
+
+# Build and test against a Qt that CI fetches itself.
+#
+# The point is that nothing here depends on a Qt already being present. Local
+# builds find one under ~/Qt because a developer installed it with the online
+# installer; a runner has no such thing, so it pulls the open-source binaries
+# from download.qt.io via aqtinstall. Same modules, same version, so a CI
+# failure means the tree is broken rather than the environment being different.
+#
+# Open-source Qt is what is fetched, and that has consequences for what may be
+# distributed from these artifacts. See THIRD-PARTY-NOTICES.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  # Matches the floor in CMakeLists.txt (find_package(Qt6 6.11)) and the
+  # version the error message tells people to install. Pinned rather than
+  # floating: "latest" turns an upstream Qt release into a surprise CI failure
+  # on an unrelated pull request.
+  QT_VERSION: "6.11.2"
+
+jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Both architectures, separately, rather than one universal binary.
+          # A universal build would hide an arm64-only mistake behind an x86_64
+          # compile that happens to succeed, and vice versa.
+          - arch: arm64
+            cmake-args: "-DCMAKE_OSX_ARCHITECTURES=arm64"
+          - arch: x64
+            cmake-args: "-DCMAKE_OSX_ARCHITECTURES=x86_64"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # CMakeLists.txt derives APP_VERSION_BUILD from `git rev-list --count
+          # HEAD`, which is 1 on a shallow clone. Wrong build numbers are the
+          # kind of thing that is only noticed by an updater refusing to update.
+          fetch-depth: 0
+
+      - name: Install Qt (open source)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: clang_64
+          # NOT qtsvg. In Qt 6 it is part of the base install rather than a
+          # separate module, and naming it here fails outright with "The
+          # packages ['qtsvg'] were not found while parsing XML" -- which reads
+          # like it is missing rather than already present. QtSvg is linked and
+          # it arrives regardless.
+          #
+          # qtquick3d and qtshadertools are installed ahead of any use of them.
+          # Quick 3D is anticipated (see THIRD-PARTY-NOTICES.md) and having the
+          # module already on the runner means adopting it is a CMakeLists
+          # change alone, rather than a CMakeLists change plus a red CI run
+          # that looks like a build break. Quick 3D is GPLv3-only under
+          # open-source Qt; installing it here changes nothing, linking it
+          # would.
+          modules: qtshadertools qtquick3d
+          # Qt 6.11+ uses a repo layout that aqtinstall 3.3.0 -- the action's
+          # default, and the newest on PyPI -- cannot parse; it fails with
+          # "Failed to locate XML data for Qt version". Fixed on aqt master but
+          # not yet released, so install from a pinned SHA. Drop this once aqt
+          # v3.4+ ships. Kept identical to hyperbin's and hypershot's pin so all
+          # three products move together.
+          aqtsource: "git+https://github.com/miurahr/aqtinstall.git@75ea7944aeac985e226df0a882cd5b3470e51a97"
+          cache: true
+
+      - name: Install Ninja
+        run: brew list ninja >/dev/null 2>&1 || brew install ninja
+
+      - name: Configure
+        # install-qt-action exports QT_ROOT_DIR and puts qmake on PATH;
+        # CMakeLists.txt reads QT_ROOT, so hand it across explicitly rather
+        # than relying on the ~/Qt glob, which does not exist on a runner.
+        run: |
+          cmake -S . -B build -G Ninja ${{ matrix.cmake-args }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DHYPERLIGHT_BUILD_TESTS=ON \
+            -DHYPERLIGHT_CODESIGN_IDENTITY=""
+
+      - name: Build
+        run: cmake --build build -j 4
+
+      - name: Test
+        working-directory: build
+        # The suite is headless by design -- FFT, band mapping, ballistics and
+        # the lock-free ring, none of which open a window or touch CoreAudio --
+        # so it runs unchanged on a runner with no audio device and no display.
+        # It cannot cover capture or the status item; those need a real machine
+        # and a granted permission, and pretending otherwise in CI would be
+        # worse than the gap.
+        run: |
+          # The x86_64 job cross-compiles on an arm64 runner, so its binaries
+          # need Rosetta to execute. GitHub's macOS images ship it today. If
+          # that ever changes, skip with a warning rather than reporting a
+          # build break that is not one -- the x64 job's real purpose is
+          # proving the tree compiles and links for that architecture.
+          if [ "${{ matrix.arch }}" = "x64" ] && ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "::warning::Rosetta unavailable on this runner; skipping the x86_64 test run"
+            exit 0
+          fi
+          ctest --output-on-failure

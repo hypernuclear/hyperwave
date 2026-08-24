@@ -191,6 +191,27 @@ would look like a brand new app and re-prompt for the audio permission forever.
 ctest --preset dev
 ```
 
+### In CI
+
+`.github/workflows/ci.yml` builds and tests both macOS architectures on every
+push and pull request, and it does **not** assume a Qt is present: it fetches
+the open-source binaries from download.qt.io with
+[`install-qt-action`](https://github.com/jurplel/install-qt-action) and
+aqtinstall, pinned to the same 6.11.2 the local build wants. So a red CI run
+means the tree is broken rather than the environment being different.
+
+Two wrinkles are baked in rather than left to be rediscovered. `qtsvg` is
+deliberately *not* in the module list — in Qt 6 it is part of the base install,
+and naming it fails with an error that reads as though it were missing.
+aqtinstall is pinned to a commit rather than the PyPI release, because 3.3.0
+cannot parse Qt 6.11's repository layout; the pin matches hyperbin's and
+hypershot's so all three move together.
+
+The suite is headless, so it runs on a runner with no audio device and no
+display. It cannot cover capture, the status item or the notch panel — those
+need a real machine and a granted permission — and CI does not pretend
+otherwise.
+
 ### In VS Code
 
 `.vscode/` is committed and carries no machine-specific paths. F5 gives you the
@@ -281,4 +302,18 @@ cost is AppKit's display-link dispatch rather than anything hyperlight draws.
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+hyperlight's own source is MIT. See [LICENSE](LICENSE).
+
+What you may do with a **binary** depends on the Qt you linked, not on this
+repository. Built against open-source Qt, every module hyperlight uses today
+offers LGPLv3, and the app links Qt's frameworks dynamically and unmodified.
+Built against a commercial Qt licence, no such obligation arises.
+
+One thing to know before it costs you: **Qt Quick 3D is GPLv3-only** — verified
+from its own headers, `LicenseRef-Qt-Commercial OR GPL-3.0-only`, with no LGPL
+option where every other module has one. It is not linked today, and linking it
+would make an open-source-Qt binary GPLv3. That is a one-line change to make by
+accident, which is why it is written down.
+
+Details, and the rest of what a build pulls in, are in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

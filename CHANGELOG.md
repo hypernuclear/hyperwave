@@ -22,14 +22,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a slow AGC.
 - One shared `QPainter` renderer, so the eventual Windows tray icon and Linux
   StatusNotifierItem draw the same pixels.
-- Two-signal permission detection: silence from the tap is cross-checked
-  against `kAudioProcessPropertyIsRunningOutput` before concluding denial, with
-  an eight-second grace window for the asynchronous TCC prompt.
+- Permission handling that never treats silence as denial. A tap without the
+  grant delivers digital silence, and so does a quiet machine; the only hard
+  evidence of denial is the tap failing to be created, so "System Audio
+  Access…" is always in the menu rather than appearing when the app has decided
+  it is being refused.
 - Display link sleeps once the picture stops moving, and drops to 30 fps in Low
   Power Mode.
 - Compiling stubs for WASAPI loopback, PulseAudio monitor capture, and the
   Windows and Linux presenters, each documenting the chosen approach.
 - Headless tests for the ring buffer, the FFT (against a naive DFT), the
   spectrum analyser and the ballistics.
+- MIT licence, matching hyperbin, and `THIRD-PARTY-NOTICES.md` covering what a
+  build actually links. Every Qt module's terms were read out of the
+  `SPDX-License-Identifier` in its own installed headers rather than from the
+  documentation: everything hyperlight uses offers LGPLv3, and Qt Quick 3D —
+  anticipated but not yet linked — is `LicenseRef-Qt-Commercial OR
+  GPL-3.0-only`, with no LGPL option, which would make an open-source-Qt binary
+  GPLv3 the moment it is added.
+- CI that fetches open-source Qt rather than assuming one is installed:
+  `install-qt-action` with aqtinstall pinned to a commit that understands Qt
+  6.11's repository layout, building and testing arm64 and x86_64 on every push
+  and pull request.
 
 [Unreleased]: https://github.com/hypernuclear/hyperlight/commits/main
