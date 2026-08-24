@@ -154,9 +154,9 @@ qt_add_executable(hyperlight
     src/app/Settings.h
     src/app/DebugHud.cpp
     src/app/DebugHud.h
-    src/app/LowPower.h
-    $<$<PLATFORM_ID:Darwin>:src/app/LowPowerMac.mm>
-    $<$<NOT:$<PLATFORM_ID:Darwin>>:src/app/LowPowerStub.cpp>
+    src/app/Shell.h
+    $<$<PLATFORM_ID:Darwin>:src/app/ShellMac.mm>
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:src/app/ShellStub.cpp>
     src/platform/BarPresenter.h
     # Per-platform files are selected here rather than in if() blocks so the
     # source list stays readable as one thing.
@@ -168,6 +168,8 @@ qt_add_executable(hyperlight
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioProcessProbe.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacBarPresenter.h>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacBarPresenter.mm>
+    $<$<PLATFORM_ID:Darwin>:src/platform/MacNotchPresenter.h>
+    $<$<PLATFORM_ID:Darwin>:src/platform/MacNotchPresenter.mm>
     $<$<PLATFORM_ID:Windows>:src/platform/WasapiSource.cpp>
     $<$<PLATFORM_ID:Windows>:src/platform/WinBarPresenter.cpp>
     $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/PulseSource.cpp>
@@ -216,7 +218,8 @@ if(APPLE)
         src/platform/AudioCapturePermission.mm
         src/platform/AudioProcessProbe.mm
         src/platform/MacBarPresenter.mm
-        src/app/LowPowerMac.mm
+        src/platform/MacNotchPresenter.mm
+        src/app/ShellMac.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 
     # Sign every build with a STABLE identity.

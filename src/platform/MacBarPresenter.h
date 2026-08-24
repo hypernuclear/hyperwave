@@ -2,8 +2,6 @@
 
 #include <memory>
 
-#include <QMenu>
-
 #include "platform/BarPresenter.h"
 
 namespace hyperlight {
@@ -42,13 +40,16 @@ public:
     bool isClockRunning() const override;
 
 
-    void setMenu(QMenu *menu);
+    void setMenu(const MenuModel &menu) override;
+    void showMenu();
 
     // Called from the display link and the AppKit notifications. Public because
     // an Objective-C helper object has to reach them.
     void emitFrameDue();
     void emitGeometryChanged();
     void emitClicked();
+    void emitMenuAction(const QString &actionId);
+    void emitMenuAboutToShow();
 
 private:
     struct Impl;

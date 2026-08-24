@@ -5,6 +5,8 @@
 #include <QImage>
 #include <QObject>
 
+#include "app/MenuModel.h"
+
 namespace hyperlight {
 
 // The platform seam on the display side.
@@ -60,12 +62,22 @@ public:
     virtual void stopClock() = 0;
     virtual bool isClockRunning() const = 0;
 
+    // The menu shown when the item is clicked. Rebuilt rather than mutated
+    // whenever anything in it changes: the app list is live, and diffing a menu
+    // is more code than rebuilding one.
+    virtual void setMenu(const MenuModel &menu) { Q_UNUSED(menu); }
+
 Q_SIGNALS:
     // Emitted once per display refresh. The app renders in response.
     void frameDue();
 
     void clicked();
     void geometryChanged();
+
+    // Fired just before the menu opens, so the app can refresh the list of
+    // which apps are currently producing audio rather than polling for it.
+    void menuAboutToShow();
+    void menuActionTriggered(const QString &actionId);
 };
 
 } // namespace hyperlight

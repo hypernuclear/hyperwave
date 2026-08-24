@@ -2,24 +2,32 @@
 
 #include <algorithm>
 
+#include <QApplication>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QGuiApplication>
+#include <QMessageBox>
 #include <QPalette>
 #include <QTimer>
 
 #include "app/DebugHud.h"
-#include "app/LowPower.h"
+#include "app/Shell.h"
 #include "render/Palette.h"
+
+#ifdef Q_OS_MACOS
+#include "platform/MacNotchPresenter.h"
+#endif
 
 namespace hyperlight {
 
 namespace {
 
 constexpr int kCompactBands = 14;
-// A couple of settled frames before the clock is allowed to sleep, so a
-// momentary gap between tracks does not stop and restart it.
+
+// A couple of settled frames before a clock is allowed to sleep, so a momentary
+// gap between tracks does not stop and restart it.
 constexpr int kAtRestFramesBeforeSleep = 4;
+
 constexpr qreal kVerifySeconds = 5.0;
 
 } // namespace
@@ -37,15 +45,15 @@ App::~App()
 {
     // Ordering matters and it is the reverse of construction.
     //
-    // The display link goes first so nothing tries to render into a buffer
-    // that is about to be freed; then the capture stops, which joins the HAL
-    // IO thread and guarantees the ring's producer is gone; only then does the
-    // DSP thread wind down and take the consumer with it. Tearing the DSP down
-    // first leaves a live producer writing into a ring whose reader has been
+    // The clocks go first so nothing tries to render into a buffer that is
+    // about to be freed; then capture stops, which joins the HAL IO thread and
+    // guarantees the ring's producer is gone; only then does the DSP thread
+    // wind down and take the consumer with it. Tearing the DSP down first
+    // leaves a live producer writing into a ring whose reader has been
     // destroyed, which does not crash immediately and so gets found by a user
     // rather than by us.
-    if (m_presenter)
-        m_presenter->stopClock();
+    for (auto &surface : m_surfaces)
+        surface->presenter->stopClock();
     if (m_audio)
         m_audio->stop();
     if (m_dspThread.isRunning()) {
@@ -53,12 +61,52 @@ App::~App()
         m_dspThread.quit();
         m_dspThread.wait();
     }
-    if (m_presenter)
-        m_presenter->remove();
+    for (auto &surface : m_surfaces)
+        surface->presenter->remove();
+}
+
+void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
+{
+    if (!presenter || !presenter->install())
+        return;
+
+    auto surface = std::make_unique<Surface>();
+    surface->presenter = std::move(presenter);
+    surface->isNotch = isNotch;
+    Surface *s = surface.get();
+    m_surfaces.push_back(std::move(surface));
+
+    BarPresenter *p = s->presenter.get();
+    connect(p, &BarPresenter::frameDue, this, [this, s] { onFrameDue(*s); });
+    connect(p, &BarPresenter::geometryChanged, this, [this, s] { onGeometryChanged(*s); });
+
+    if (!isNotch) {
+        // The status item carries the menu; the notch panel expands instead.
+        m_menuSurface = s;
+        connect(p, &BarPresenter::menuAboutToShow, this, &App::refreshMenu);
+        connect(p, &BarPresenter::menuActionTriggered, this, &App::onMenuAction);
+    }
+
+    onGeometryChanged(*s);
+    p->startClock();
 }
 
 bool App::start()
 {
+    if (m_options.sourceBundleId == QLatin1String("list")) {
+        // Print what the audio system will admit to and exit. Cheaper than
+        // guessing bundle ids, and it doubles as a check that the process probe
+        // is returning un-redacted names.
+        for (const AudioProcess &process : m_audio->source()->audioProcesses()) {
+            if (!process.isNamed() && !process.playingOutput)
+                continue;
+            qInfo("%-9s %-42s %s", process.playingOutput ? "PLAYING" : "-",
+                  qPrintable(process.bundleId), qPrintable(process.name));
+        }
+        QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+        return true;
+    }
+
     m_worker = new DspWorker;
     m_worker->setRing(m_audio->source()->ring());
     m_worker->moveToThread(&m_dspThread);
@@ -73,8 +121,13 @@ bool App::start()
 
     m_dspThread.start();
 
-    // Start capture before the DSP loop so the first format is already known by
-    // the time the worker configures itself.
+    // The source is chosen before capture starts, so the first tap is built for
+    // the right processes rather than being torn down and rebuilt immediately.
+    const QString source = m_options.sourceBundleId.isEmpty() ? m_settings.sourceBundleId()
+                                                              : m_options.sourceBundleId;
+    if (!source.isEmpty())
+        m_audio->source()->setSourceBundleId(source);
+
     m_audio->start();
     QMetaObject::invokeMethod(m_worker, &DspWorker::setFormat, Qt::QueuedConnection,
                               m_audio->source()->sampleRate(),
@@ -82,8 +135,6 @@ bool App::start()
     QMetaObject::invokeMethod(m_worker, &DspWorker::start, Qt::QueuedConnection);
 
     if (m_options.verifyAudio) {
-        // A one-liner answer to "can it hear the system", rather than a squint
-        // at a 24pt strip.
         auto *timer = new QTimer(this);
         timer->setInterval(250);
         connect(timer, &QTimer::timeout, this, &App::runVerifyTick);
@@ -92,17 +143,23 @@ bool App::start()
     }
 
     if (!m_options.windowed) {
-        m_presenter = BarPresenter::create(this);
-        if (!m_presenter->install()) {
+        addSurface(BarPresenter::create(this), false);
+        if (m_surfaces.empty()) {
             qCritical("hyperlight: could not create a menu bar item");
             return false;
         }
-        connect(m_presenter.get(), &BarPresenter::frameDue, this, &App::onFrameDue);
-        connect(m_presenter.get(), &BarPresenter::geometryChanged, this,
-                &App::onGeometryChanged);
-        onGeometryChanged();
+
+#ifdef Q_OS_MACOS
+        // The notch panel is additional, never a replacement. The status item
+        // is what people expect to find and what they can drag; the panel is
+        // insurance against it being crowded off a notched display entirely.
+        MacNotchPresenter::setFakeNotch(m_options.fakeNotch);
+        if (MacNotchPresenter::isAvailable())
+            addSurface(std::make_unique<MacNotchPresenter>(this), true);
+#endif
+
         applyFrameRate();
-        m_presenter->startClock();
+        refreshMenu();
     }
 
     if (m_options.windowed || m_options.hud) {
@@ -111,152 +168,90 @@ bool App::start()
         m_hud->show();
 
         if (m_options.windowed) {
-            // No presenter, so nothing is driving the clock. A plain timer is
-            // fine here -- this path exists for iterating on the renderer, not
-            // for shipping.
+            // No presenter, so nothing is driving a clock. A plain timer is fine
+            // here: this path exists for iterating on the renderer.
+            auto surface = std::make_unique<Surface>();
+            Surface *s = surface.get();
+            m_surfaces.push_back(std::move(surface));
+            rebuildStyle(*s);
+            ensureBuffers(*s);
+
             auto *timer = new QTimer(this);
             timer->setInterval(16);
-            connect(timer, &QTimer::timeout, this, &App::onFrameDue);
+            connect(timer, &QTimer::timeout, this, [this, s] { onFrameDue(*s); });
             timer->start();
-            rebuildStyle();
-            ensureBuffers();
         }
     }
 
     return true;
 }
 
-void App::rebuildStyle()
+void App::rebuildStyle(Surface &surface)
 {
-    const bool compact = m_settings.compact()
-        || (m_presenter && m_presenter->prefersCompact());
+    surface.style = RenderStyle{};
 
-    m_style = RenderStyle{};
-    m_style.bandCount = compact ? kCompactBands : dsp::kBandCount;
+    if (surface.isNotch) {
+        // The panel is the size of the hole in the display, so the strip fits
+        // itself to that rather than the other way round. There is room for the
+        // full band count here even when the menu bar is too crowded for it.
+        auto *notch = static_cast<BarPresenter *>(surface.presenter.get());
+        Q_UNUSED(notch);
+        surface.style.bandCount = dsp::kBandCount;
+        surface.style.barWidthPt = 2.5;
+        surface.style.barGapPt = 2.5;
+        surface.style.insetTopPt = 2.0;
+        surface.style.insetBottomPt = 3.0;
+
+#ifdef Q_OS_MACOS
+        const qreal available =
+            static_cast<MacNotchPresenter *>(surface.presenter.get())->availableWidthPt();
+        const int n = surface.style.bandCount;
+        const qreal content =
+            n * surface.style.barWidthPt + (n - 1) * surface.style.barGapPt;
+        const qreal pad = std::max<qreal>(4.0, (available - content) / 2.0);
+        surface.style.insetLeftPt = pad;
+        surface.style.insetRightPt = pad;
+#endif
+    } else {
+        const bool compact = m_settings.compact() || surface.presenter->prefersCompact();
+        surface.style.bandCount = compact ? kCompactBands : dsp::kBandCount;
+    }
 
     // The menu bar's own foreground colour, for the presets that follow the
     // system rather than carrying their own palette.
     const QColor foreground = QGuiApplication::palette().color(QPalette::WindowText);
-    Palette::applyTo(m_style, m_settings.gradientId(), foreground);
+    Palette::applyTo(surface.style, m_settings.gradientId(), foreground);
 
-    m_style.idleOpacity = dsp::kIdlePresence;
+    surface.style.idleOpacity = dsp::kIdlePresence;
+
+    // Inside the panel the background is our own black, not the wallpaper, so
+    // the halo that rescues legibility over a bright desktop has nothing to do
+    // but muddy the bars.
+    if (surface.isNotch)
+        surface.style.drawShadow = false;
 }
 
-void App::ensureBuffers()
+void App::ensureBuffers(Surface &surface)
 {
-    const QSize wanted = BarRenderer::pixelSize(m_style, m_heightPt, m_dpr);
-    for (QImage &buffer : m_buffers) {
-        if (buffer.size() != wanted || buffer.format() != QImage::Format_ARGB32_Premultiplied) {
+    const QSize wanted =
+        BarRenderer::pixelSize(surface.style, surface.heightPt, surface.dpr);
+    for (QImage &buffer : surface.buffers) {
+        if (buffer.size() != wanted
+            || buffer.format() != QImage::Format_ARGB32_Premultiplied) {
             buffer = QImage(wanted, QImage::Format_ARGB32_Premultiplied);
         }
     }
 }
 
-void App::onGeometryChanged()
+void App::onGeometryChanged(Surface &surface)
 {
-    if (!m_presenter)
+    if (!surface.presenter)
         return;
-    m_heightPt = m_presenter->heightPt();
-    m_dpr = m_presenter->devicePixelRatio();
-    rebuildStyle();
-    m_presenter->setWidthPt(m_style.stripWidthPt());
-    ensureBuffers();
-}
-
-bool App::renderCurrentFrame(QImage **out)
-{
-    FrameState state;
-    if (!m_worker->frames()->tryRead(state))
-        return false;   // the writer kept winning; there will be another in 16 ms
-
-    // On a 120 Hz display the link fires twice per analysis frame. Presenting
-    // the same pixels again costs a full recomposite of the menu bar for
-    // nothing, so skip it.
-    if (state.seq == m_lastPresentedSeq)
-        return false;
-    m_lastPresentedSeq = state.seq;
-
-    // Once the picture has genuinely stopped moving, stop the clock.
-    //
-    // This is the single biggest lever on idle cost, and the reason is not our
-    // drawing: a running CADisplayLink drags the whole AppKit
-    // deferred-display-link machinery through the run loop on every vsync
-    // whether or not we do anything with it. Leaving it running while showing a
-    // static row of dots measured the same as running at full tilt.
-    m_atRestFrames = frameIsAtRest(state) ? m_atRestFrames + 1 : 0;
-    if (m_presenter && m_atRestFrames > kAtRestFramesBeforeSleep) {
-        m_presenter->stopClock();
-        m_atRestFrames = 0;
-    }
-
-    QImage &target = m_buffers[m_nextBuffer];
-    m_nextBuffer = 1 - m_nextBuffer;
-    if (target.isNull())
-        return false;
-
-    m_renderer.render(state, m_style, m_heightPt, m_dpr, target);
-
-    if (m_hud) {
-        m_hud->setFrame(state);
-        m_hud->setPreview(target);
-    }
-
-    if (out)
-        *out = &target;
-    return true;
-}
-
-void App::onFrameDue()
-{
-    // Do not spend a recomposite on a strip nobody can see.
-    if (m_presenter && !m_presenter->isVisibleOnScreen())
-        return;
-
-    QImage *rendered = nullptr;
-    if (!renderCurrentFrame(&rendered) || !rendered)
-        return;
-
-    if (m_presenter)
-        m_presenter->present(*rendered);
-
-    // Let the ballistics settle before grabbing. A frame taken at startup is
-    // all zeros, which makes for a useless reference image.
-    if (!m_options.shotPath.isEmpty() && m_lastPresentedSeq > 120) {
-        rendered->save(m_options.shotPath);
-        qInfo("hyperlight: wrote %s (%dx%d px, %.1f x %.1f pt @ %.0fx)", qPrintable(m_options.shotPath),
-              rendered->width(), rendered->height(), m_style.stripWidthPt(), m_heightPt, m_dpr);
-        QCoreApplication::quit();
-    }
-}
-
-void App::onAudioBecameActive()
-{
-    if (m_presenter && !m_presenter->isClockRunning())
-        m_presenter->startClock();
-}
-
-void App::onAudioBecameSilent()
-{
-    // Nothing to do here beyond noting the edge. The clock is stopped by
-    // onFrameDue once the picture has actually stopped changing, which is a
-    // later moment than this one: presence has only just reached zero and the
-    // bars and peak dots are still falling. Killing the link here would freeze
-    // them mid-descent.
-}
-
-void App::applyFrameRate()
-{
-    if (!m_presenter)
-        return;
-
-    // Sixty is what the visuals were designed at and it is the default. Thirty
-    // is the lever for battery: measured on macOS 26 the strip costs 2.9% of a
-    // core at 30 fps against 7.2% at 60, which is a large fraction of the
-    // reason to reach for it at all. Most of that saving is AppKit's
-    // display-link dispatch rather than our drawing, which is why halving the
-    // rate more than halves the cost.
-    const bool halve = m_settings.halfRateOnBattery() && isLowPowerMode();
-    m_presenter->setPreferredFps(halve ? 30 : 60);
+    surface.heightPt = surface.presenter->heightPt();
+    surface.dpr = surface.presenter->devicePixelRatio();
+    rebuildStyle(surface);
+    surface.presenter->setWidthPt(surface.style.stripWidthPt());
+    ensureBuffers(surface);
 }
 
 bool App::frameIsAtRest(const FrameState &state) const
@@ -270,6 +265,75 @@ bool App::frameIsAtRest(const FrameState &state) const
     return true;
 }
 
+void App::onFrameDue(Surface &surface)
+{
+    if (surface.presenter && !surface.presenter->isVisibleOnScreen())
+        return;
+
+    FrameState state;
+    if (!m_worker->frames()->tryRead(state))
+        return;   // the writer kept winning; there will be another in 16 ms
+
+    // On a 120 Hz display the link fires twice per analysis frame. Presenting
+    // the same pixels again costs a full recomposite for nothing.
+    if (state.seq == surface.lastPresentedSeq)
+        return;
+    surface.lastPresentedSeq = state.seq;
+
+    // Once the picture has genuinely stopped moving, stop the clock.
+    //
+    // This is the single biggest lever on idle cost, and the reason is not the
+    // drawing: a running CADisplayLink drags AppKit's whole deferred-display
+    // machinery through the run loop on every vsync whether or not anything is
+    // done with it.
+    surface.atRestFrames = frameIsAtRest(state) ? surface.atRestFrames + 1 : 0;
+    if (surface.presenter && surface.atRestFrames > kAtRestFramesBeforeSleep) {
+        surface.presenter->stopClock();
+        surface.atRestFrames = 0;
+    }
+
+    QImage &target = surface.buffers[surface.nextBuffer];
+    surface.nextBuffer = 1 - surface.nextBuffer;
+    if (target.isNull())
+        return;
+
+    surface.renderer.render(state, surface.style, surface.heightPt, surface.dpr, target);
+
+    if (surface.presenter)
+        surface.presenter->present(target);
+
+    if (m_hud && (&surface == m_surfaces.front().get())) {
+        m_hud->setFrame(state);
+        m_hud->setPreview(target);
+    }
+
+    // Let the ballistics settle before grabbing. A frame taken at startup is
+    // all zeros, which makes for a useless reference image.
+    if (!m_options.shotPath.isEmpty() && surface.lastPresentedSeq > 120) {
+        target.save(m_options.shotPath);
+        qInfo("hyperlight: wrote %s (%dx%d px, %.1f x %.1f pt @ %.0fx)",
+              qPrintable(m_options.shotPath), target.width(), target.height(),
+              surface.style.stripWidthPt(), surface.heightPt, surface.dpr);
+        QCoreApplication::quit();
+    }
+}
+
+void App::onAudioBecameActive()
+{
+    for (auto &surface : m_surfaces) {
+        if (surface->presenter && !surface->presenter->isClockRunning())
+            surface->presenter->startClock();
+    }
+}
+
+void App::onAudioBecameSilent()
+{
+    // Nothing to do beyond noting the edge. The clocks are stopped by
+    // onFrameDue once the picture has actually stopped changing, which is a
+    // later moment than this one: presence has only just reached zero and the
+    // bars and peak dots are still falling.
+}
+
 void App::onPermissionChanged(int state)
 {
     QMetaObject::invokeMethod(m_worker, &DspWorker::setPermissionState, Qt::QueuedConnection,
@@ -279,6 +343,182 @@ void App::onPermissionChanged(int state)
         qWarning("hyperlight: system audio access appears to be denied. "
                  "Open the menu bar item to grant it.");
     }
+    refreshMenu();
+}
+
+MenuModel App::buildMenu() const
+{
+    MenuModel menu;
+
+    const QString source = m_audio->source()->sourceBundleId();
+    menu.append(MenuItem::action(QLatin1String(MenuAction::kSourcePrefix),
+                                 QStringLiteral("All system audio"))
+                    .withCheck(source.isEmpty()));
+
+    AudioProcessList processes = m_audio->source()->audioProcesses();
+
+    // Named applications only. The list is otherwise mostly faceless helpers
+    // and CLI tools -- afplay, for one, has no bundle id at all and so cannot
+    // be selected by one even though it happily makes noise.
+    processes.removeIf(
+        [](const AudioProcess &p) { return !p.isNamed() || p.bundleId.isEmpty(); });
+
+    // Things currently making noise first, then alphabetically. Sorting by name
+    // alone buries whatever you actually want to pick.
+    std::sort(processes.begin(), processes.end(),
+              [](const AudioProcess &a, const AudioProcess &b) {
+                  if (a.playingOutput != b.playingOutput)
+                      return a.playingOutput;
+                  return a.name.localeAwareCompare(b.name) < 0;
+              });
+
+    if (!processes.isEmpty()) {
+        menu.append(MenuItem::separator());
+        for (const AudioProcess &process : processes) {
+            menu.append(
+                MenuItem::action(QLatin1String(MenuAction::kSourcePrefix) + process.bundleId,
+                                 process.name)
+                    .withCheck(process.bundleId == source)
+                    .withIcon(process.bundleId)
+                    .withDetail(process.playingOutput ? QStringLiteral("playing") : QString()));
+        }
+    }
+
+    menu.append(MenuItem::separator());
+
+    MenuModel gradients;
+    const QString activeGradient = m_settings.gradientId();
+    for (const GradientPreset &preset : Palette::presets()) {
+        gradients.append(
+            MenuItem::action(QLatin1String(MenuAction::kGradientPrefix) + preset.id, preset.name)
+                .withCheck(preset.id == activeGradient));
+    }
+    gradients.append(MenuItem::separator());
+    gradients.append(MenuItem::action(QLatin1String(MenuAction::kToggleCompact),
+                                      QStringLiteral("Compact strip"))
+                         .withCheck(m_settings.compact()));
+    menu.append(MenuItem::submenu(QStringLiteral("Appearance"), gradients));
+
+    menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleNowPlaying),
+                                 QStringLiteral("Track info and controls"))
+                    .withCheck(m_settings.nowPlayingEnabled()));
+
+    if (m_audio->permission() == PermissionState::LikelyDenied) {
+        menu.append(MenuItem::separator());
+        menu.append(MenuItem::action(QLatin1String(MenuAction::kRequestPermission),
+                                     QStringLiteral("Enable System Audio Access…")));
+        if (m_audio->needsRestartToRecover()) {
+            menu.append(MenuItem::action(QLatin1String(MenuAction::kRestart),
+                                         QStringLiteral("Restart hyperlight")));
+        }
+    }
+
+    menu.append(MenuItem::separator());
+    menu.append(
+        MenuItem::action(QLatin1String(MenuAction::kAbout), QStringLiteral("About hyperlight")));
+    menu.append(
+        MenuItem::action(QLatin1String(MenuAction::kQuit), QStringLiteral("Quit hyperlight")));
+    return menu;
+}
+
+void App::refreshMenu()
+{
+    if (m_menuSurface)
+        m_menuSurface->presenter->setMenu(buildMenu());
+}
+
+void App::onMenuAction(const QString &actionId)
+{
+    const QLatin1String sourcePrefix(MenuAction::kSourcePrefix);
+    const QLatin1String gradientPrefix(MenuAction::kGradientPrefix);
+
+    if (actionId.startsWith(sourcePrefix)) {
+        const QString bundleId = actionId.mid(sourcePrefix.size());
+        m_settings.setSourceBundleId(bundleId);
+        m_audio->source()->setSourceBundleId(bundleId);
+        // The tap was torn down and rebuilt, so the analysis is looking at a
+        // stale rolling buffer at a possibly different rate.
+        QMetaObject::invokeMethod(m_worker, &DspWorker::setFormat, Qt::QueuedConnection,
+                                  m_audio->source()->sampleRate(),
+                                  m_audio->source()->formatEpoch());
+        onAudioBecameActive();   // the clocks may have gone to sleep
+        return;
+    }
+
+    if (actionId.startsWith(gradientPrefix)) {
+        m_settings.setGradientId(actionId.mid(gradientPrefix.size()));
+        for (auto &surface : m_surfaces)
+            rebuildStyle(*surface);
+        onAudioBecameActive();
+        return;
+    }
+
+    if (actionId == QLatin1String(MenuAction::kToggleCompact)) {
+        m_settings.setCompact(!m_settings.compact());
+        for (auto &surface : m_surfaces)
+            onGeometryChanged(*surface);
+        onAudioBecameActive();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kToggleNowPlaying)) {
+        m_settings.setNowPlayingEnabled(!m_settings.nowPlayingEnabled());
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kRequestPermission)) {
+        m_audio->requestPermission();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kRestart)) {
+        relaunch();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kAbout)) {
+        showAbout();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kQuit)) {
+        QCoreApplication::quit();
+        return;
+    }
+}
+
+void App::applyFrameRate()
+{
+    // Sixty is what the visuals were designed at and it is the default. Thirty
+    // is the lever for battery: measured on macOS 26 the strip costs 2.9% of a
+    // core at 30 fps against 7.2% at 60. Most of that saving is AppKit's
+    // display-link dispatch rather than the drawing, which is why halving the
+    // rate more than halves the cost.
+    const bool halve = m_settings.halfRateOnBattery() && isLowPowerMode();
+    for (auto &surface : m_surfaces) {
+        if (surface->presenter)
+            surface->presenter->setPreferredFps(halve ? 30 : 60);
+    }
+}
+
+void App::showAbout()
+{
+    QMessageBox box;
+    box.setWindowTitle(QStringLiteral("hyperlight"));
+    box.setText(QStringLiteral("<b>hyperlight</b> %1").arg(QStringLiteral(HYPERLIGHT_VERSION)));
+    box.setInformativeText(QStringLiteral("A system audio visualiser that lives in the menu bar."
+                                          "\n\nCapture: %1\nRate: %2 Hz\n\n"
+                                          "© 2026 Hypernuclear LLC")
+                               .arg(m_audio->source()->statusDetail())
+                               .arg(m_audio->source()->sampleRate(), 0, 'f', 0));
+    box.setStandardButtons(QMessageBox::Ok);
+
+    // An LSUIElement app has no Dock icon and no application menu, so a dialog
+    // opens behind whatever is frontmost unless the app takes focus first.
+    activateApp();
+    box.raise();
+    box.activateWindow();
+    box.exec();
+}
+
+void App::relaunch()
+{
+    relaunchApp();
 }
 
 void App::runVerifyTick()

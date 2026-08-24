@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include <QImage>
 #include <QObject>
@@ -8,6 +9,7 @@
 
 #include "app/AudioController.h"
 #include "app/DspWorker.h"
+#include "app/MenuModel.h"
 #include "app/Settings.h"
 #include "dsp/FrameState.h"
 #include "platform/BarPresenter.h"
@@ -30,7 +32,9 @@ public:
         bool hud = false;         // show the diagnostics window
         bool verifyAudio = false; // print levels for a few seconds, then exit
         bool fakeAudio = false;   // drive the DSP from a synthetic sweep
+        bool fakeNotch = false;   // pretend the display has a notch
         QString shotPath;         // grab one frame and exit
+        QString sourceBundleId;   // listen to one app; "list" prints and exits
     };
 
     explicit App(Options options, QObject *parent = nullptr);
@@ -39,43 +43,66 @@ public:
     bool start();
 
 private Q_SLOTS:
-    void onFrameDue();
-    void onGeometryChanged();
+    void onMenuAction(const QString &actionId);
+    void refreshMenu();
     void onPermissionChanged(int state);
     void onAudioBecameActive();
     void onAudioBecameSilent();
 
 private:
-    void rebuildStyle();
-    void applyFrameRate();
+    // One thing that shows bars. There are up to two: the status item, and on a
+    // notched Mac the panel below the housing.
+    //
+    // They are separate surfaces rather than one presenter with two outputs
+    // because they genuinely differ -- different width, different height,
+    // different band count, and the notch panel changes size when it expands.
+    // What they share is the renderer, which is the whole point.
+    struct Surface
+    {
+        std::unique_ptr<BarPresenter> presenter;
+        RenderStyle style;
+        BarRenderer renderer;
+
+        // Two buffers, alternated: on macOS the bytes go to Core Animation
+        // without a copy, so the image the compositor is reading must not be
+        // the one being painted into.
+        QImage buffers[2];
+        int nextBuffer = 0;
+
+        qreal heightPt = 22.0;
+        qreal dpr = 2.0;
+        std::uint32_t lastPresentedSeq = 0;
+        int atRestFrames = 0;
+        bool isNotch = false;
+    };
+
+    void addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch);
+    void onFrameDue(Surface &surface);
+    void onGeometryChanged(Surface &surface);
+    void rebuildStyle(Surface &surface);
+    void ensureBuffers(Surface &surface);
     bool frameIsAtRest(const FrameState &state) const;
-    void ensureBuffers();
-    bool renderCurrentFrame(QImage **out);
+
+    void applyFrameRate();
+    MenuModel buildMenu() const;
+    void showAbout();
+    void relaunch();
     void runVerifyTick();
 
     Options m_options;
     Settings m_settings;
 
     std::unique_ptr<AudioController> m_audio;
-    std::unique_ptr<BarPresenter> m_presenter;
     std::unique_ptr<DebugHud> m_hud;
+
+    // Deque rather than vector: surfaces hand out references that outlive the
+    // call, and a vector reallocating on the second push would dangle them.
+    std::vector<std::unique_ptr<Surface>> m_surfaces;
+    Surface *m_menuSurface = nullptr;   // the one that carries the menu
 
     QThread m_dspThread;
     DspWorker *m_worker = nullptr;   // lives on m_dspThread, owned by it
 
-    BarRenderer m_renderer;
-    RenderStyle m_style;
-
-    // Two of them. The macOS presenter hands the bytes to Core Animation
-    // without a copy, so the image the compositor is reading must not be the
-    // one we are about to paint into.
-    QImage m_buffers[2];
-    int m_nextBuffer = 0;
-
-    qreal m_heightPt = 24.0;
-    qreal m_dpr = 2.0;
-    std::uint32_t m_lastPresentedSeq = 0;
-    int m_atRestFrames = 0;
     int m_verifyTicks = 0;
 };
 

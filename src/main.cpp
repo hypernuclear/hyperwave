@@ -36,6 +36,11 @@ int main(int argc, char **argv)
     const QCommandLineOption verifyOption(
         QStringLiteral("verify-audio"),
         QStringLiteral("Print capture levels for five seconds, then exit."));
+    const QCommandLineOption sourceOption(
+        QStringLiteral("source"),
+        QStringLiteral("Listen to one app instead of the whole system mix, by bundle id "
+                       "(e.g. com.spotify.client). Use \"list\" to print what is available."),
+        QStringLiteral("bundle-id"));
     const QCommandLineOption shotOption(
         QStringLiteral("shot"),
         QStringLiteral("Render one frame to <path> and exit."), QStringLiteral("path"));
@@ -43,6 +48,12 @@ int main(int argc, char **argv)
     parser.addOption(windowedOption);
     parser.addOption(hudOption);
     parser.addOption(verifyOption);
+    const QCommandLineOption fakeNotchOption(
+        QStringLiteral("fake-notch"),
+        QStringLiteral("Pretend the display has a notch, for developing the panel on an "
+                       "external monitor."));
+    parser.addOption(sourceOption);
+    parser.addOption(fakeNotchOption);
     parser.addOption(shotOption);
     parser.process(app);
 
@@ -51,6 +62,8 @@ int main(int argc, char **argv)
     options.hud = parser.isSet(hudOption);
     options.verifyAudio = parser.isSet(verifyOption);
     options.shotPath = parser.value(shotOption);
+    options.sourceBundleId = parser.value(sourceOption);
+    options.fakeNotch = parser.isSet(fakeNotchOption);
     options.fakeAudio = !qEnvironmentVariableIsEmpty("HYPERLIGHT_FAKE_AUDIO");
 
     App hyperlightApp(options);

@@ -58,10 +58,11 @@
 
 // A small Objective-C shim so the display link and the notification centre have
 // something to target. The C++ object cannot be a selector target directly.
-@interface HLPresenterHook : NSObject
+@interface HLPresenterHook : NSObject <NSMenuDelegate>
 @property (nonatomic, assign) hyperlight::MacBarPresenter *presenter;
 - (void)step:(id)sender;
 - (void)statusItemClicked:(id)sender;
+- (void)menuItemChosen:(NSMenuItem *)sender;
 - (void)screenParametersChanged:(NSNotification *)note;
 - (void)occlusionChanged:(NSNotification *)note;
 @end
@@ -80,6 +81,21 @@
     (void)sender;
     if (_presenter)
         _presenter->emitClicked();
+}
+
+- (void)menuItemChosen:(NSMenuItem *)sender
+{
+    if (_presenter && [sender.representedObject isKindOfClass:[NSString class]])
+        _presenter->emitMenuAction(QString::fromNSString(sender.representedObject));
+}
+
+- (void)menuWillOpen:(NSMenu *)menu
+{
+    (void)menu;
+    // The app list is live, so it is rebuilt at the moment of opening rather
+    // than polled on a timer for a menu nobody is looking at.
+    if (_presenter)
+        _presenter->emitMenuAboutToShow();
 }
 
 - (void)screenParametersChanged:(NSNotification *)note
@@ -175,6 +191,12 @@ bool MacBarPresenter::install()
     // handling, which is the exact thing this whole class exists to avoid.
     button.image = nil;
     button.title = @"";
+    // With neither a title nor an image the button has no accessible content
+    // at all: VoiceOver has nothing to announce and the accessibility API
+    // reports the item as a zero-sized rect, which also defeats scripting. The
+    // label costs nothing and is the only thing standing in for the pixels.
+    button.accessibilityLabel = @"hyperlight audio visualiser";
+    button.toolTip = @"hyperlight";
     button.target = m_impl->hook;
     button.action = @selector(statusItemClicked:);
     [button sendActionOn:NSEventMaskLeftMouseUp | NSEventMaskRightMouseUp];
@@ -255,6 +277,7 @@ void MacBarPresenter::present(const QImage &image)
     if (!m_impl->view || image.isNull())
         return;
 
+
     QImage &slot = m_impl->buffers[m_impl->nextBuffer];
     slot = image;
     m_impl->nextBuffer = 1 - m_impl->nextBuffer;
@@ -291,15 +314,17 @@ bool MacBarPresenter::isVisibleOnScreen() const
 {
     if (!m_impl->statusItem || !m_impl->view)
         return false;
-    if (!m_impl->statusItem.visible)
-        return false;
-    NSWindow *window = m_impl->view.window;
-    if (!window)
-        return false;
-    // Best effort rather than gospel: how faithfully occlusion is reported for
-    // a status item window is not something to build correctness on, so this
-    // only ever gates an optimisation.
-    return (window.occlusionState & NSWindowOcclusionStateVisible) != 0;
+
+    // statusItem.visible and nothing else.
+    //
+    // The obvious addition here is NSWindowOcclusionStateVisible on the item's
+    // window, to skip drawing under a fullscreen app with the menu bar hidden.
+    // Do not: a status item's window does not reliably carry that bit at all.
+    // Measured on macOS 26 it was clear on 240 of 241 consecutive frames with
+    // the strip plainly on screen, so using it as a gate silently blanked the
+    // whole visualiser -- the app ran, the tap worked, and nothing was ever
+    // drawn. An optimisation that can turn the product off is not one.
+    return m_impl->statusItem.visible;
 }
 
 void MacBarPresenter::startClock()
@@ -355,13 +380,115 @@ bool MacBarPresenter::isClockRunning() const
     return m_impl->clockRunning;
 }
 
-void MacBarPresenter::setMenu(QMenu *menu)
+namespace {
+
+// The app icon for a bundle id, scaled to menu size. Returns nil for anything
+// not currently running, which is fine -- the item just goes without.
+NSImage *iconForBundle(const QString &bundleId)
 {
-    (void)menu;
-    // The status item's menu is built natively in App rather than handed over
-    // from QMenu: Qt does its own menu merging and template-image handling on
-    // macOS, and having already been bitten by setTemplate: once there is no
-    // reason to give it a second opportunity.
+    if (bundleId.isEmpty())
+        return nil;
+    NSString *wanted = bundleId.toNSString();
+    for (NSRunningApplication *app in [[NSWorkspace sharedWorkspace] runningApplications]) {
+        if ([app.bundleIdentifier isEqualToString:wanted] && app.icon) {
+            NSImage *icon = [app.icon copy];
+            icon.size = NSMakeSize(16, 16);
+            return icon;
+        }
+    }
+    return nil;
+}
+
+void buildInto(NSMenu *menu, const MenuModel &model, HLPresenterHook *hook)
+{
+    for (const MenuItem &item : model) {
+        if (item.kind == MenuItem::Kind::Separator) {
+            [menu addItem:[NSMenuItem separatorItem]];
+            continue;
+        }
+
+        NSMenuItem *entry = [[NSMenuItem alloc] initWithTitle:item.title.toNSString()
+                                                       action:nil
+                                                keyEquivalent:@""];
+
+        if (item.kind == MenuItem::Kind::Submenu) {
+            NSMenu *child = [[NSMenu alloc] initWithTitle:item.title.toNSString()];
+            child.autoenablesItems = NO;
+            buildInto(child, item.children, hook);
+            entry.submenu = child;
+        } else {
+            entry.target = hook;
+            entry.action = @selector(menuItemChosen:);
+            entry.representedObject = item.actionId.toNSString();
+            entry.state = item.checked ? NSControlStateValueOn : NSControlStateValueOff;
+        }
+
+        entry.enabled = item.enabled;
+        if (NSImage *icon = iconForBundle(item.iconBundleId))
+            entry.image = icon;
+
+        // The dimmed trailing text ("playing", "not running") rides along as an
+        // attributed title, since NSMenuItem has no second label of its own.
+        if (!item.detail.isEmpty()) {
+            NSMutableAttributedString *title = [[NSMutableAttributedString alloc]
+                initWithString:item.title.toNSString()];
+            NSAttributedString *detail = [[NSAttributedString alloc]
+                initWithString:[NSString stringWithFormat:@"   %@", item.detail.toNSString()]
+                    attributes:@{
+                        NSForegroundColorAttributeName : [NSColor secondaryLabelColor],
+                        NSFontAttributeName :
+                            [NSFont menuFontOfSize:[NSFont smallSystemFontSize]],
+                    }];
+            [title appendAttributedString:detail];
+            entry.attributedTitle = title;
+        }
+
+        [menu addItem:entry];
+    }
+}
+
+} // namespace
+
+void MacBarPresenter::setMenu(const MenuModel &model)
+{
+    if (!m_impl->statusItem)
+        return;
+
+    // Rebuilt wholesale every time. The app list changes as things start and
+    // stop playing, and diffing an NSMenu against a model is considerably more
+    // code than throwing the old one away.
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"hyperlight"];
+    menu.autoenablesItems = NO;
+    menu.delegate = m_impl->hook;
+    buildInto(menu, model, m_impl->hook);
+
+    m_impl->menu = menu;
+
+    // Deliberately NOT statusItem.menu.
+    //
+    // Assigning the menu makes AppKit own the click, which swallows the button
+    // action and, more to the point, holds the item highlighted for as long as
+    // the menu is tracking. Popping it up by hand on click keeps the strip
+    // behaving like a strip.
+}
+
+void MacBarPresenter::showMenu()
+{
+    if (!m_impl->menu || !m_impl->statusItem)
+        return;
+    [m_impl->menu popUpMenuPositioningItem:nil
+                                atLocation:NSMakePoint(0, 0)
+                                    inView:m_impl->statusItem.button];
+}
+
+void MacBarPresenter::emitMenuAction(const QString &actionId)
+{
+    Q_EMIT menuActionTriggered(actionId);
+}
+
+void MacBarPresenter::emitMenuAboutToShow()
+{
+    Q_EMIT menuAboutToShow();
 }
 
 void MacBarPresenter::emitFrameDue()
@@ -376,6 +503,11 @@ void MacBarPresenter::emitGeometryChanged()
 
 void MacBarPresenter::emitClicked()
 {
+    // Order matters: the app rebuilds the menu in response to menuAboutToShow,
+    // and only then is it popped up. Doing the rebuild from NSMenuDelegate's
+    // menuWillOpen: instead would mean mutating a menu that is already tracking.
+    Q_EMIT menuAboutToShow();
+    showMenu();
     Q_EMIT clicked();
 }
 

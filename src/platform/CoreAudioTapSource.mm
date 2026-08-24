@@ -15,6 +15,7 @@
 #include <QDebug>
 
 #include "audio/Downmix.h"
+#include "platform/AudioProcessProbe.h"
 
 namespace hyperlight {
 
@@ -202,6 +203,12 @@ bool CoreAudioTapSource::start()
     m_statusDetail = m_isOutputClient
         ? QStringLiteral("aggregate includes the output device (output client)")
         : QStringLiteral("tap-only aggregate");
+    // createTap() may have had something to say about the requested source not
+    // being available; it would otherwise be lost to the line above.
+    if (!m_sourceNote.isEmpty())
+        m_statusDetail += QStringLiteral(" — ") + m_sourceNote;
+    else if (!m_sourceBundleId.isEmpty())
+        m_statusDetail += QStringLiteral(" — listening to ") + m_sourceBundleId;
 
     installListeners();
     m_running = true;
@@ -232,11 +239,34 @@ bool CoreAudioTapSource::createTap()
     if (m_impl->tap != kAudioObjectUnknown)
         return true;
 
-    // An empty exclusion list is what makes this a global tap: every process
-    // that outputs audio is included. We exclude nothing, because hyperlight
-    // never plays anything -- if that ever changes, our own process object
-    // belongs in this array or the meter will react to itself.
-    CATapDescription *desc = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
+    CATapDescription *desc = nil;
+    m_sourceNote.clear();
+
+    if (m_sourceBundleId.isEmpty()) {
+        // An empty exclusion list is what makes this a global tap: every
+        // process that outputs audio is included. We exclude nothing, because
+        // hyperlight never plays anything -- if that ever changes, our own
+        // process object belongs in this array or the meter reacts to itself.
+        desc = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
+    } else {
+        // Listening to one app. The object ids are resolved now rather than
+        // stored, because they are only meaningful for this run.
+        NSMutableArray<NSNumber *> *processes = [NSMutableArray array];
+        for (quint32 objectId : AudioProcessProbe::objectIdsForBundle(m_sourceBundleId))
+            [processes addObject:@(objectId)];
+
+        if (processes.count == 0) {
+            // The app is not running, or is not registered with the audio
+            // system yet. A mixdown of nothing produces a tap that never
+            // delivers a sample, which is indistinguishable from a broken one,
+            // so fall back to the system mix and say why.
+            m_sourceNote = QStringLiteral("%1 is not producing audio, listening to everything")
+                               .arg(m_sourceBundleId);
+            desc = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
+        } else {
+            desc = [[CATapDescription alloc] initStereoMixdownOfProcesses:processes];
+        }
+    }
     desc.name = @(kTapName);
     desc.UUID = [NSUUID UUID];
     desc.privateTap = YES;      // invisible to other apps and to Audio MIDI Setup
@@ -438,6 +468,41 @@ int CoreAudioTapSource::renderCallback(const void *inputBufferList, void *output
     return 0;
 }
 
+AudioProcessList CoreAudioTapSource::audioProcesses() const
+{
+    return AudioProcessProbe::listProcesses();
+}
+
+bool CoreAudioTapSource::setSourceBundleId(const QString &bundleId)
+{
+    if (bundleId == m_sourceBundleId)
+        return true;
+
+    m_sourceBundleId = bundleId;
+
+    // Unlike a device change, this one really does need the tap rebuilt: which
+    // processes are mixed into it is baked into the CATapDescription and there
+    // is no property to change afterwards. Recreating a tap re-runs the TCC
+    // evaluation, but the grant is already in place by the time anyone can
+    // reach the source picker, so in practice it is silent.
+    if (m_running && !restartCapture()) {
+        qWarning("hyperlight: could not switch source, falling back to the system mix");
+        m_sourceBundleId.clear();
+        restartCapture();
+        Q_EMIT sourceChanged(m_sourceBundleId);
+        return false;
+    }
+
+    Q_EMIT sourceChanged(m_sourceBundleId);
+    return true;
+}
+
+bool CoreAudioTapSource::restartCapture()
+{
+    stop();
+    return start();
+}
+
 void CoreAudioTapSource::refreshOutputDevice()
 {
     m_impl->outputDevice = defaultOutputDevice();
@@ -543,6 +608,7 @@ void CoreAudioTapSource::sweepOrphanedTaps()
 
     for (AudioObjectID tap : taps) {
         CATapDescription *desc = nil;
+    m_sourceNote.clear();
         UInt32 descSize = sizeof(desc);
         AudioObjectPropertyAddress da = addr(kAudioTapPropertyDescription);
         if (AudioObjectGetPropertyData(tap, &da, 0, nullptr, &descSize, &desc) != noErr || !desc)
