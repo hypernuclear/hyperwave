@@ -167,6 +167,8 @@ qt_add_executable(hyperlight
     $<$<PLATFORM_ID:Darwin>:src/platform/CoreAudioTapSource.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioCapturePermission.h>
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioCapturePermission.mm>
+    $<$<PLATFORM_ID:Darwin>:src/platform/AudioLevelMeter.h>
+    $<$<PLATFORM_ID:Darwin>:src/platform/AudioLevelMeter.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioProcessProbe.h>
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioProcessProbe.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacBarPresenter.h>
@@ -222,6 +224,7 @@ if(APPLE)
         src/platform/CoreAudioTapSource.mm
         src/platform/AudioCapturePermission.mm
         src/platform/AudioProcessProbe.mm
+        src/platform/AudioLevelMeter.mm
         src/platform/MacBarPresenter.mm
         src/platform/MacNotchPresenter.mm
         src/platform/MacMenuBuilder.mm

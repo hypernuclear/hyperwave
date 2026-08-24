@@ -23,6 +23,10 @@ namespace {
 
 constexpr const char *kTapName = "Hyperlight System Audio";
 
+// Every tap this app creates starts with this, so the startup sweep can find
+// orphans from a previous run without knowing which kind they were.
+constexpr const char *kTapNamePrefix = "Hyperlight";
+
 // Frames of scratch on the realtime stack. A device handing us more than this
 // in one callback would mean a buffer longer than 170 ms, which no output
 // device does; we clamp rather than allocate, because allocating on the HAL IO
@@ -129,6 +133,18 @@ CoreAudioTapSource::CoreAudioTapSource(QObject *parent)
     m_rebuildDebounce.setInterval(250);
     connect(&m_rebuildDebounce, &QTimer::timeout, this,
             &CoreAudioTapSource::rebuildAfterHardwareChange);
+    // Which processes are worth metering changes as apps open and close audio
+    // devices, which is rare. A second is plenty, and setProcesses() is a cheap
+    // no-op whenever the membership has not actually moved.
+    m_meterRefresh.setInterval(1000);
+    connect(&m_meterRefresh, &QTimer::timeout, this, [this] {
+        QVector<quint32> candidates;
+        for (const AudioProcess &process : AudioProcessProbe::listProcesses()) {
+            if (process.playingOutput)
+                candidates.append(process.objectId);
+        }
+        m_meter.setProcesses(candidates);
+    });
 }
 
 CoreAudioTapSource::~CoreAudioTapSource()
@@ -211,6 +227,7 @@ bool CoreAudioTapSource::start()
         m_statusDetail += QStringLiteral(" — device ") + m_sourceDeviceUid;
 
     installListeners();
+    m_meterRefresh.start();
     m_running = true;
     setPermissionState(PermissionState::Probing);
     return true;
@@ -227,6 +244,8 @@ void CoreAudioTapSource::stop()
     // use-after-free that reproduces only on a loaded machine.
     m_shuttingDown.store(true, std::memory_order_release);
     m_rebuildDebounce.stop();
+    m_meterRefresh.stop();
+    m_meter.stop();
     removeListeners();
     stopIo();
     destroyAggregate();
@@ -464,7 +483,12 @@ int CoreAudioTapSource::renderCallback(const void *inputBufferList, void *output
 
 AudioProcessList CoreAudioTapSource::audioProcesses() const
 {
-    return AudioProcessProbe::listProcesses();
+    AudioProcessList processes = AudioProcessProbe::listProcesses();
+    for (AudioProcess &process : processes) {
+        process.levelDb = m_meter.levelDb(process.objectId);
+        process.audible = m_meter.isAudible(process.objectId);
+    }
+    return processes;
 }
 
 AudioDeviceList CoreAudioTapSource::audioDevices() const
@@ -612,7 +636,7 @@ void CoreAudioTapSource::sweepOrphanedTaps()
         AudioObjectPropertyAddress da = addr(kAudioTapPropertyDescription);
         if (AudioObjectGetPropertyData(tap, &da, 0, nullptr, &descSize, &desc) != noErr || !desc)
             continue;
-        if ([desc.name isEqualToString:@(kTapName)]) {
+        if ([desc.name hasPrefix:@"Hyperlight"]) {
             qInfo("hyperlight: destroying an orphaned tap from a previous run");
             AudioHardwareDestroyProcessTap(tap);
         }

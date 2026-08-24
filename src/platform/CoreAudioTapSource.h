@@ -7,6 +7,7 @@
 #include <QTimer>
 
 #include "audio/AudioSource.h"
+#include "platform/AudioLevelMeter.h"
 
 // Deliberately free of any Objective-C or CoreAudio type. The whole point of
 // this header is that App and AudioController can include it without dragging
@@ -84,6 +85,11 @@ private:
     std::unique_ptr<Impl> m_impl;
 
     QTimer m_rebuildDebounce;
+    // Metering is separate from capture: one extra aggregate holding one tap
+    // per candidate process, so "which apps are audible" is measured rather
+    // than inferred from a property that cannot answer it.
+    mutable AudioLevelMeter m_meter;
+    QTimer m_meterRefresh;
 
     std::atomic<std::uint64_t> m_callbackCount{0};
     std::atomic<std::uint64_t> m_overruns{0};

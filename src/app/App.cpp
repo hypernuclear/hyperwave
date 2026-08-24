@@ -427,40 +427,38 @@ MenuModel App::buildMenu() const
     // The submenu's own row says what is selected, so the answer is visible
     // without opening it.
     menu.append(MenuItem::submenu(QStringLiteral("Source"), sources).withDetail(activeName));
-    // --- what is making noise, and what is playing ---
+    // --- what is actually making a sound ---
     //
-    // Informational, not a picker. Which apps have audio going is worth
-    // knowing; it is a different question from where the visualiser listens,
-    // and conflating the two produced a source list full of things that had
-    // merely opened a device once.
-    AudioProcessList active = m_audio->source()->audioProcesses();
-    active.removeIf([](const AudioProcess &p) { return !p.isNamed() || !p.playingOutput; });
-    std::sort(active.begin(), active.end(), [](const AudioProcess &a, const AudioProcess &b) {
+    // Filtered on measured level, not on kAudioProcessPropertyIsRunningOutput.
+    // That property only says a process holds an open output stream, which a 3D
+    // editor does for hours while emitting digital silence -- it was reported as
+    // "playing" three times before this was measured properly.
+    AudioProcessList audible = m_audio->source()->audioProcesses();
+    audible.removeIf([](const AudioProcess &p) { return !p.isNamed() || !p.audible; });
+    std::sort(audible.begin(), audible.end(), [](const AudioProcess &a, const AudioProcess &b) {
+        if (a.levelDb != b.levelDb)
+            return a.levelDb > b.levelDb;   // loudest first
         return a.name.localeAwareCompare(b.name) < 0;
     });
-    if (!active.isEmpty()) {
-        MenuModel using_;
-        for (const AudioProcess &process : active) {
-            // "Using audio", not "playing".
-            //
-            // CoreAudio only reports that a process holds an open output
-            // stream. The one exception is an app with a scripting dictionary
-            // we are already allowed to read, which can say for certain -- so
-            // that is the only case that gets a definite word.
-            QString detail;
+    if (!audible.isEmpty()) {
+        MenuModel playing;
+        for (const AudioProcess &process : audible) {
+            // Now it can honestly say "playing", because it was measured. A
+            // scriptable app that is paused still overrides this -- it knows
+            // better than a level meter does.
+            QString detail = QStringLiteral("playing");
             if (m_settings.nowPlayingEnabled() && NowPlaying::isSupported(process.bundleId)
                 && m_nowPlaying->bundleId() == process.bundleId
-                && m_nowPlaying->info().valid) {
-                detail = m_nowPlaying->info().playing ? QStringLiteral("playing")
-                                                      : QStringLiteral("paused");
+                && m_nowPlaying->info().valid && !m_nowPlaying->info().playing) {
+                detail = QStringLiteral("paused");
             }
-            using_.append(MenuItem::action(QString(), process.name)
-                              .withIcon(process.bundleId)
-                              .withDetail(detail)
-                              .withEnabled(false));
+            playing.append(MenuItem::action(QString(), process.name)
+                               .withIcon(process.bundleId)
+                               .withDetail(detail)
+                               .withEnabled(false));
         }
-        menu.append(MenuItem::submenu(QStringLiteral("Using audio"), using_)
-                        .withDetail(QString::number(active.size())));
+        menu.append(MenuItem::submenu(QStringLiteral("Playing"), playing)
+                        .withDetail(QString::number(audible.size())));
     }
     // --- now playing, where we can actually read it ---
     const NowPlayingInfo &np = m_nowPlaying->info();

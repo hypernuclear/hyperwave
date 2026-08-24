@@ -71,17 +71,28 @@ built-in speakers while audio was routed to a virtual device: the tap stayed
 alive at 463 callbacks and reported −120 dB, against −14.2 dB for the device
 actually in use.
 
-## What is using audio
+## What is playing
 
-`Using audio ▸` lists every application holding an open output stream, with its
-icon. It is informational and deliberately not selectable: which apps have audio
-going is a different question from where the visualiser listens, and conflating
-the two is what produced a source list full of things that had merely opened a
-device once.
+`Playing ▸` lists the applications actually making a sound, loudest first, with
+their icons. Informational and deliberately not selectable: which apps have
+audio going is a different question from where the visualiser listens.
 
-The entries say "using audio", not "playing", because that is all CoreAudio will
-support. The one exception is an app with a scripting dictionary, which can say
-for certain — so only those get a definite "playing" or "paused".
+The list is built from a **measurement**, not from
+`kAudioProcessPropertyIsRunningOutput`. That property only says a process holds
+an open output stream, which a 3D editor does for hours while emitting digital
+silence — it got reported as "playing" three separate times before this was
+measured properly.
+
+The measurement is cheap because one private aggregate device can hold *several*
+taps at once: `kAudioAggregateDeviceTapListKey` takes an array, and each tap
+arrives as its own buffer in a single IOProc. So metering N applications costs
+one aggregate, one IO thread, and an RMS per buffer — not N of everything. With
+music playing and an editor idle, the editor's own tap reads −120 dB while the
+player's reads −5.9 dB, which is not a close call.
+
+The level decays over about two seconds rather than tracking the signal, so a
+gap between tracks does not make an app blink out of the list. A scriptable app
+that reports itself paused overrides the meter, because it knows better.
 
 ## Track info
 

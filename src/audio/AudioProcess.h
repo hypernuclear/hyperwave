@@ -24,6 +24,10 @@ struct AudioProcess
     // app that opened an audio context at launch and has been silent ever since
     // still reports true. Do not present it to anyone as "playing".
     bool playingOutput = false;
+    // Measured peak output level in dBFS, or -120 when silent or unmetered.
+    // This, not playingOutput, is what "is it making a sound" means.
+    float levelDb = -120.0f;
+    bool audible = false;
 
     bool isNamed() const { return !name.isEmpty(); }
 };
