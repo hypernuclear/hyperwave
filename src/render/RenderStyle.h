@@ -253,6 +253,10 @@ struct RenderStyle
         // rather than as a glow.
         qreal separation = 0.22;
         qreal constantOffset = 0.035;
+        // Clearance kept inside the item, as a fraction of the half-extent.
+        // The glow spreads outward from the rim and the status item is a hard
+        // edge, so a ring drawn right up to it has its halo sliced off.
+        qreal margin = 0.14;
         qreal stiffness = 0.18;
         qreal damping = 0.88;
     };

@@ -150,6 +150,7 @@ RenderStyle::Mirror Settings::mirror() const
     m.verticalInset = num("mirror/verticalInset", m.verticalInset);
     m.stiffness = num("mirror/stiffness", m.stiffness);
     m.damping = num("mirror/damping", m.damping);
+    m.minHalfPt = num("mirror/minHalfPt", m.minHalfPt);
     return m;
 }
 void Settings::setMirror(const RenderStyle::Mirror &m)
@@ -159,6 +160,7 @@ void Settings::setMirror(const RenderStyle::Mirror &m)
     m_store.setValue(QStringLiteral("mirror/verticalInset"), m.verticalInset);
     m_store.setValue(QStringLiteral("mirror/stiffness"), m.stiffness);
     m_store.setValue(QStringLiteral("mirror/damping"), m.damping);
+    m_store.setValue(QStringLiteral("mirror/minHalfPt"), m.minHalfPt);
     Q_EMIT visualiserParametersChanged();
 }
 RenderStyle::Ring Settings::ring() const
@@ -175,6 +177,8 @@ RenderStyle::Ring Settings::ring() const
     r.separation = num("ring/separation", r.separation);
     r.constantOffset = num("ring/constantOffset", r.constantOffset);
     r.fillOpacity = num("ring/fillOpacity", r.fillOpacity);
+    r.margin = num("ring/margin", r.margin);
+    r.layerOpacity = num("ring/layerOpacity", r.layerOpacity);
     r.stiffness = num("ring/stiffness", r.stiffness);
     r.damping = num("ring/damping", r.damping);
     return r;
@@ -188,6 +192,8 @@ void Settings::setRing(const RenderStyle::Ring &r)
     m_store.setValue(QStringLiteral("ring/separation"), r.separation);
     m_store.setValue(QStringLiteral("ring/constantOffset"), r.constantOffset);
     m_store.setValue(QStringLiteral("ring/fillOpacity"), r.fillOpacity);
+    m_store.setValue(QStringLiteral("ring/margin"), r.margin);
+    m_store.setValue(QStringLiteral("ring/layerOpacity"), r.layerOpacity);
     m_store.setValue(QStringLiteral("ring/stiffness"), r.stiffness);
     m_store.setValue(QStringLiteral("ring/damping"), r.damping);
     Q_EMIT visualiserParametersChanged();
@@ -242,7 +248,7 @@ void Settings::resetVisualiserParameters()
 
 bool Settings::inputEnabled() const
 {
-    return m_store.value(QStringLiteral("audio/inputEnabled"), false).toBool();
+    return m_store.value(QStringLiteral("audio/inputEnabled"), true).toBool();
 }
 void Settings::setInputEnabled(bool enabled)
 {

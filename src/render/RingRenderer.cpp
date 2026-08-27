@@ -92,8 +92,27 @@ void RingRenderer::render(const FrameState &state, const RenderStyle &style, qre
     const qreal cx = w * 0.5;
     const qreal cy = h * 0.5;
     const qreal extent = std::min(w, h) * 0.5;
-    const qreal base = extent * r.baseRadius;
-    const qreal reach = extent * r.reach;
+
+    // Everything that pushes past the outline has to be paid for out of the
+    // radius, or it draws off the edge.
+    //
+    // The stroke straddles the path, so half of it is outside. The coloured
+    // copies are shifted by a constant offset in both axes. And the spring is
+    // allowed to overshoot to 1.4, so the reach has to be budgeted at its
+    // maximum rather than at 1.0 -- sizing for the average is what let a loud
+    // passage clip the top of the circle against the top of the status item.
+    const qreal stroke = std::max(1.0, r.lineWidthPt * dpr);
+    const qreal off = extent * r.constantOffset;
+    const qreal headroom = std::max(1.0, extent - stroke * 0.5 - off - extent * r.margin);
+
+    constexpr qreal kMaxPush = 1.4;
+    qreal base = headroom * r.baseRadius;
+    qreal reach = headroom * r.reach;
+    if (base + reach * kMaxPush > headroom) {
+        const qreal scale = headroom / (base + reach * kMaxPush);
+        base *= scale;
+        reach *= scale;
+    }
 
     const auto outline = [&](qreal amplitudeScale, qreal radialOffset, QPointF shift) {
         for (int i = 0; i <= segments; ++i) {
@@ -134,7 +153,6 @@ void RingRenderer::render(const FrameState &state, const RenderStyle &style, qre
     // darker mixtures towards the middle, which is what makes the fringes look
     // like layers rather than like a rainbow gradient. White last, so the ring
     // proper sits on top and the colour reads as escaping from underneath it.
-    const qreal off = extent * r.constantOffset;
     struct Layer
     {
         qreal amplitude;

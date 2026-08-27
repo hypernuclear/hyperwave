@@ -185,6 +185,8 @@ VisualiserControls::VisualiserControls(Options options, QWidget *parent)
     addSlider(mirrorForm, QStringLiteral("Stiffness"), 0.05, 0.8, &m_mirror.stiffness,
               mirrorChanged);
     addSlider(mirrorForm, QStringLiteral("Bounce"), 0.60, 0.98, &m_mirror.damping, mirrorChanged);
+    addSlider(mirrorForm, QStringLiteral("Rest height pt"), 0.0, 3.0, &m_mirror.minHalfPt,
+              mirrorChanged);
     layout->addWidget(m_mirrorBox);
     const std::function<void()> ringChanged = [this] { Q_EMIT ringRequested(m_ring); };
     m_ringBox = new QGroupBox(QStringLiteral("Ring"), this);
@@ -199,6 +201,9 @@ VisualiserControls::VisualiserControls(Options options, QWidget *parent)
     addSlider(ringForm, QStringLiteral("Separation"), 0.0, 0.8, &m_ring.separation, ringChanged);
     addSlider(ringForm, QStringLiteral("Offset"), 0.0, 0.15, &m_ring.constantOffset, ringChanged);
     addSlider(ringForm, QStringLiteral("Fill"), 0.0, 1.0, &m_ring.fillOpacity, ringChanged);
+    addSlider(ringForm, QStringLiteral("Margin"), 0.0, 0.4, &m_ring.margin, ringChanged);
+    addSlider(ringForm, QStringLiteral("Layer opacity"), 0.1, 1.0, &m_ring.layerOpacity,
+              ringChanged);
     addSlider(ringForm, QStringLiteral("Stiffness"), 0.05, 0.8, &m_ring.stiffness, ringChanged);
     addSlider(ringForm, QStringLiteral("Bounce"), 0.60, 0.98, &m_ring.damping, ringChanged);
     layout->addWidget(m_ringBox);

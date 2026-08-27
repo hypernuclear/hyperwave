@@ -21,15 +21,23 @@ QShader loadShader(const QString &path)
     return QShader::fromSerialized(f.readAll());
 }
 
-// The bright pass and the blurs run at half resolution.
+// How much the bright pass and the blurs are downscaled by.
 //
-// Bloom is low-frequency by definition, so the detail thrown away is detail
-// that was about to be blurred out anyway, and it makes the three passes that
-// dominate the chain a sixteenth of the work. It also multiplies the reach of
-// the blur kernel by the same factor for free, which is the real reason for
-// going to a quarter rather than a half: at half resolution the halo was only
-// a few pixels wide and read as a soft edge rather than as light.
-constexpr int kBloomDivisor = 4;
+// Bloom is low-frequency by definition, so detail thrown away here was about to
+// be blurred out anyway, and a quarter in each direction makes those three
+// passes a sixteenth of the work while multiplying the kernel's reach for free.
+//
+// But only when there is resolution to spare. The ring asks for a square status
+// item, which is 44 pixels across at 2x -- a quarter of that is an eleven-pixel
+// bloom texture, and blurring eleven pixels and compositing them back over
+// forty-four does not read as glow, it reads as the whole thing being out of
+// focus. So the divisor backs off on small targets and the bloom is computed at
+// full resolution when the frame is small enough that it costs nothing anyway.
+int bloomDivisorFor(const QSize &size)
+{
+    const int shortSide = std::min(size.width(), size.height());
+    return std::clamp(shortSide / 64, 1, 4);
+}
 
 struct Uniforms
 {
@@ -149,7 +157,8 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
     if (d.size != QSize(w, h)) {
         d.releaseSizeDependent();
         d.size = QSize(w, h);
-        d.bloomSize = QSize(std::max(1, w / kBloomDivisor), std::max(1, h / kBloomDivisor));
+        const int divisor = bloomDivisorFor(d.size);
+        d.bloomSize = QSize(std::max(1, w / divisor), std::max(1, h / divisor));
 
         const auto makeTexture = [&](std::unique_ptr<QRhiTexture> &tex, QSize size,
                                      QRhiTexture::Flags flags) {

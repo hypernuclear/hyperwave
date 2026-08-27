@@ -36,12 +36,15 @@ afterwards, in the glow.
 
 ![lines](docs/lines.png)
 
-**Ring** is a closed outline pushed outward by the spectrum, drawn three times
-in separated colours. Two details do the work. The outline is mirrored, so the
-spectrum runs out along one half and back along the other and the shape stays
-symmetric however the music moves. And the coloured copies are offset in
-*amplitude* rather than in position, so they coincide exactly where the ring is
-at rest and split into fringes only where it bulges.
+**Ring** is a closed outline pushed outward by the spectrum, drawn five times in
+separated colours over a dark disc. Two details do the work. The outline is
+mirrored, so the spectrum runs out along one half and back along the other and
+the shape stays symmetric however the music moves. And the copies are offset two
+ways at once -- by amplitude, which scales with how far the ring has been pushed
+out, so the fringes land on the protrusions; and by a constant, which shifts them
+everywhere, so they read as layers out of register rather than as a glow. Cyan,
+magenta and yellow, because overlapping CMY darkens towards the middle the way a
+four-colour process does, where RGB would just make a rainbow.
 
 ![ring](docs/ring.png)
 
@@ -97,11 +100,18 @@ this repository.
 ![lines](docs/lines.png)
 
 The lines, which are the look glow exists for.
-It is set **per look, not once for the app**, and only the lines arrive with it
-on. That is not a preference so much as part of what a look is: the lines are
-strokes of light and are barely worth drawing without it, while the bars are
-objects with edges and haloing them turns a legible meter into a smear. A single
-switch for all six meant choosing which half to spoil.
+
+It is set **per look, not once for the app**, and the lines and the ring are the
+two that arrive with it on. That is less a preference than part of what a look
+is: both draw something that emits rather than something that reflects, while
+the bars are objects with edges and haloing them turns a legible meter into a
+smear. A single switch for all six meant choosing which half to spoil.
+
+The bright pass and the blurs run downscaled, but only where there is resolution
+to spare. The ring asks for a square status item -- 44 pixels across at 2x -- and
+a quarter of that is an eleven-pixel bloom texture, which composited back over
+the original does not read as glow so much as being out of focus. The divisor
+backs off on small targets.
 
 Bloom is not a property of any look. Deciding which pixels are lit and deciding
 what light does to them afterwards are different questions, so it is four
@@ -197,9 +207,8 @@ actually in use.
 
 `Include microphone input` mixes an input device into the analysis alongside the
 system output, so the visualiser answers "what can this machine hear" as well as
-"what is it playing". Off unless you turn it on: it needs its own permission,
-and a menu bar decoration has no business asking for the microphone the first
-time it runs.
+"what is it playing". On by default, which means a first run asks for the
+microphone; the menu item turns it off and the choice persists.
 
 It could not reuse the tap. A CoreAudio process tap answers what the machine is
 *playing*; there is no variant of it that answers what the machine can *hear*.

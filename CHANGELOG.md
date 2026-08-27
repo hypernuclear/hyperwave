@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The ring was fuzzy and drew outside itself. Its bloom ran at a quarter
+  resolution, which on a 44-pixel square status item is an eleven-pixel texture
+  -- blurred and composited back, that reads as being out of focus rather than
+  as glow -- so the divisor now backs off on small targets. And the stroke
+  width, the coloured copies' offset and the spring's overshoot were all pushing
+  past the radius without being budgeted for, so a loud passage clipped against
+  the top of the item.
 - The microphone ran most of a second late. The output ring discards its backlog
   every tick to stay current and the input ring did not, so with two devices on
   two clocks the excess simply accumulated until the ring was full and stayed
@@ -75,6 +82,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The ring has glow on by default, alongside the lines. Both draw something
   that emits rather than something that reflects, which is the distinction that
   decides it.
+- Microphone input is on by default, and the ring's layer opacity and the
+  mirror's resting height are adjustable and persisted -- an audit of every
+  field against the settings code found them tunable in principle and reachable
+  by nobody.
 - "Include microphone input" in the menu, which mixes an input device into the
   analysis alongside the system output so the visualiser answers "what can this
   machine hear" as well as "what is it playing". Off by default, because it
