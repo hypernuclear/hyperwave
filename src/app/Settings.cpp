@@ -6,6 +6,7 @@ namespace hyperwave {
 
 namespace {
 constexpr const char *kGradientKey = "appearance/gradient";
+constexpr const char *kVizKey = "appearance/visualiser";
 constexpr const char *kCompactKey = "appearance/compact";
 constexpr const char *kHalfRateKey = "power/halfRateOnBattery";
 constexpr const char *kSourceKey = "audio/sourceDeviceUid";
@@ -32,6 +33,17 @@ void Settings::setGradientId(const QString &id)
     Q_EMIT gradientIdChanged(id);
 }
 
+QString Settings::vizStyle() const
+{
+    return m_store.value(QLatin1String(kVizKey), QStringLiteral("bars")).toString();
+}
+void Settings::setVizStyle(const QString &id)
+{
+    if (vizStyle() == id)
+        return;
+    m_store.setValue(QLatin1String(kVizKey), id);
+    Q_EMIT vizStyleChanged(id);
+}
 bool Settings::compact() const
 {
     return m_store.value(QLatin1String(kCompactKey), false).toBool();

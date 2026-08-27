@@ -133,6 +133,7 @@ add_library(hyperwave_core STATIC
     src/audio/Downmix.cpp
     src/audio/Downmix.h
     src/render/BarRenderer.cpp
+    src/render/RidgeRenderer.cpp
     src/render/BarRenderer.h
     src/render/RenderStyle.h
     src/render/Palette.cpp

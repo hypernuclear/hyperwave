@@ -275,22 +275,24 @@ bool CoreAudioTapSource::createTap()
     // exactly like a revoked permission or a broken app. Fall back to the whole
     // system mix and say why -- m_sourceNote is read back into m_statusDetail,
     // which is what the HUD and the logs show.
-    bool sourcePresent = m_sourceDeviceUid.isEmpty();
-    if (!m_sourceDeviceUid.isEmpty()) {
+    bool useGlobalTap = m_sourceDeviceUid.isEmpty();
+    if (!useGlobalTap) {
+        bool present = false;
         for (const AudioDevice &device : AudioProcessProbe::listOutputDevices()) {
             if (device.uid == m_sourceDeviceUid) {
-                sourcePresent = true;
+                present = true;
                 break;
             }
         }
-        if (!sourcePresent) {
+        if (!present) {
+            useGlobalTap = true;
             m_sourceNote = QStringLiteral("device %1 is not connected, using the system mix")
                                .arg(m_sourceDeviceUid);
             qInfo("hyperwave: %s", qPrintable(m_sourceNote));
         }
     }
 
-    if (!sourcePresent) {
+    if (useGlobalTap) {
         // An empty exclusion list is what makes this a global tap: every
         // process that outputs audio is included, wherever it is going. This is
         // the default, and it follows the default output device as the user

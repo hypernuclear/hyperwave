@@ -48,6 +48,60 @@ struct RenderStyle
     // disappears reads as a crash.
     qreal idleOpacity = 0.35;
 
+    // --- the ridgeline look -------------------------------------------------
+    //
+    // Kept here with everything else because a look is data, not a code path.
+    // These are ignored by the bar renderer and vice versa; carrying both in
+    // one struct is cheaper than a variant and keeps App's style code single.
+    struct Ridge
+    {
+        // Time slices held in the terrain. Forty at a row per frame is two
+        // thirds of a second of history at 60 fps: long enough to watch a
+        // phrase arrive, short enough that the back of the terrain is still
+        // related to what you are hearing.
+        //
+        // This is also the dominant cost. Halving it very nearly halves the
+        // frame, which no other knob here does, so it is the first thing to
+        // reach for and the last thing to raise.
+        int rows = 40;
+        int frameStride = 1;
+
+        // Antialiasing is the single most expensive thing this look does, and
+        // with forty overlapping translucent ridges it buys less than it does
+        // for a lone curve -- the terrain is its own antialiasing. Measured
+        // both ways before choosing.
+        bool antialias = true;
+
+        // Lines the other way, every Nth sample, which is what turns a stack of
+        // separate curves into one surface you can read the shape of. Zero
+        // turns them off. They are drawn after the ridges and fainter, so they
+        // suggest the mesh rather than competing with it.
+        int columnStride = 8;
+        qreal columnOpacity = 0.35;
+
+        // Interpolation between bands, Catmull-Rom. Twenty-eight points across
+        // a strip is visibly faceted; three samples per band turns the ridges
+        // into curves for about a fifth of the frame.
+        int subdivision = 3;
+
+        // Perspective. depth is how much further the oldest row is than the
+        // newest, as a multiple of the eye distance, so 1.6 means the back of
+        // the terrain is 2.6x away and draws at 38% scale.
+        qreal depth = 1.6;
+        qreal spreadX = 0.92;    // fraction of the width the nearest row spans
+        qreal amplitude = 0.55;  // fraction of the height a full-scale band rises
+        qreal baseline = 0.88;   // where the nearest row sits, 0 = top
+        qreal horizon = 0.30;    // where infinitely far rows converge to
+        // A little lateral slide with depth. Pure symmetric convergence reads
+        // as a diagram; an oblique one reads as an object.
+        qreal shearX = 0.10;
+        // How fast older rows fade out. Above 1 the falloff is gentle at the
+        // front and steep at the back, which keeps the near ridges legible
+        // without the far ones turning into a solid mass.
+        qreal fadeExponent = 1.5;
+        qreal lineWidthPt = 0.7;
+    };
+    Ridge ridge;
     qreal stripWidthPt() const
     {
         return insetLeftPt + insetRightPt

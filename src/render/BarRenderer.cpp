@@ -8,7 +8,7 @@
 
 namespace hyperwave {
 
-QSize BarRenderer::pixelSize(const RenderStyle &style, qreal stripHeightPt, qreal dpr)
+QSize BarRenderer::sizeFor(const RenderStyle &style, qreal stripHeightPt, qreal dpr)
 {
     // Ceil rather than round. Scaled display modes produce fractional backing
     // scales, and a buffer one pixel short of what the layer wants shows up as

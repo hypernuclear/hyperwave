@@ -22,6 +22,12 @@ public:
 
     QString gradientId() const;
     void setGradientId(const QString &id);
+    // Which visualiser draws: "bars" or "ridge". A string rather than an enum
+    // because it crosses a settings file, a command line and a menu, and a
+    // value written by a newer build has to survive being read by an older one
+    // without becoming a different look by accident.
+    QString vizStyle() const;
+    void setVizStyle(const QString &id);
 
     // Compact mode narrows the strip and drops the band count. Worth having as
     // a preference rather than a pure heuristic: on a notched display a 108pt
@@ -51,6 +57,7 @@ public:
 
 Q_SIGNALS:
     void gradientIdChanged(const QString &id);
+    void vizStyleChanged(const QString &id);
     void compactChanged(bool compact);
     void sourceDeviceUidChanged(const QString &uid);
     void nowPlayingEnabledChanged(bool enabled);

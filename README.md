@@ -8,6 +8,44 @@ Twenty-eight bars, a violet-to-cyan gradient anchored to the strip rather than
 to each bar, peak-hold dots that fall under gravity, and a fade to a resting row
 of dots when nothing is playing. Roughly 118 × 22 points of menu bar.
 
+## Two looks
+
+**Bars** is the default and what the screenshot above shows.
+
+**Terrain** is the same analysis with a memory. Each time slice becomes a
+polyline across the frequency bands, and the slices stack away from you under
+perspective — frequency across, level up, time receding — so what you watch is a
+ridge of mountains sliding backwards as it ages.
+
+![terrain](docs/terrain.png)
+
+Switch in `Appearance ▸`, or `--viz ridge` for one run.
+
+It is projected in software, not on the GPU, and that is a deliberate choice
+rather than a shortcut. The targets are a 118 × 22 pt status item and a notch
+panel a few hundred points wide; at that size the terrain is forty polylines of
+about eighty points, which QPainter draws in **1.0 ms**, a sixteenth of a 60 fps
+frame. A GPU path would need a context and a framebuffer per surface plus a
+readback every frame to get back to the QImage that the status item, the tray
+icon and the panel all require — more machinery, and more latency, than the
+drawing costs.
+
+Note also that **Qt Quick 3D is GPLv3-only**, so the obvious "just use Quick3D"
+route would change what may be shipped. See
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+It is not free, and the honest number is not the wall-clock one. Measured end to
+end against the bars, RelWithDebInfo, synthetic source: **22.2% of a core against
+7.2%**. Wall time per frame is only 1.0 ms because Qt's raster engine spreads
+stroking across its thread pool, so summed CPU is roughly triple what a stopwatch
+around `render()` suggests. Both numbers are true and they answer different
+questions: the frame is never late, and the battery still notices.
+
+The knobs live in `RenderStyle::Ridge`, and they were chosen by measurement:
+`rows` dominates everything (halving it nearly halves the frame), `antialias` is
+worth 2.3× on its own, and the cross-hatching is nearly free. Dropping this look
+to 30 fps is the obvious next lever and is not wired up yet.
+
 ## What makes this one different
 
 **No virtual audio driver.** macOS 14.2 shipped CoreAudio process taps, and
@@ -235,6 +273,7 @@ task for checking the other side of that.
 | `--hud` | Diagnostics window: OSStatus, callback count, RMS, AGC, sample rate, overruns |
 | `--shot <path>` | Render one settled frame to a PNG and exit |
 | `--source <uid>` | Listen to one output device by UID. `--source list` prints them |
+| `--viz <style>` | Which visualiser to draw: `bars` (default) or `ridge`, the terrain. Overrides the saved preference for one run |
 | `--fake-notch` | Pretend the display has a notch, for developing the panel on an external monitor |
 | `HYPERWAVE_FAKE_AUDIO=1` | Drive the DSP from a synthetic sweep, so the renderer can be worked on with no audio and no permission |
 | `HYPERWAVE_METER_DEBUG=1` | Log the metered applications in priority order, any that ran out of tap slots, and the "Playing" list itself every two seconds. Every wrong answer this list has given was found by a human opening a menu and disagreeing with it; this makes the same question answerable in one command |
@@ -284,7 +323,8 @@ Measured on an M-series Mac, Release build, 60 fps, one P-core:
 
 | | |
 |---|---|
-| Visualising at 60 fps | ~9% |
+| Visualising at 60 fps, bars | ~7% |
+| Visualising at 60 fps, terrain | ~22% |
 | Visualising at 30 fps | ~4% |
 | Nothing playing | display link stops; the strip holds its resting frame |
 About 2 points of that is the per-application metering. Forty live taps cost no

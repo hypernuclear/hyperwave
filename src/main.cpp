@@ -44,6 +44,12 @@ int main(int argc, char **argv)
     const QCommandLineOption shotOption(
         QStringLiteral("shot"),
         QStringLiteral("Render one frame to <path> and exit."), QStringLiteral("path"));
+    const QCommandLineOption vizOption(
+        QStringLiteral("viz"),
+        QStringLiteral("Which visualiser to draw: \"bars\" (default) or \"ridge\", a "
+                       "spectrogram terrain with frequency across, level up and time "
+                       "receding. Overrides the saved preference for this run only."),
+        QStringLiteral("style"));
 
     parser.addOption(windowedOption);
     parser.addOption(hudOption);
@@ -55,6 +61,7 @@ int main(int argc, char **argv)
     parser.addOption(sourceOption);
     parser.addOption(fakeNotchOption);
     parser.addOption(shotOption);
+    parser.addOption(vizOption);
     parser.process(app);
 
     App::Options options;
@@ -64,6 +71,7 @@ int main(int argc, char **argv)
     options.shotPath = parser.value(shotOption);
     options.sourceBundleId = parser.value(sourceOption);
     options.fakeNotch = parser.isSet(fakeNotchOption);
+    options.vizStyle = parser.value(vizOption);
     options.fakeAudio = !qEnvironmentVariableIsEmpty("HYPERWAVE_FAKE_AUDIO");
 
     App hyperwaveApp(options);

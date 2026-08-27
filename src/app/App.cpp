@@ -32,6 +32,17 @@ constexpr qreal kVerifySeconds = 5.0;
 
 } // namespace
 
+std::unique_ptr<Visualiser> App::makeVisualiser(const QString &id)
+{
+    if (id == QLatin1String("ridge"))
+        return std::make_unique<RidgeRenderer>();
+    // Bars are the default and the fallback. An unknown id in a settings file
+    // -- a downgrade, a typo, a look that was removed -- must produce the
+    // ordinary visualiser rather than an empty menu bar item, which is
+    // indistinguishable from a crash.
+    return std::make_unique<BarRenderer>();
+}
+
 App::App(Options options, QObject *parent)
     : QObject(parent)
     , m_options(std::move(options))
@@ -73,6 +84,8 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
 
     auto surface = std::make_unique<Surface>();
     surface->presenter = std::move(presenter);
+    surface->renderer = makeVisualiser(m_options.vizStyle.isEmpty() ? m_settings.vizStyle()
+                                                                    : m_options.vizStyle);
     surface->isNotch = isNotch;
     Surface *s = surface.get();
     m_surfaces.push_back(std::move(surface));
@@ -215,6 +228,11 @@ bool App::start()
             // here: this path exists for iterating on the renderer.
             auto surface = std::make_unique<Surface>();
             Surface *s = surface.get();
+            // This path does not go through addSurface(), so it has to say
+            // which look it is drawing itself. Forgetting leaves the renderer
+            // null and the first frame dereferences it.
+            s->renderer = makeVisualiser(m_options.vizStyle.isEmpty() ? m_settings.vizStyle()
+                                                                      : m_options.vizStyle);
             m_surfaces.push_back(std::move(surface));
             rebuildStyle(*s);
             ensureBuffers(*s);
@@ -289,7 +307,7 @@ void App::rebuildStyle(Surface &surface)
 void App::ensureBuffers(Surface &surface)
 {
     const QSize wanted =
-        BarRenderer::pixelSize(surface.style, surface.heightPt, surface.dpr);
+        surface.renderer->pixelSize(surface.style, surface.heightPt, surface.dpr);
     for (QImage &buffer : surface.buffers) {
         if (buffer.size() != wanted
             || buffer.format() != QImage::Format_ARGB32_Premultiplied) {
@@ -367,7 +385,7 @@ void App::onFrameDue(Surface &surface)
     if (target.isNull())
         return;
 
-    surface.renderer.render(state, surface.style, surface.heightPt, surface.dpr, target);
+    surface.renderer->render(state, surface.style, surface.heightPt, surface.dpr, target);
 
     if (surface.presenter)
         surface.presenter->present(target);
@@ -511,6 +529,15 @@ MenuModel App::buildMenu() const
                 .withCheck(preset.id == activeGradient));
     }
     gradients.append(MenuItem::separator());
+    const QString activeViz = m_options.vizStyle.isEmpty() ? m_settings.vizStyle()
+                                                           : m_options.vizStyle;
+    gradients.append(MenuItem::action(QLatin1String(MenuAction::kVizPrefix) + QStringLiteral("bars"),
+                                      QStringLiteral("Bars"))
+                         .withCheck(activeViz != QLatin1String("ridge")));
+    gradients.append(MenuItem::action(QLatin1String(MenuAction::kVizPrefix) + QStringLiteral("ridge"),
+                                      QStringLiteral("Terrain"))
+                         .withCheck(activeViz == QLatin1String("ridge")));
+    gradients.append(MenuItem::separator());
     gradients.append(MenuItem::action(QLatin1String(MenuAction::kToggleCompact),
                                       QStringLiteral("Compact strip"))
                          .withCheck(m_settings.compact()));
@@ -611,6 +638,19 @@ void App::onMenuAction(const QString &actionId)
         return;
     }
 
+    if (actionId.startsWith(QLatin1String(MenuAction::kVizPrefix))) {
+        const QString id = actionId.mid(QLatin1String(MenuAction::kVizPrefix).size());
+        m_settings.setVizStyle(id);
+        for (auto &surface : m_surfaces) {
+            surface->renderer = makeVisualiser(id);
+            // The buffers are sized by the renderer, and a look may not want
+            // the same footprint, so the geometry has to be recomputed rather
+            // than assumed to be unchanged.
+            onGeometryChanged(*surface);
+        }
+        onAudioBecameActive();
+        return;
+    }
     if (actionId.startsWith(gradientPrefix)) {
         m_settings.setGradientId(actionId.mid(gradientPrefix.size()));
         for (auto &surface : m_surfaces)

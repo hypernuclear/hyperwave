@@ -79,6 +79,7 @@ using MenuModel = QVector<MenuItem>;
 namespace MenuAction {
 inline constexpr const char *kSourcePrefix = "source:";   // + bundle id, empty for all
 inline constexpr const char *kGradientPrefix = "gradient:";
+inline constexpr const char *kVizPrefix = "viz:";
 inline constexpr const char *kToggleCompact = "toggle-compact";
 inline constexpr const char *kToggleNowPlaying = "toggle-now-playing";
 inline constexpr const char *kToggleNotch = "toggle-notch";

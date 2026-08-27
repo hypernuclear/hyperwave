@@ -9,6 +9,7 @@
 
 #include "dsp/FrameState.h"
 #include "render/RenderStyle.h"
+#include "render/Visualiser.h"
 
 namespace hyperwave {
 
@@ -21,18 +22,25 @@ namespace hyperwave {
 // trivially; a CALayer tree becomes none of them. The cost is about 30-70 us
 // per frame, which is a fraction of a percent of one core at 60 fps -- a fair
 // price for having exactly one renderer instead of three that drift apart.
-class BarRenderer
+class BarRenderer : public Visualiser
 {
 public:
-    // The pixel size a strip of this style needs at this scale.
-    static QSize pixelSize(const RenderStyle &style, qreal stripHeightPt, qreal dpr);
+    // The pixel size a strip of this style needs at this scale. Static because
+    // callers ask before they have a renderer to ask; the virtual override
+    // below is the same answer through the interface.
+    static QSize sizeFor(const RenderStyle &style, qreal stripHeightPt, qreal dpr);
+
+    QSize pixelSize(const RenderStyle &style, qreal stripHeightPt, qreal dpr) const override
+    {
+        return sizeFor(style, stripHeightPt, dpr);
+    }
 
     // `target` must be ARGB32_Premultiplied and already sized to pixelSize().
     // The renderer fills it; it never resizes it, because on macOS the buffer
     // is handed to Core Animation without a copy and reallocating it under a
     // live layer is how you get tearing.
-    void render(const FrameState &state, const RenderStyle &style,
-                qreal stripHeightPt, qreal dpr, QImage &target);
+    void render(const FrameState &state, const RenderStyle &style, qreal stripHeightPt,
+                qreal dpr, QImage &target) override;
 
 private:
     void rebuildCache(const RenderStyle &style, qreal stripHeightPt);

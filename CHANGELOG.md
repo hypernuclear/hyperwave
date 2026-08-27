@@ -33,6 +33,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows and Linux presenters, each documenting the chosen approach.
 - Headless tests for the ring buffer, the FFT (against a naive DFT), the
   spectrum analyser and the ballistics.
+- A second visualiser, "Terrain": a spectrogram ridgeline with frequency across,
+  level up and time receding under perspective, chosen in `Appearance` or with
+  `--viz ridge`. Projected in software rather than on the GPU, because at status
+  item and notch panel sizes the whole terrain draws in 1.0 ms and a GPU path
+  would need a context, a framebuffer and a readback per surface to get back to
+  the QImage every presenter here requires. Qt Quick 3D was ruled out separately:
+  it is GPLv3-only and would change what may be shipped.
+- A `Visualiser` interface, so a look is a class rather than a branch, and every
+  surface holds one instead of a concrete renderer.
 - MIT licence, matching hyperbin, and `THIRD-PARTY-NOTICES.md` covering what a
   build actually links. Every Qt module's terms were read out of the
   `SPDX-License-Identifier` in its own installed headers rather than from the

@@ -16,6 +16,8 @@
 #include "platform/BarPresenter.h"
 #include "render/BarRenderer.h"
 #include "render/RenderStyle.h"
+#include "render/RidgeRenderer.h"
+#include "render/Visualiser.h"
 
 namespace hyperwave {
 
@@ -36,7 +38,12 @@ public:
         bool fakeNotch = false;   // pretend the display has a notch
         QString shotPath;         // grab one frame and exit
         QString sourceBundleId;   // listen to one app; "list" prints and exits
+        QString vizStyle;         // "bars" or "ridge"; empty means the setting
     };
+
+    // The looks, by id. Kept next to Options because the command line, the
+    // settings and the menu all have to agree on the same spelling.
+    static std::unique_ptr<Visualiser> makeVisualiser(const QString &id);
 
     explicit App(Options options, QObject *parent = nullptr);
     ~App() override;
@@ -63,7 +70,10 @@ private:
     {
         std::unique_ptr<BarPresenter> presenter;
         RenderStyle style;
-        BarRenderer renderer;
+        // Which look this surface is drawing. Held through the interface so
+        // that changing it at runtime is an assignment rather than a rebuild
+        // of the surface and its buffers.
+        std::unique_ptr<Visualiser> renderer;
 
         // Two buffers, alternated: on macOS the bytes go to Core Animation
         // without a copy, so the image the compositor is reading must not be
