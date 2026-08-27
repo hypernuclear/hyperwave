@@ -13,6 +13,7 @@
 #include <rhi/qrhi.h>
 
 #include "dsp/DspConfig.h"
+#include "render/GpuContext.h"
 #include "render/RenderStyle.h"
 
 namespace hyperwave {
@@ -31,33 +32,6 @@ QShader loadShader(const QString &path)
     if (!f.open(QIODevice::ReadOnly))
         return {};
     return QShader::fromSerialized(f.readAll());
-}
-
-// One QRhi for the whole process, shared by every surface that wants one.
-//
-// Two surfaces means two of these otherwise, and a QRhi owns a Metal device and
-// a command queue -- not things to have two of for a menu bar item. Held weakly
-// so it goes away when the last strands renderer does, which matters because
-// switching back to the bars should not leave a GPU context alive forever.
-std::weak_ptr<QRhi> g_rhi;
-
-std::shared_ptr<QRhi> acquireRhi()
-{
-    if (auto existing = g_rhi.lock())
-        return existing;
-
-#if defined(Q_OS_MACOS)
-    QRhiMetalInitParams params;
-    auto rhi = std::shared_ptr<QRhi>(QRhi::create(QRhi::Metal, &params));
-#elif defined(Q_OS_WIN)
-    QRhiD3D11InitParams params;
-    auto rhi = std::shared_ptr<QRhi>(QRhi::create(QRhi::D3D11, &params));
-#else
-    QRhiVulkanInitParams params;
-    auto rhi = std::shared_ptr<QRhi>(QRhi::create(QRhi::Vulkan, &params));
-#endif
-    g_rhi = rhi;
-    return rhi;
 }
 
 } // namespace
@@ -172,8 +146,7 @@ StrandRenderer::~StrandRenderer()
 bool StrandRenderer::isAvailable()
 {
     static const bool available = [] {
-        auto rhi = acquireRhi();
-        return rhi != nullptr;
+        return GpuContext::acquire() != nullptr;
     }();
     return available;
 }
@@ -205,7 +178,7 @@ void StrandRenderer::render(const FrameState &state, const RenderStyle &style, q
         return;
 
     if (!d.rhi) {
-        d.rhi = acquireRhi();
+        d.rhi = GpuContext::acquire();
         if (!d.rhi) {
             d.failed = true;
             return;

@@ -17,6 +17,10 @@
 #include "platform/BarPresenter.h"
 #include "render/BarRenderer.h"
 #include "render/RenderStyle.h"
+#include "render/GpuPost.h"
+#include "render/LineRenderer.h"
+#include "render/MirrorRenderer.h"
+#include "render/RingRenderer.h"
 #include "render/RidgeRenderer.h"
 #include "render/StrandRenderer.h"
 #include "render/Visualiser.h"
@@ -125,6 +129,14 @@ private:
     // outlives it, or the first resize would silently undo it.
     RenderStyle::Strands m_strandTuning;
     RenderStyle::Ridge m_ridgeTuning;
+    RenderStyle::Lines m_lineTuning;
+    RenderStyle::Mirror m_mirrorTuning;
+    RenderStyle::Ring m_ringTuning;
+    RenderStyle::Bloom m_bloomTuning;
+    // Bloom is a post-process over whatever a look drew, so it lives here
+    // rather than inside any renderer. One instance: it holds GPU resources
+    // sized to the frame, and every surface is the same size at a time.
+    GpuPost m_post;
 
     std::unique_ptr<AudioController> m_audio;
     std::unique_ptr<NowPlaying> m_nowPlaying;

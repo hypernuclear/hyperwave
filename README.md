@@ -6,7 +6,8 @@ A system audio visualiser that lives in the menu bar. It does one job.
 
 Twenty-eight bars, a violet-to-cyan gradient anchored to the strip rather than
 to each bar, peak-hold dots that fall under gravity, and a fade to a resting row
-of dots when nothing is playing. Roughly 91 × 22 points of menu bar.
+of dots when nothing is playing. Roughly 91 x 22 points of menu bar.
+
 The bars sit a point apart, which is as tight as they go while staying crisp:
 they are positioned at `insetLeft + k * (width + gap)` and scaled by the device
 pixel ratio at paint time, so a 3pt stride is 3px at 1x, 6px at 2x and 9px at
@@ -14,10 +15,35 @@ pixel ratio at paint time, so a 3pt stride is 3px at 1x, 6px at 2x and 9px at
 non-Retina display, which looks fine on a laptop and blurry on someone's
 external monitor.
 
-## Three looks
+## Six looks, and one thing that happens to all of them
+
+Switch in `Appearance`, or `--viz <name>` for one run.
 
 **Bars** is the default and what the screenshot above shows.
 
+**Mirror** is the same bars, thinner and grown from the centre line in both
+directions, so the eye reads the envelope rather than the tops. Movement runs
+through an underdamped spring rather than an eased interpolation: it overshoots
+slightly and settles back, and that small bounce is most of the character. An
+eased value cannot do it, because easing has no velocity to overshoot with.
+
+![mirror](docs/mirror.png)
+
+**Lines** is a wall of upright strokes, each lit by one band, flashing rather
+than pulsing. The renderer is the plainest in the project -- it draws
+rectangles -- because everything that makes it worth looking at happens
+afterwards, in the glow.
+
+![lines](docs/lines.png)
+
+**Ring** is a closed outline pushed outward by the spectrum, drawn three times
+in separated colours. Two details do the work. The outline is mirrored, so the
+spectrum runs out along one half and back along the other and the shape stays
+symmetric however the music moves. And the coloured copies are offset in
+*amplitude* rather than in position, so they coincide exactly where the ring is
+at rest and split into fringes only where it bulges.
+
+![ring](docs/ring.png)
 
 **Strands** is a bundle of lines wrapped around an axis: each is the same
 straight line, displaced radially by a radius that the spectrum and three
@@ -25,66 +51,79 @@ octaves of simplex noise push around, twisting like a finger trap and tapered
 to points at both ends. X is frequency, so the tube swells where the music is.
 A port of Matt DesLauriers' codevember #21 (MIT, credited in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)).
+
 ![strands](docs/strands.png)
+
 It runs on the GPU through QRhi -- Metal on macOS -- because that is what the
 technique *is* rather than because a GPU was available. The geometry is static,
 uploaded once and never touched; every frame's motion is a vertex shader, and
-the CPU's whole job is a 256-byte spectrum texture and a clock.
-The consequence is the interesting part. **It costs less than the bars.**
-Measured end to end, RelWithDebInfo, same run: 10.8% of a core for the strands
-against 12.0% for twenty-eight rectangles drawn with QPainter. And the strand
-count is very nearly free -- 32 strands and 1024 strands both measure within
-noise of each other, because the entire CPU cost is the fixed round trip and
-the GPU absorbs 204,800 vertices without noticing. `HYPERWAVE_STRANDS=n` sets
-it; `RenderStyle::Strands` holds the rest.
-Rendered offscreen and read back, because every presenter here consumes a
-QImage. The whole round trip -- submit, wait, copy 41 KB back -- measures
-0.166 ms at status item size, about 1% of a core at 60 fps, and costs a frame
-of latency that nobody can see on a visualiser.
+the CPU's whole job is a 256-byte spectrum texture and a clock. The strand count
+is very nearly free: 32 strands and 1024 strands measure within noise of each
+other, because the entire CPU cost is the fixed offscreen round trip and the GPU
+absorbs 204,800 vertices without noticing.
+
 **Terrain** is the same analysis with a memory. Each time slice becomes a
 polyline across the frequency bands, and the slices stack away from you under
-perspective — frequency across, level up, time receding — so what you watch is a
-ridge of mountains sliding backwards as it ages.
+perspective -- frequency across, level up, time receding -- so what you watch is
+a ridge of mountains sliding backwards as it ages.
 
 ![terrain](docs/terrain.png)
 
-Switch in `Appearance ▸`, or `--viz ridge` for one run.
-**`Settings…`** in the menu opens a window with every parameter of whichever
-look is running -- count, radius, thickness, fill, tilt, twists, spin, opacity
-and gain for the strands; rows, subdivision, columns, depth, amplitude and line
-width for the terrain -- each taking effect on the next frame and saved as it
-changes. "Reset to defaults" clears the stored values rather than writing the
-current ones back, so a later change to a default is picked up rather than
-frozen at whatever shipped.
+It is projected in software rather than on the GPU, which deserves a defence
+because "3D" usually implies otherwise. At status item and notch panel sizes the
+whole terrain is forty polylines of about eighty points, which QPainter draws in
+1.0 ms; a GPU path would need a context, a framebuffer and a readback per
+surface to reach the QImage every presenter here requires. The honest cost is
+not the wall-clock one, though: Qt's raster engine spreads stroking across its
+thread pool, so summed CPU is roughly triple what a stopwatch around `render()`
+suggests.
+
+## Settings
+
+**`Settings...`** in the menu opens a window with every parameter of whichever
+look is running, each taking effect on the next frame and saved as it changes.
+"Reset to defaults" clears the stored values rather than writing the current
+ones back, so a later change to a default is picked up rather than frozen at
+whatever shipped.
+
+![settings](docs/settings.png)
+
 It is the same widget the debug HUD embeds. Keeping it one widget is what stops
 a parameter existing for development and being unreachable by anyone outside
 this repository.
-![settings](docs/settings.png)
 
-It is projected in software, not on the GPU, and that is a deliberate choice
-rather than a shortcut. The targets are a 118 × 22 pt status item and a notch
-panel a few hundred points wide; at that size the terrain is forty polylines of
-about eighty points, which QPainter draws in **1.0 ms**, a sixteenth of a 60 fps
-frame. A GPU path would need a context and a framebuffer per surface plus a
-readback every frame to get back to the QImage that the status item, the tray
-icon and the panel all require — more machinery, and more latency, than the
-drawing costs.
+## Glow
 
-Note also that **Qt Quick 3D is GPLv3-only**, so the obvious "just use Quick3D"
-route would change what may be shipped. See
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+![bars with glow](docs/bars-glow.png)
 
-It is not free, and the honest number is not the wall-clock one. Measured end to
-end against the bars, RelWithDebInfo, synthetic source: **22.2% of a core against
-7.2%**. Wall time per frame is only 1.0 ms because Qt's raster engine spreads
-stroking across its thread pool, so summed CPU is roughly triple what a stopwatch
-around `render()` suggests. Both numbers are true and they answer different
-questions: the frame is never late, and the battery still notices.
+The bars, unchanged, with the post-process on top.
 
-The knobs live in `RenderStyle::Ridge`, and they were chosen by measurement:
-`rows` dominates everything (halving it nearly halves the frame), `antialias` is
-worth 2.3× on its own, and the cross-hatching is nearly free. Dropping this look
-to 30 fps is the obvious next lever and is not wired up yet.
+Bloom is not a property of any look. Deciding which pixels are lit and deciding
+what light does to them afterwards are different questions, so it is four
+full-screen passes applied to whatever a visualiser drew: keep what is bright
+enough to glow, blur it horizontally, blur it vertically, composite it back with
+the red and blue channels pulled apart along the radius. Every look gets it on
+the same terms, including looks that do not exist yet.
+
+The dispersion is the part worth explaining, because it is what the reference
+image is actually made of. A real lens focuses red, green and blue at slightly
+different places, and the error grows with distance from the optical axis — so
+centre lines stay sharp and white while edge lines split into warm and cool
+fringes and smear outwards. Sampling each channel at its own radial offset,
+scaled by the square of the radius, reproduces that with no special case for the
+middle.
+
+One thing had to be learned by looking at it: the **core** must keep its
+registration and only the **glow** may disperse. Splitting the source itself was
+the first attempt, and a one-pixel line shifted several pixels per channel stops
+overlapping itself — red, green and blue land on empty background and one line
+renders as three coloured ones, most visibly a pure green one where only the
+unshifted channel hit.
+
+It runs on the GPU through QRhi, sharing one Metal device with the strands
+renderer, and costs about four points of a core at status item size: bars
+measure 11.1% without it and 14.8% with, which buys a bright pass, two blurs, a
+composite, an upload and a readback every frame.
 
 ## What makes this one different
 
@@ -326,7 +365,7 @@ task for checking the other side of that.
 | `--hud` | Diagnostics window: OSStatus, callback count, RMS, AGC, sample rate, overruns |
 | `--shot <path>` | Render one settled frame to a PNG and exit |
 | `--source <uid>` | Listen to one output device by UID. `--source list` prints them |
-| `--viz <style>` | Which visualiser to draw: `bars` (default), `strands` or `ridge`. Overrides the saved preference for one run |
+| `--viz <style>` | Which visualiser to draw: `bars` (default), `mirror`, `lines`, `ring`, `strands` or `ridge`. Overrides the saved preference for one run |
 | `--preview-scale <n>` | Magnify the windowed and `--shot` canvas, for looking at a visualiser at a size where its detail is visible. Applied as device pixel ratio, so every measurement scales with it |
 | `HYPERWAVE_STRANDS=n` | How many strands in the bundle. Very nearly free: 32 and 1024 measure the same |
 | `--fake-notch` | Pretend the display has a notch, for developing the panel on an external monitor |
@@ -378,11 +417,19 @@ Measured on an M-series Mac, Release build, 60 fps, one P-core:
 
 | | |
 |---|---|
-| Visualising at 60 fps, bars | ~7% |
-| Visualising at 60 fps, terrain | ~22% |
-| Visualising at 60 fps, strands (GPU) | less than the bars |
-| Visualising at 30 fps | ~4% |
+| Bars | 14.8%, or 11.1% with the glow off |
+| Mirror | 14.9% |
+| Lines | 12.5% |
+| Strands (GPU) | 14.7% |
+| Ring | 21.1% |
+| Terrain | ~19% |
 | Nothing playing | display link stops; the strip holds its resting frame |
+
+Every figure above includes the glow, which is about four points on its own. The
+looks that draw the most geometry are not the most expensive ones: the strands
+push 204,800 vertices through the GPU for less than the terrain spends stroking
+a few thousand polyline points on the CPU.
+
 About 2 points of that is the per-application metering. Forty live taps cost no
 more than twenty did — measured at 9.1% against the same 9% — because the
 metering IOProc itself is free (8 samples in a 4-second profile) and the HAL is

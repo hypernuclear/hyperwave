@@ -50,6 +50,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows and Linux presenters, each documenting the chosen approach.
 - Headless tests for the ring buffer, the FFT (against a naive DFT), the
   spectrum analyser and the ballistics.
+- Three more visualisers. "Mirror" is the bars grown from the centre line in
+  both directions, moved by an underdamped spring so they overshoot and settle
+  rather than easing into place. "Lines" is a wall of upright strokes lit by the
+  spectrum, flashing rather than pulsing. "Ring" is a closed outline pushed
+  outward by the spectrum and drawn three times in separated colours, mirrored
+  so the shape stays symmetric, with the copies offset in amplitude rather than
+  position so they coincide at rest and split only where the ring bulges.
+- Bloom, as a post-process over whatever a look drew rather than as a property
+  of any of them: a bright pass, two blurs and a composite that pulls the red
+  and blue channels apart along the radius, so centre detail stays sharp and
+  white while the edges split into fringes and smear outwards. Runs on the GPU
+  through QRhi, sharing one device with the strands renderer, and costs about
+  four points of a core -- bars measure 11.1% without it and 14.8% with.
 - A third visualiser, "Strands": a bundle of lines wrapped around an axis with
   the spectrum and three octaves of simplex noise driving the radius, tapered to
   points at both ends. A port of Matt DesLauriers' codevember #21 (MIT, credited

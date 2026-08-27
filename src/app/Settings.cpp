@@ -109,12 +109,122 @@ void Settings::setRidge(const RenderStyle::Ridge &r)
     Q_EMIT visualiserParametersChanged();
 }
 
+RenderStyle::Lines Settings::lines() const
+{
+    const RenderStyle defaults;
+    RenderStyle::Lines l = defaults.lines;
+    const auto num = [this](const char *key, qreal fallback) {
+        return m_store.value(QLatin1String(key), fallback).toDouble();
+    };
+    l.count = m_store.value(QStringLiteral("lines/count"), l.count).toInt();
+    l.widthPt = num("lines/widthPt", l.widthPt);
+    l.verticalInset = num("lines/verticalInset", l.verticalInset);
+    l.heightResponse = num("lines/heightResponse", l.heightResponse);
+    l.floorLevel = num("lines/floorLevel", l.floorLevel);
+    l.gamma = num("lines/gamma", l.gamma);
+    l.attack = num("lines/attack", l.attack);
+    l.release = num("lines/release", l.release);
+    return l;
+}
+void Settings::setLines(const RenderStyle::Lines &l)
+{
+    m_store.setValue(QStringLiteral("lines/count"), l.count);
+    m_store.setValue(QStringLiteral("lines/widthPt"), l.widthPt);
+    m_store.setValue(QStringLiteral("lines/verticalInset"), l.verticalInset);
+    m_store.setValue(QStringLiteral("lines/heightResponse"), l.heightResponse);
+    m_store.setValue(QStringLiteral("lines/floorLevel"), l.floorLevel);
+    m_store.setValue(QStringLiteral("lines/gamma"), l.gamma);
+    m_store.setValue(QStringLiteral("lines/attack"), l.attack);
+    m_store.setValue(QStringLiteral("lines/release"), l.release);
+    Q_EMIT visualiserParametersChanged();
+}
+RenderStyle::Mirror Settings::mirror() const
+{
+    const RenderStyle defaults;
+    RenderStyle::Mirror m = defaults.mirror;
+    const auto num = [this](const char *key, qreal fallback) {
+        return m_store.value(QLatin1String(key), fallback).toDouble();
+    };
+    m.count = m_store.value(QStringLiteral("mirror/count"), m.count).toInt();
+    m.widthPt = num("mirror/widthPt", m.widthPt);
+    m.verticalInset = num("mirror/verticalInset", m.verticalInset);
+    m.stiffness = num("mirror/stiffness", m.stiffness);
+    m.damping = num("mirror/damping", m.damping);
+    return m;
+}
+void Settings::setMirror(const RenderStyle::Mirror &m)
+{
+    m_store.setValue(QStringLiteral("mirror/count"), m.count);
+    m_store.setValue(QStringLiteral("mirror/widthPt"), m.widthPt);
+    m_store.setValue(QStringLiteral("mirror/verticalInset"), m.verticalInset);
+    m_store.setValue(QStringLiteral("mirror/stiffness"), m.stiffness);
+    m_store.setValue(QStringLiteral("mirror/damping"), m.damping);
+    Q_EMIT visualiserParametersChanged();
+}
+RenderStyle::Ring Settings::ring() const
+{
+    const RenderStyle defaults;
+    RenderStyle::Ring r = defaults.ring;
+    const auto num = [this](const char *key, qreal fallback) {
+        return m_store.value(QLatin1String(key), fallback).toDouble();
+    };
+    r.segments = m_store.value(QStringLiteral("ring/segments"), r.segments).toInt();
+    r.baseRadius = num("ring/baseRadius", r.baseRadius);
+    r.reach = num("ring/reach", r.reach);
+    r.lineWidthPt = num("ring/lineWidthPt", r.lineWidthPt);
+    r.separation = num("ring/separation", r.separation);
+    r.stiffness = num("ring/stiffness", r.stiffness);
+    r.damping = num("ring/damping", r.damping);
+    return r;
+}
+void Settings::setRing(const RenderStyle::Ring &r)
+{
+    m_store.setValue(QStringLiteral("ring/segments"), r.segments);
+    m_store.setValue(QStringLiteral("ring/baseRadius"), r.baseRadius);
+    m_store.setValue(QStringLiteral("ring/reach"), r.reach);
+    m_store.setValue(QStringLiteral("ring/lineWidthPt"), r.lineWidthPt);
+    m_store.setValue(QStringLiteral("ring/separation"), r.separation);
+    m_store.setValue(QStringLiteral("ring/stiffness"), r.stiffness);
+    m_store.setValue(QStringLiteral("ring/damping"), r.damping);
+    Q_EMIT visualiserParametersChanged();
+}
+RenderStyle::Bloom Settings::bloom() const
+{
+    const RenderStyle defaults;
+    RenderStyle::Bloom b = defaults.bloom;
+    const auto num = [this](const char *key, qreal fallback) {
+        return m_store.value(QLatin1String(key), fallback).toDouble();
+    };
+    b.enabled = m_store.value(QStringLiteral("bloom/enabled"), b.enabled).toBool();
+    b.threshold = num("bloom/threshold", b.threshold);
+    b.knee = num("bloom/knee", b.knee);
+    b.intensity = num("bloom/intensity", b.intensity);
+    b.radius = num("bloom/radius", b.radius);
+    b.dispersion = num("bloom/dispersion", b.dispersion);
+    b.radialBlur = num("bloom/radialBlur", b.radialBlur);
+    return b;
+}
+void Settings::setBloom(const RenderStyle::Bloom &b)
+{
+    m_store.setValue(QStringLiteral("bloom/enabled"), b.enabled);
+    m_store.setValue(QStringLiteral("bloom/threshold"), b.threshold);
+    m_store.setValue(QStringLiteral("bloom/knee"), b.knee);
+    m_store.setValue(QStringLiteral("bloom/intensity"), b.intensity);
+    m_store.setValue(QStringLiteral("bloom/radius"), b.radius);
+    m_store.setValue(QStringLiteral("bloom/dispersion"), b.dispersion);
+    m_store.setValue(QStringLiteral("bloom/radialBlur"), b.radialBlur);
+    Q_EMIT visualiserParametersChanged();
+}
 // Clears every stored visualiser parameter, so the next read falls through to
 // the defaults rather than to whatever was last saved.
 void Settings::resetVisualiserParameters()
 {
     m_store.remove(QStringLiteral("strands"));
     m_store.remove(QStringLiteral("ridge"));
+    m_store.remove(QStringLiteral("lines"));
+    m_store.remove(QStringLiteral("mirror"));
+    m_store.remove(QStringLiteral("ring"));
+    m_store.remove(QStringLiteral("bloom"));
     Q_EMIT visualiserParametersChanged();
 }
 

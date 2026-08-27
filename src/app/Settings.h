@@ -40,6 +40,14 @@ public:
     void setStrands(const RenderStyle::Strands &strands);
     RenderStyle::Ridge ridge() const;
     void setRidge(const RenderStyle::Ridge &ridge);
+    RenderStyle::Lines lines() const;
+    void setLines(const RenderStyle::Lines &lines);
+    RenderStyle::Mirror mirror() const;
+    void setMirror(const RenderStyle::Mirror &mirror);
+    RenderStyle::Ring ring() const;
+    void setRing(const RenderStyle::Ring &ring);
+    RenderStyle::Bloom bloom() const;
+    void setBloom(const RenderStyle::Bloom &bloom);
     void resetVisualiserParameters();
 
     // Compact mode narrows the strip and drops the band count. Worth having as

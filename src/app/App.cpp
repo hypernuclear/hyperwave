@@ -37,6 +37,12 @@ std::unique_ptr<Visualiser> App::makeVisualiser(const QString &id)
 {
     if (id == QLatin1String("ridge"))
         return std::make_unique<RidgeRenderer>();
+    if (id == QLatin1String("lines"))
+        return std::make_unique<LineRenderer>();
+    if (id == QLatin1String("mirror"))
+        return std::make_unique<MirrorRenderer>();
+    if (id == QLatin1String("ring"))
+        return std::make_unique<RingRenderer>();
     if (id == QLatin1String("strands")) {
         // A machine with no usable GPU gets the bars rather than an empty
         // status item, which is indistinguishable from a crash.
@@ -78,6 +84,10 @@ void App::applyVisualiserTuning(VisualiserControls *origin)
             return;
         panel->setStrands(m_strandTuning);
         panel->setRidge(m_ridgeTuning);
+        panel->setLines(m_lineTuning);
+        panel->setMirror(m_mirrorTuning);
+        panel->setRing(m_ringTuning);
+        panel->setBloom(m_bloomTuning);
     };
     seed(m_hud ? m_hud->controls() : nullptr);
     seed(m_settingsControls);
@@ -91,6 +101,10 @@ void App::connectControls(VisualiserControls *controls)
     controls->setPreviewScale(m_options.previewScale);
     controls->setStrands(m_strandTuning);
     controls->setRidge(m_ridgeTuning);
+    controls->setLines(m_lineTuning);
+    controls->setMirror(m_mirrorTuning);
+    controls->setRing(m_ringTuning);
+    controls->setBloom(m_bloomTuning);
     connect(controls, &VisualiserControls::visualiserRequested, this, [this](const QString &id) {
         m_options.vizStyle = id;
         m_settings.setVizStyle(id);
@@ -125,11 +139,39 @@ void App::connectControls(VisualiserControls *controls)
                 m_settings.setRidge(ridge);
                 applyVisualiserTuning(controls);
             });
+    connect(controls, &VisualiserControls::linesRequested, this,
+            [this, controls](const RenderStyle::Lines &lines) {
+                m_lineTuning = lines;
+                m_settings.setLines(lines);
+                applyVisualiserTuning(controls);
+            });
+    connect(controls, &VisualiserControls::mirrorRequested, this,
+            [this, controls](const RenderStyle::Mirror &mirror) {
+                m_mirrorTuning = mirror;
+                m_settings.setMirror(mirror);
+                applyVisualiserTuning(controls);
+            });
+    connect(controls, &VisualiserControls::ringRequested, this,
+            [this, controls](const RenderStyle::Ring &ring) {
+                m_ringTuning = ring;
+                m_settings.setRing(ring);
+                applyVisualiserTuning(controls);
+            });
+    connect(controls, &VisualiserControls::bloomRequested, this,
+            [this, controls](const RenderStyle::Bloom &bloom) {
+                m_bloomTuning = bloom;
+                m_settings.setBloom(bloom);
+                applyVisualiserTuning(controls);
+            });
     connect(controls, &VisualiserControls::resetRequested, this, [this] {
         m_settings.resetVisualiserParameters();
         const RenderStyle defaults;
         m_strandTuning = defaults.strands;
         m_ridgeTuning = defaults.ridge;
+        m_lineTuning = defaults.lines;
+        m_mirrorTuning = defaults.mirror;
+        m_ringTuning = defaults.ring;
+        m_bloomTuning = defaults.bloom;
         applyVisualiserTuning(nullptr);   // a reset must reach every panel
     });
 }
@@ -164,6 +206,10 @@ App::App(Options options, QObject *parent)
     // Whatever was tuned last time, before anything draws a frame.
     m_strandTuning = m_settings.strands();
     m_ridgeTuning = m_settings.ridge();
+    m_lineTuning = m_settings.lines();
+    m_mirrorTuning = m_settings.mirror();
+    m_ringTuning = m_settings.ring();
+    m_bloomTuning = m_settings.bloom();
 
     // The environment variable seeds the tuning rather than being consulted on
     // every restyle, so the HUD's slider can move away from it afterwards
@@ -388,6 +434,10 @@ void App::rebuildStyle(Surface &surface)
     // slider the HUD had touched.
     surface.style.strands = m_strandTuning;
     surface.style.ridge = m_ridgeTuning;
+    surface.style.lines = m_lineTuning;
+    surface.style.mirror = m_mirrorTuning;
+    surface.style.ring = m_ringTuning;
+    surface.style.bloom = m_bloomTuning;
 
     if (surface.isNotch) {
         // The panel is the size of the hole in the display, so the strip fits
@@ -530,6 +580,11 @@ void App::onFrameDue(Surface &surface)
         return;
 
     surface.renderer->render(state, surface.style, surface.heightPt, surface.dpr, target);
+    // Bloom last, over whatever was drawn. Deliberately not the renderer's job:
+    // deciding which pixels are lit and deciding what light does afterwards are
+    // different questions, and keeping them apart is what lets one
+    // post-process serve four looks and any look added later.
+    m_post.apply(target, surface.style.bloom);
 
     if (surface.presenter)
         surface.presenter->present(target);
@@ -677,8 +732,15 @@ MenuModel App::buildMenu() const
                                                            : m_options.vizStyle;
     gradients.append(MenuItem::action(QLatin1String(MenuAction::kVizPrefix) + QStringLiteral("bars"),
                                       QStringLiteral("Bars"))
-                         .withCheck(activeViz != QLatin1String("ridge")
-                                    && activeViz != QLatin1String("strands")));
+                         .withCheck(activeViz == QLatin1String("bars")
+                                    || activeViz.isEmpty()));
+    for (const auto &entry : {std::pair{"mirror", "Mirror"}, std::pair{"lines", "Lines"},
+                              std::pair{"ring", "Ring"}}) {
+        gradients.append(
+            MenuItem::action(QLatin1String(MenuAction::kVizPrefix) + QLatin1String(entry.first),
+                             QLatin1String(entry.second))
+                .withCheck(activeViz == QLatin1String(entry.first)));
+    }
     if (StrandRenderer::isAvailable()) {
         gradients.append(
             MenuItem::action(QLatin1String(MenuAction::kVizPrefix) + QStringLiteral("strands"),

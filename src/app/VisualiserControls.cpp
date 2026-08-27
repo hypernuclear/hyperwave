@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -30,6 +31,9 @@ VisualiserControls::VisualiserControls(Options options, QWidget *parent)
 
     m_look = new QComboBox(this);
     m_look->addItem(QStringLiteral("Bars"), QStringLiteral("bars"));
+    m_look->addItem(QStringLiteral("Mirror"), QStringLiteral("mirror"));
+    m_look->addItem(QStringLiteral("Lines"), QStringLiteral("lines"));
+    m_look->addItem(QStringLiteral("Ring"), QStringLiteral("ring"));
     m_look->addItem(QStringLiteral("Strands"), QStringLiteral("strands"));
     m_look->addItem(QStringLiteral("Terrain"), QStringLiteral("ridge"));
     connect(m_look, &QComboBox::currentIndexChanged, this, [this](int) {
@@ -154,6 +158,72 @@ VisualiserControls::VisualiserControls(Options options, QWidget *parent)
               ridgeChanged);
     layout->addWidget(m_ridgeBox);
 
+    const std::function<void()> linesChanged = [this] { Q_EMIT linesRequested(m_lines); };
+    m_lineBox = new QGroupBox(QStringLiteral("Lines"), this);
+    auto *lineForm = new QFormLayout(m_lineBox);
+    lineForm->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    lineForm->setLabelAlignment(Qt::AlignRight);
+    addSpin(lineForm, QStringLiteral("Count"), 4, 512, &m_lines.count, linesChanged);
+    addSlider(lineForm, QStringLiteral("Width pt"), 0.2, 4.0, &m_lines.widthPt, linesChanged);
+    addSlider(lineForm, QStringLiteral("Inset"), 0.0, 0.4, &m_lines.verticalInset, linesChanged);
+    addSlider(lineForm, QStringLiteral("Height response"), 0.0, 1.0, &m_lines.heightResponse,
+              linesChanged);
+    addSlider(lineForm, QStringLiteral("Floor"), 0.0, 0.5, &m_lines.floorLevel, linesChanged);
+    addSlider(lineForm, QStringLiteral("Gamma"), 0.5, 4.0, &m_lines.gamma, linesChanged);
+    addSlider(lineForm, QStringLiteral("Attack"), 0.05, 1.0, &m_lines.attack, linesChanged);
+    addSlider(lineForm, QStringLiteral("Release"), 0.02, 1.0, &m_lines.release, linesChanged);
+    layout->addWidget(m_lineBox);
+    const std::function<void()> mirrorChanged = [this] { Q_EMIT mirrorRequested(m_mirror); };
+    m_mirrorBox = new QGroupBox(QStringLiteral("Mirror"), this);
+    auto *mirrorForm = new QFormLayout(m_mirrorBox);
+    mirrorForm->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    mirrorForm->setLabelAlignment(Qt::AlignRight);
+    addSpin(mirrorForm, QStringLiteral("Count"), 4, 512, &m_mirror.count, mirrorChanged);
+    addSlider(mirrorForm, QStringLiteral("Width pt"), 0.3, 6.0, &m_mirror.widthPt, mirrorChanged);
+    addSlider(mirrorForm, QStringLiteral("Inset"), 0.0, 0.4, &m_mirror.verticalInset,
+              mirrorChanged);
+    addSlider(mirrorForm, QStringLiteral("Stiffness"), 0.05, 0.8, &m_mirror.stiffness,
+              mirrorChanged);
+    addSlider(mirrorForm, QStringLiteral("Bounce"), 0.60, 0.98, &m_mirror.damping, mirrorChanged);
+    layout->addWidget(m_mirrorBox);
+    const std::function<void()> ringChanged = [this] { Q_EMIT ringRequested(m_ring); };
+    m_ringBox = new QGroupBox(QStringLiteral("Ring"), this);
+    auto *ringForm = new QFormLayout(m_ringBox);
+    ringForm->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    ringForm->setLabelAlignment(Qt::AlignRight);
+    addSpin(ringForm, QStringLiteral("Segments"), 24, 720, &m_ring.segments, ringChanged);
+    addSlider(ringForm, QStringLiteral("Base radius"), 0.1, 0.9, &m_ring.baseRadius, ringChanged);
+    addSlider(ringForm, QStringLiteral("Reach"), 0.05, 0.8, &m_ring.reach, ringChanged);
+    addSlider(ringForm, QStringLiteral("Line width pt"), 0.3, 4.0, &m_ring.lineWidthPt,
+              ringChanged);
+    addSlider(ringForm, QStringLiteral("Separation"), 0.0, 0.5, &m_ring.separation, ringChanged);
+    addSlider(ringForm, QStringLiteral("Stiffness"), 0.05, 0.8, &m_ring.stiffness, ringChanged);
+    addSlider(ringForm, QStringLiteral("Bounce"), 0.60, 0.98, &m_ring.damping, ringChanged);
+    layout->addWidget(m_ringBox);
+    // Bloom is not tied to a look, so its group is always visible.
+    const std::function<void()> bloomChanged = [this] { Q_EMIT bloomRequested(m_bloom); };
+    auto *bloomBox = new QGroupBox(QStringLiteral("Glow"), this);
+    auto *bloomForm = new QFormLayout(bloomBox);
+    bloomForm->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    bloomForm->setLabelAlignment(Qt::AlignRight);
+    auto *bloomOn = new QCheckBox(QStringLiteral("Enabled"), this);
+    connect(bloomOn, &QCheckBox::toggled, this, [this, bloomChanged](bool on) {
+        if (m_seeding)
+            return;
+        m_bloom.enabled = on;
+        bloomChanged();
+    });
+    bloomForm->addRow(QString(), bloomOn);
+    m_seeders.push_back([this, bloomOn] { bloomOn->setChecked(m_bloom.enabled); });
+    addSlider(bloomForm, QStringLiteral("Threshold"), 0.0, 0.8, &m_bloom.threshold, bloomChanged);
+    addSlider(bloomForm, QStringLiteral("Knee"), 0.0, 0.8, &m_bloom.knee, bloomChanged);
+    addSlider(bloomForm, QStringLiteral("Intensity"), 0.0, 4.0, &m_bloom.intensity, bloomChanged);
+    addSlider(bloomForm, QStringLiteral("Radius"), 0.5, 8.0, &m_bloom.radius, bloomChanged);
+    addSlider(bloomForm, QStringLiteral("Dispersion"), 0.0, 0.15, &m_bloom.dispersion,
+              bloomChanged);
+    addSlider(bloomForm, QStringLiteral("Radial blur"), 0.0, 0.4, &m_bloom.radialBlur,
+              bloomChanged);
+    layout->addWidget(bloomBox);
     if (m_options.showReset) {
         auto *reset = new QPushButton(QStringLiteral("Reset to defaults"), this);
         connect(reset, &QPushButton::clicked, this, [this] { Q_EMIT resetRequested(); });
@@ -173,6 +243,12 @@ void VisualiserControls::showRelevantControls()
         m_strandBox->setVisible(id == QLatin1String("strands"));
     if (m_ridgeBox)
         m_ridgeBox->setVisible(id == QLatin1String("ridge"));
+    if (m_lineBox)
+        m_lineBox->setVisible(id == QLatin1String("lines"));
+    if (m_mirrorBox)
+        m_mirrorBox->setVisible(id == QLatin1String("mirror"));
+    if (m_ringBox)
+        m_ringBox->setVisible(id == QLatin1String("ring"));
 }
 
 void VisualiserControls::setVisualiser(const QString &id)
@@ -207,6 +283,38 @@ void VisualiserControls::setStrands(const RenderStyle::Strands &strands)
 void VisualiserControls::setRidge(const RenderStyle::Ridge &ridge)
 {
     m_ridge = ridge;
+    m_seeding = true;
+    for (const auto &seed : m_seeders)
+        seed();
+    m_seeding = false;
+}
+void VisualiserControls::setLines(const RenderStyle::Lines &lines)
+{
+    m_lines = lines;
+    m_seeding = true;
+    for (const auto &seed : m_seeders)
+        seed();
+    m_seeding = false;
+}
+void VisualiserControls::setMirror(const RenderStyle::Mirror &mirror)
+{
+    m_mirror = mirror;
+    m_seeding = true;
+    for (const auto &seed : m_seeders)
+        seed();
+    m_seeding = false;
+}
+void VisualiserControls::setRing(const RenderStyle::Ring &ring)
+{
+    m_ring = ring;
+    m_seeding = true;
+    for (const auto &seed : m_seeders)
+        seed();
+    m_seeding = false;
+}
+void VisualiserControls::setBloom(const RenderStyle::Bloom &bloom)
+{
+    m_bloom = bloom;
     m_seeding = true;
     for (const auto &seed : m_seeders)
         seed();

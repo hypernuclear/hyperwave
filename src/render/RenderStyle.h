@@ -172,6 +172,94 @@ struct RenderStyle
         qreal spinRate = 1.16;
     };
     Strands strands;
+    // --- the lines look ------------------------------------------------------
+    //
+    // Upright strokes lit by the spectrum. The parameters are about light
+    // rather than geometry, because with the bloom doing the work that is what
+    // there is to tune.
+    struct Lines
+    {
+        int count = 48;          // strokes across the width
+        qreal widthPt = 0.6;
+        // Fraction of the height left clear top and bottom.
+        qreal verticalInset = 0.10;
+        // How much a stroke shortens when quiet. Small on purpose: brightness
+        // carries the signal, and strokes that change height are a bar chart.
+        qreal heightResponse = 0.25;
+        // An unlit stroke is still visible at this brightness, so the wall of
+        // lines stays a wall rather than gaps opening in it.
+        qreal floorLevel = 0.08;
+        // Above 1 this pushes the quiet strokes down and lets the loud ones
+        // stand out, which is what stops the whole row glowing at once.
+        qreal gamma = 2.4;
+        // Per-frame easing towards the band level. The upstream ballistics are
+        // tuned for bars, where a fast attack reads as punch; here the bloom
+        // multiplies any jump, so a hard attack strobes.
+        // Fast up, fast down: these flash rather than pulse. A slow release
+        // makes a wall of lines that breathes; a quick one makes it strobe with
+        // the music, which is what the reference is doing.
+        qreal attack = 0.85;
+        qreal release = 0.30;
+    };
+    Lines lines;
+    // --- the mirrored look ---------------------------------------------------
+    struct Mirror
+    {
+        int count = 64;        // strokes across the width
+        qreal widthPt = 1.0;
+        qreal verticalInset = 0.12;
+        qreal minHalfPt = 0.5;   // a silent stroke is still a dot on the centre line
+        // Spring, not easing. Damping below about 0.9 overshoots and settles,
+        // which is the bounce; at 1.0 it never loses energy and oscillates
+        // forever, and near 0.7 it arrives without visible overshoot at all.
+        qreal stiffness = 0.32;
+        qreal damping = 0.82;
+    };
+    Mirror mirror;
+    // --- the ring look --------------------------------------------------------
+    struct Ring
+    {
+        int segments = 180;
+        qreal baseRadius = 0.45;   // fraction of the half-extent at rest
+        qreal reach = 0.42;        // how much further a full-scale band pushes
+        qreal lineWidthPt = 0.9;
+        qreal layerOpacity = 0.85;
+        // How far the coloured copies differ in amplitude. They coincide at
+        // rest and separate where the ring bulges, which is what puts the
+        // fringes on the protrusions rather than around the whole outline.
+        qreal separation = 0.16;
+        qreal stiffness = 0.30;
+        qreal damping = 0.84;
+    };
+    Ring ring;
+    // --- bloom ---------------------------------------------------------------
+    //
+    // A post-process rather than a property of any one look, because it is
+    // about what light does after something has decided to emit it. Applied to
+    // whatever the visualiser drew, so every look gets it on the same terms.
+    struct Bloom
+    {
+        bool enabled = true;
+        // What counts as bright enough to glow, measured as luminance on the
+        // premultiplied colour, with a soft knee so a line brightening past the
+        // threshold fades its glow up rather than switching it on.
+        qreal threshold = 0.14;
+        qreal knee = 0.25;
+        // How much of the blurred bright pass is added back.
+        qreal intensity = 1.8;
+        // How far the blur reaches, as a multiple of a texel. The bright pass
+        // runs at half resolution, so this is doubled in effect.
+        qreal radius = 3.0;
+        // Lateral chromatic aberration: how far apart red and blue are pulled,
+        // in units of the frame, at the very corner. Scales with the square of
+        // the distance from the centre, so the middle stays clean.
+        qreal dispersion = 0.035;
+        // How far the glow smears outward along the radius. This is the part
+        // that reads as depth -- edge highlights stretch away from the centre
+        // as though the whole thing were behind a lens.
+        qreal radialBlur = 0.10;
+    };
+    Bloom bloom;
 
     qreal stripWidthPt() const
     {

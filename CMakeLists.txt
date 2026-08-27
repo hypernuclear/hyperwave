@@ -134,6 +134,11 @@ add_library(hyperwave_core STATIC
     src/audio/Downmix.h
     src/render/BarRenderer.cpp
     src/render/StrandRenderer.cpp
+    src/render/LineRenderer.cpp
+    src/render/MirrorRenderer.cpp
+    src/render/RingRenderer.cpp
+    src/render/GpuContext.cpp
+    src/render/GpuPost.cpp
     src/render/RidgeRenderer.cpp
     src/render/BarRenderer.h
     src/render/RenderStyle.h
@@ -147,7 +152,11 @@ qt_add_shaders(hyperwave_core "hyperwave_strand_shaders"
     BASE "src/render/shaders"
     FILES
         src/render/shaders/strands.vert
-        src/render/shaders/strands.frag)
+        src/render/shaders/strands.frag
+        src/render/shaders/fullscreen.vert
+        src/render/shaders/bright.frag
+        src/render/shaders/blur.frag
+        src/render/shaders/composite.frag)
 
 # --- the app ----------------------------------------------------------------
 qt_add_executable(hyperwave

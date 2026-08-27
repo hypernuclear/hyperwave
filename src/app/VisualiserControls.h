@@ -43,12 +43,20 @@ public:
     void setPreviewScale(qreal scale);
     void setStrands(const RenderStyle::Strands &strands);
     void setRidge(const RenderStyle::Ridge &ridge);
+    void setLines(const RenderStyle::Lines &lines);
+    void setMirror(const RenderStyle::Mirror &mirror);
+    void setRing(const RenderStyle::Ring &ring);
+    void setBloom(const RenderStyle::Bloom &bloom);
 
 Q_SIGNALS:
     void visualiserRequested(const QString &id);
     void previewScaleRequested(qreal scale);
     void strandsRequested(const RenderStyle::Strands &strands);
     void ridgeRequested(const RenderStyle::Ridge &ridge);
+    void linesRequested(const RenderStyle::Lines &lines);
+    void mirrorRequested(const RenderStyle::Mirror &mirror);
+    void ringRequested(const RenderStyle::Ring &ring);
+    void bloomRequested(const RenderStyle::Bloom &bloom);
     void resetRequested();
 
 private:
@@ -65,9 +73,16 @@ private:
     QSpinBox *m_scale = nullptr;
     QGroupBox *m_strandBox = nullptr;
     QGroupBox *m_ridgeBox = nullptr;
+    QGroupBox *m_lineBox = nullptr;
+    QGroupBox *m_mirrorBox = nullptr;
+    QGroupBox *m_ringBox = nullptr;
 
     RenderStyle::Strands m_strands;
     RenderStyle::Ridge m_ridge;
+    RenderStyle::Lines m_lines;
+    RenderStyle::Mirror m_mirror;
+    RenderStyle::Ring m_ring;
+    RenderStyle::Bloom m_bloom;
 };
 
 } // namespace hyperwave
