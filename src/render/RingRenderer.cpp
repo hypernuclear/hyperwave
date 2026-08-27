@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include <QPainter>
+#include <QPainterPath>
 #include <QPen>
 
 #include "dsp/DspConfig.h"
@@ -56,9 +57,8 @@ void RingRenderer::render(const FrameState &state, const RenderStyle &style, qre
     for (int i = 0; i < segments; ++i) {
         // Mirrored: the spectrum runs out along the first half of the ring and
         // back along the second, so the two sides always agree. Reading the
-        // bands straight round the circle makes a lopsided blob that looks like
-        // a bug rather than a shape.
-        const qreal around = static_cast<qreal>(i) / segments;      // 0..1
+        // bands straight round the circle makes a lopsided blob.
+        const qreal around = static_cast<qreal>(i) / segments;
         const qreal folded = around < 0.5 ? around * 2.0 : (1.0 - around) * 2.0;
         const qreal pos = folded * (bands - 1);
         const int i0 = std::clamp(static_cast<int>(pos), 0, bands - 1);
@@ -76,48 +76,76 @@ void RingRenderer::render(const FrameState &state, const RenderStyle &style, qre
 
     QPainter p(&target);
     p.setRenderHint(QPainter::Antialiasing, true);
-    p.setBrush(Qt::NoBrush);
 
     const qreal presence = std::clamp<qreal>(state.presence, 0.0, 1.0);
     const qreal opacity = style.idleOpacity + (1.0 - style.idleOpacity) * presence;
 
-    // An ellipse, not a circle. The status item is far wider than it is tall,
-    // and a circle that fits its height leaves most of the strip empty; an
-    // ellipse that fills the space is the same shape stretched, and the
-    // protrusions still read.
+    // A circle, not an ellipse.
+    //
+    // The radius comes from the shorter side, so the shape stays 1:1 on a
+    // status item that is four times wider than it is tall. Stretching it to
+    // fill the strip filled the space, but a squashed circle is not the shape
+    // this look is: the protrusions stop reading as pushes outward from a
+    // centre and start reading as bumps on a horizon.
     const qreal cx = w * 0.5;
     const qreal cy = h * 0.5;
-    const qreal baseX = w * 0.5 * r.baseRadius;
-    const qreal baseY = h * 0.5 * r.baseRadius;
-    const qreal reachX = w * 0.5 * r.reach;
-    const qreal reachY = h * 0.5 * r.reach;
+    const qreal extent = std::min(w, h) * 0.5;
+    const qreal base = extent * r.baseRadius;
+    const qreal reach = extent * r.reach;
 
-    // Three copies at slightly different amplitudes. Offsetting the amplitude
-    // rather than the position is the whole trick: at rest every copy traces
-    // the same ellipse and the ring is one clean line, and the colours only
-    // separate where the spectrum pushes it out.
-    struct Layer
-    {
-        qreal scale;
-        QColor colour;
-    };
-    const QColor warm(255, 90, 120);
-    const QColor cool(90, 170, 255);
-    const Layer layers[3] = {
-        {1.0 + r.separation, warm},
-        {1.0 - r.separation, cool},
-        {1.0, QColor(255, 255, 255)},
-    };
-
-    for (const Layer &layer : layers) {
+    const auto outline = [&](qreal amplitudeScale, qreal radialOffset, QPointF shift) {
         for (int i = 0; i <= segments; ++i) {
             const int k = i % segments;
             const qreal theta = kTau * static_cast<qreal>(k) / segments - kTau * 0.25;
-            const qreal push = m_value[static_cast<std::size_t>(k)] * layer.scale;
+            const qreal push = m_value[static_cast<std::size_t>(k)] * amplitudeScale;
+            const qreal radius = base + reach * push + radialOffset;
             m_points[static_cast<std::size_t>(i)] =
-                QPointF(cx + std::cos(theta) * (baseX + reachX * push),
-                        cy + std::sin(theta) * (baseY + reachY * push));
+                QPointF(cx + std::cos(theta) * radius + shift.x(),
+                        cy + std::sin(theta) * radius + shift.y());
         }
+    };
+
+    // The disc, drawn once from the true outline, before any of the copies.
+    {
+        outline(1.0, 0.0, QPointF(0.0, 0.0));
+        QPainterPath path;
+        path.moveTo(m_points[0]);
+        for (int i = 1; i <= segments; ++i)
+            path.lineTo(m_points[static_cast<std::size_t>(i)]);
+        path.closeSubpath();
+        QColor fill = style.gradientBottom;
+        fill.setAlphaF(std::clamp<qreal>(opacity * r.fillOpacity, 0.0, 1.0));
+        p.setPen(Qt::NoPen);
+        p.setBrush(fill);
+        p.drawPath(path);
+    }
+
+    // Five copies, offset like a mis-registered print rather than blurred.
+    //
+    // Cyan, magenta and yellow because that is what separates in a real
+    // four-colour process, and because they stay distinguishable when they
+    // overlap in a way that red, green and blue do not: overlapping CMY makes
+    // darker mixtures towards the middle, which is what makes the fringes look
+    // like layers rather than like a rainbow gradient. White last, so the ring
+    // proper sits on top and the colour reads as escaping from underneath it.
+    const qreal off = extent * r.constantOffset;
+    struct Layer
+    {
+        qreal amplitude;
+        QPointF shift;
+        QColor colour;
+    };
+    const Layer layers[5] = {
+        {1.0 + r.separation, QPointF(-off, -off * 0.6), QColor(0, 200, 255)},
+        {1.0 - r.separation, QPointF(off, -off * 0.6), QColor(255, 0, 190)},
+        {1.0 + r.separation * 0.5, QPointF(0.0, off), QColor(255, 220, 0)},
+        {1.0 - r.separation * 0.5, QPointF(0.0, -off * 0.4), QColor(150, 120, 255)},
+        {1.0, QPointF(0.0, 0.0), QColor(255, 255, 255)},
+    };
+
+    p.setBrush(Qt::NoBrush);
+    for (const Layer &layer : layers) {
+        outline(layer.amplitude, 0.0, layer.shift);
         QColor c = layer.colour;
         c.setAlphaF(std::clamp<qreal>(opacity * r.layerOpacity, 0.0, 1.0));
         QPen pen(c, std::max(1.0, r.lineWidthPt * dpr));

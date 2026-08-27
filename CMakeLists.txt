@@ -156,7 +156,8 @@ qt_add_shaders(hyperwave_core "hyperwave_strand_shaders"
         src/render/shaders/fullscreen.vert
         src/render/shaders/bright.frag
         src/render/shaders/blur.frag
-        src/render/shaders/composite.frag)
+        src/render/shaders/composite.frag
+        src/render/shaders/rays.frag)
 
 # --- the app ----------------------------------------------------------------
 qt_add_executable(hyperwave

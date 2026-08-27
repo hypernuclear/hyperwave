@@ -27,10 +27,13 @@ layout(std140, binding = 0) uniform Block {
     float direction;
     float dispersion;
     float radialBlur;
+    float rayLength;
+    float rayDecay;
 } u;
 
 layout(binding = 1) uniform sampler2D source;
 layout(binding = 2) uniform sampler2D bloom;
+layout(binding = 3) uniform sampler2D rays;
 
 void main()
 {
@@ -62,25 +65,29 @@ void main()
     base.a = texture(source, vUv).a;
 
     // The glow gets a stronger shift and a smear along the same axis.
-    vec4 glow = vec4(0.0);
-    const int kTaps = 6;
-    float span = u.radialBlur * r;
-    for (int i = 0; i < kTaps; ++i) {
-        float t = float(i) / float(kTaps - 1);          // 0..1
-        vec2 offset = dir * (span * t);
-        float w = 1.0 - t * 0.6;                        // nearer taps count more
-        glow.r += texture(bloom, vUv + offset - dir * shift * 2.0).r * w;
-        glow.g += texture(bloom, vUv + offset).g * w;
-        glow.b += texture(bloom, vUv + offset + dir * shift * 2.0).b * w;
-        glow.a += texture(bloom, vUv + offset).a * w;
-    }
-    glow /= float(kTaps) * 0.7;
+    // A single sample now. The radial smear that used to live here as six
+    // taps along the radius is the rays pass, which does it over the bright
+    // pass with twenty-four taps and a decay -- doing both meant paying twice
+    // for the same effect and getting a muddier version of it.
+    vec4 glow;
+    glow.r = texture(bloom, vUv - dir * shift * 2.0).r;
+    glow.g = texture(bloom, vUv).g;
+    glow.b = texture(bloom, vUv + dir * shift * 2.0).b;
+    glow.a = texture(bloom, vUv).a;
     // The glow's own dispersion is what carries the colour, so it is scaled up
     // rather than down; the taps above already spread it far enough that the
     // channels still overlap.
 
-    vec3 rgb = base.rgb + glow.rgb * u.intensity;
-    float a = base.a + glow.a * u.intensity;
+    // The rays are already directional, so they take the dispersion too but
+    // not the smear: streaking a streak just blurs it back into a fog.
+    vec4 ray;
+    ray.r = texture(rays, vUv - dir * shift * 2.0).r;
+    ray.g = texture(rays, vUv).g;
+    ray.b = texture(rays, vUv + dir * shift * 2.0).b;
+    ray.a = texture(rays, vUv).a;
+
+    vec3 rgb = base.rgb + glow.rgb * u.intensity + ray.rgb * u.radialBlur * 8.0;
+    float a = base.a + glow.a * u.intensity + ray.a * u.radialBlur * 8.0;
     a = clamp(a, 0.0, 1.0);
 
     // Everything here is premultiplied, and premultiplied means rgb never

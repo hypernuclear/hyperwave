@@ -173,6 +173,8 @@ RenderStyle::Ring Settings::ring() const
     r.reach = num("ring/reach", r.reach);
     r.lineWidthPt = num("ring/lineWidthPt", r.lineWidthPt);
     r.separation = num("ring/separation", r.separation);
+    r.constantOffset = num("ring/constantOffset", r.constantOffset);
+    r.fillOpacity = num("ring/fillOpacity", r.fillOpacity);
     r.stiffness = num("ring/stiffness", r.stiffness);
     r.damping = num("ring/damping", r.damping);
     return r;
@@ -184,6 +186,8 @@ void Settings::setRing(const RenderStyle::Ring &r)
     m_store.setValue(QStringLiteral("ring/reach"), r.reach);
     m_store.setValue(QStringLiteral("ring/lineWidthPt"), r.lineWidthPt);
     m_store.setValue(QStringLiteral("ring/separation"), r.separation);
+    m_store.setValue(QStringLiteral("ring/constantOffset"), r.constantOffset);
+    m_store.setValue(QStringLiteral("ring/fillOpacity"), r.fillOpacity);
     m_store.setValue(QStringLiteral("ring/stiffness"), r.stiffness);
     m_store.setValue(QStringLiteral("ring/damping"), r.damping);
     Q_EMIT visualiserParametersChanged();
@@ -202,6 +206,8 @@ RenderStyle::Bloom Settings::bloom() const
     b.radius = num("bloom/radius", b.radius);
     b.dispersion = num("bloom/dispersion", b.dispersion);
     b.radialBlur = num("bloom/radialBlur", b.radialBlur);
+    b.rayLength = num("bloom/rayLength", b.rayLength);
+    b.rayDecay = num("bloom/rayDecay", b.rayDecay);
     return b;
 }
 void Settings::setBloom(const RenderStyle::Bloom &b)
@@ -213,6 +219,8 @@ void Settings::setBloom(const RenderStyle::Bloom &b)
     m_store.setValue(QStringLiteral("bloom/radius"), b.radius);
     m_store.setValue(QStringLiteral("bloom/dispersion"), b.dispersion);
     m_store.setValue(QStringLiteral("bloom/radialBlur"), b.radialBlur);
+    m_store.setValue(QStringLiteral("bloom/rayLength"), b.rayLength);
+    m_store.setValue(QStringLiteral("bloom/rayDecay"), b.rayDecay);
     Q_EMIT visualiserParametersChanged();
 }
 // Clears every stored visualiser parameter, so the next read falls through to

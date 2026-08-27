@@ -87,7 +87,7 @@ void LineRenderer::render(const FrameState &state, const RenderStyle &style, qre
         // Towards white as a stroke burns, which is what gives the bloom
         // something achromatic to spread and makes the hot ones read as light
         // rather than as a saturated colour.
-        const qreal toWhite = std::pow(lit, 2.0);
+        const qreal toWhite = std::pow(lit, 1.3);
         colour.setRedF(colour.redF() + (1.0 - colour.redF()) * toWhite);
         colour.setGreenF(colour.greenF() + (1.0 - colour.greenF()) * toWhite);
         colour.setBlueF(colour.blueF() + (1.0 - colour.blueF()) * toWhite);

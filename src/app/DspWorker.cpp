@@ -1,5 +1,7 @@
 #include "app/DspWorker.h"
 
+#include <cmath>
+
 #include <algorithm>
 
 #include "audio/Downmix.h"
@@ -72,7 +74,7 @@ void DspWorker::applyIdleThrottle(bool silent)
 
 void DspWorker::tick()
 {
-    if (!m_ring)
+    if (!m_ring && !m_fakeAudio)
         return;
 
     // A format change means the rolling buffer holds samples at the old rate
@@ -81,7 +83,8 @@ void DspWorker::tick()
     // one garbage frame before it settles.
     if (m_epoch != m_appliedEpoch && m_sampleRate > 0.0) {
         m_analyzer.configure(m_sampleRate, dsp::kBandCount);
-        m_ring->reset();
+        if (m_ring)
+            m_ring->reset();
         m_appliedEpoch = m_epoch;
         return;
     }
@@ -93,16 +96,64 @@ void DspWorker::tick()
     // visualiser running a third of a second behind the music is worse than one
     // that dropped a third of a second.
     const auto window = static_cast<std::uint64_t>(m_analyzer.fftSize());
-    m_ring->discardAllButNewest(window * 2);
 
-    const auto available = static_cast<std::uint32_t>(
-        std::min<std::uint64_t>(m_ring->available(), window * 2));
+    // How many samples this tick produced, whatever produced them. The
+    // throttled path below re-reads this block to decide whether audio has
+    // come back, so both branches have to leave it meaning the same thing.
+    std::uint32_t available = 0;
 
-    if (available > 0) {
-        if (m_scratch.size() < available)
-            m_scratch.resize(available);
-        const std::uint32_t got = m_ring->read(m_scratch.data(), available);
-        m_analyzer.pushSamples(m_scratch.data(), got);
+    if (m_fakeAudio) {
+        // Six partials an octave apart, each breathing at its own rate, plus a
+        // kick twice a second.
+        //
+        // Spread across the spectrum deliberately: a single swept tone lights
+        // one band at a time and says nothing about how a look behaves when the
+        // whole width is busy, which is the case that actually matters.
+        const auto n = static_cast<std::uint32_t>(window);
+        if (m_scratch.size() < n)
+            m_scratch.resize(n);
+        const double dt = 1.0 / m_sampleRate;
+        for (std::uint32_t i = 0; i < n; ++i) {
+            const double t = m_fakeSeconds + i * dt;
+            const double beat = std::exp(-std::fmod(t, 0.5) * 6.0);
+            double sample = 0.0;
+            for (int k = 0; k < 6; ++k) {
+                const double freq = 80.0 * std::pow(2.0, k);
+                const double breathe = 0.5 + 0.5 * std::sin(t * (0.7 + 0.31 * k) + k);
+                const double amp = (k == 0 ? 0.35 + 0.5 * beat : 0.28) * breathe;
+                m_fakePhase[k] += 2.0 * M_PI * freq * dt;
+                if (m_fakePhase[k] > 2.0 * M_PI)
+                    m_fakePhase[k] -= 2.0 * M_PI;
+                sample += std::sin(m_fakePhase[k]) * amp;
+            }
+            // Plus broadband noise, which matters more than it sounds like it
+            // should. Six pure partials light six bands and leave the rest at
+            // the floor, so a look was being judged against a spectrum no music
+            // produces -- the lines in particular looked dead because almost
+            // nothing crossed the bloom threshold. Music is broadband; the
+            // synthetic stand-in has to be too.
+            m_fakeNoise = m_fakeNoise * 1103515245u + 12345u;
+            const double noise =
+                (static_cast<double>((m_fakeNoise >> 16) & 0x7FFF) / 16384.0) - 1.0;
+            sample += noise * 0.22 * (0.4 + 0.6 * beat);
+
+            m_scratch[i] = static_cast<float>(sample * 0.22);
+        }
+        m_fakeSeconds += n * dt;
+        m_analyzer.pushSamples(m_scratch.data(), n);
+        available = n;
+    } else {
+        m_ring->discardAllButNewest(window * 2);
+
+        available = static_cast<std::uint32_t>(
+            std::min<std::uint64_t>(m_ring->available(), window * 2));
+
+        if (available > 0) {
+            if (m_scratch.size() < available)
+                m_scratch.resize(available);
+            const std::uint32_t got = m_ring->read(m_scratch.data(), available);
+            m_analyzer.pushSamples(m_scratch.data(), got);
+        }
     }
 
     FrameState state;

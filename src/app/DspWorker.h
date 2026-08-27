@@ -34,6 +34,14 @@ public:
 
     // Set once, before the thread starts.
     void setRing(MonoRing *ring) { m_ring = ring; }
+    // Drive the analysis from a synthetic signal instead of the capture ring.
+    //
+    // Synthesised into the *input* rather than faked at the output, so the FFT,
+    // the band mapping and the ballistics all run exactly as they do on real
+    // audio. A fake that skipped them would be a different code path, and the
+    // one thing a renderer preview must not do is show you something the real
+    // pipeline would never produce.
+    void setFakeAudio(bool fake) { m_fakeAudio = fake; }
 
 public Q_SLOTS:
     void start();
@@ -71,6 +79,10 @@ private:
     QTimer *m_timer = nullptr;
 
     std::vector<float> m_scratch;
+    bool m_fakeAudio = false;
+    double m_fakePhase[6] = {};
+    double m_fakeSeconds = 0.0;
+    std::uint32_t m_fakeNoise = 22222u;
 
     double m_sampleRate = 0.0;
     std::uint32_t m_epoch = 0;

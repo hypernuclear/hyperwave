@@ -40,8 +40,14 @@ struct Uniforms
     float direction = 0.0f;
     float dispersion = 0.0f;
     float radialBlur = 0.0f;
+    float rayLength = 0.0f;
+    float rayDecay = 0.0f;
+    float pad[2] = {0.0f, 0.0f};
 };
-static_assert(sizeof(Uniforms) == 32);
+// std140 rounds a uniform block up to a multiple of sixteen bytes, so the
+// padding is not decoration: without it the driver reads two floats of
+// whatever follows.
+static_assert(sizeof(Uniforms) == 48);
 
 } // namespace
 
@@ -57,39 +63,48 @@ struct GpuPost::Impl
     std::unique_ptr<QRhiTexture> bright;    // half res
     std::unique_ptr<QRhiTexture> blurTmp;   // half res
     std::unique_ptr<QRhiTexture> bloom;     // half res
+    std::unique_ptr<QRhiTexture> rays;      // half res
     std::unique_ptr<QRhiTexture> output;
 
     std::unique_ptr<QRhiTextureRenderTarget> brightTarget, blurTmpTarget, bloomTarget,
-        outputTarget;
-    std::unique_ptr<QRhiRenderPassDescriptor> brightPass, blurPass, bloomPass, outputPass;
+        raysTarget, outputTarget;
+    std::unique_ptr<QRhiRenderPassDescriptor> brightPass, blurPass, bloomPass, raysPass,
+        outputPass;
 
     std::unique_ptr<QRhiSampler> sampler;
     std::unique_ptr<QRhiBuffer> uniforms;   // one block, rewritten per pass
 
-    std::unique_ptr<QRhiShaderResourceBindings> brightSrb, blurTmpSrb, bloomSrb, outputSrb;
-    std::unique_ptr<QRhiGraphicsPipeline> brightPipeline, blurPipeline, compositePipeline;
+    std::unique_ptr<QRhiShaderResourceBindings> brightSrb, blurTmpSrb, bloomSrb, raysSrb,
+        outputSrb;
+    std::unique_ptr<QRhiGraphicsPipeline> brightPipeline, blurPipeline, raysPipeline,
+        compositePipeline;
 
     void releaseSizeDependent()
     {
         brightPipeline.reset();
         blurPipeline.reset();
+        raysPipeline.reset();
         compositePipeline.reset();
         brightSrb.reset();
         blurTmpSrb.reset();
         bloomSrb.reset();
+        raysSrb.reset();
         outputSrb.reset();
         brightTarget.reset();
         blurTmpTarget.reset();
         bloomTarget.reset();
+        raysTarget.reset();
         outputTarget.reset();
         brightPass.reset();
         blurPass.reset();
         bloomPass.reset();
+        raysPass.reset();
         outputPass.reset();
         source.reset();
         bright.reset();
         blurTmp.reset();
         bloom.reset();
+        rays.reset();
         output.reset();
         size = {};
     }
@@ -154,11 +169,13 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
             || !makeTexture(d.bright, d.bloomSize, QRhiTexture::RenderTarget)
             || !makeTexture(d.blurTmp, d.bloomSize, QRhiTexture::RenderTarget)
             || !makeTexture(d.bloom, d.bloomSize, QRhiTexture::RenderTarget)
+            || !makeTexture(d.rays, d.bloomSize, QRhiTexture::RenderTarget)
             || !makeTexture(d.output, d.size,
                             QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource)
             || !makeTarget(d.brightTarget, d.brightPass, d.bright.get())
             || !makeTarget(d.blurTmpTarget, d.blurPass, d.blurTmp.get())
             || !makeTarget(d.bloomTarget, d.bloomPass, d.bloom.get())
+            || !makeTarget(d.raysTarget, d.raysPass, d.rays.get())
             || !makeTarget(d.outputTarget, d.outputPass, d.output.get())) {
             d.failed = true;
             return;
@@ -189,8 +206,9 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
         const QShader vs = loadShader(QStringLiteral(":/shaders/fullscreen.vert.qsb"));
         const QShader brightFs = loadShader(QStringLiteral(":/shaders/bright.frag.qsb"));
         const QShader blurFs = loadShader(QStringLiteral(":/shaders/blur.frag.qsb"));
+        const QShader raysFs = loadShader(QStringLiteral(":/shaders/rays.frag.qsb"));
         const QShader compositeFs = loadShader(QStringLiteral(":/shaders/composite.frag.qsb"));
-        if (!vs.isValid() || !brightFs.isValid() || !blurFs.isValid()
+        if (!vs.isValid() || !brightFs.isValid() || !blurFs.isValid() || !raysFs.isValid()
             || !compositeFs.isValid()) {
             qWarning("hyperwave: bloom shaders missing; drawing without it");
             d.failed = true;
@@ -198,8 +216,9 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
         }
 
         const auto makeSrb = [&](std::unique_ptr<QRhiShaderResourceBindings> &srb,
-                                 QRhiTexture *first, QRhiTexture *second) {
-            QVarLengthArray<QRhiShaderResourceBinding, 3> bindings;
+                                 QRhiTexture *first, QRhiTexture *second,
+                                 QRhiTexture *third = nullptr) {
+            QVarLengthArray<QRhiShaderResourceBinding, 4> bindings;
             bindings.append(QRhiShaderResourceBinding::uniformBuffer(
                 0, QRhiShaderResourceBinding::FragmentStage, d.uniforms.get()));
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
@@ -207,6 +226,10 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
             if (second) {
                 bindings.append(QRhiShaderResourceBinding::sampledTexture(
                     2, QRhiShaderResourceBinding::FragmentStage, second, d.sampler.get()));
+            }
+            if (third) {
+                bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                    3, QRhiShaderResourceBinding::FragmentStage, third, d.sampler.get()));
             }
             srb.reset(rhi->newShaderResourceBindings());
             srb->setBindings(bindings.cbegin(), bindings.cend());
@@ -216,7 +239,8 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
         if (!makeSrb(d.brightSrb, d.source.get(), nullptr)
             || !makeSrb(d.blurTmpSrb, d.bright.get(), nullptr)
             || !makeSrb(d.bloomSrb, d.blurTmp.get(), nullptr)
-            || !makeSrb(d.outputSrb, d.source.get(), d.bloom.get())) {
+            || !makeSrb(d.raysSrb, d.bright.get(), nullptr)
+            || !makeSrb(d.outputSrb, d.source.get(), d.bloom.get(), d.rays.get())) {
             d.failed = true;
             return;
         }
@@ -239,6 +263,7 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
 
         if (!makePipeline(d.brightPipeline, brightFs, d.brightSrb.get(), d.brightPass.get())
             || !makePipeline(d.blurPipeline, blurFs, d.blurTmpSrb.get(), d.blurPass.get())
+            || !makePipeline(d.raysPipeline, raysFs, d.raysSrb.get(), d.raysPass.get())
             || !makePipeline(d.compositePipeline, compositeFs, d.outputSrb.get(),
                              d.outputPass.get())) {
             d.failed = true;
@@ -262,6 +287,8 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
     u.intensity = static_cast<float>(params.intensity);
     u.dispersion = static_cast<float>(params.dispersion);
     u.radialBlur = static_cast<float>(params.radialBlur);
+    u.rayLength = static_cast<float>(params.rayLength);
+    u.rayDecay = static_cast<float>(params.rayDecay);
 
     const auto runPass = [&](QRhiTextureRenderTarget *rt, QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb, const QSize &viewport,
@@ -293,7 +320,10 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
     runPass(d.bloomTarget.get(), d.blurPipeline.get(), d.bloomSrb.get(), d.bloomSize, u,
             nullptr);
 
-    // 4. Back over the original, with the channels pulled apart radially.
+    // 4. Rays, marched from the bright pass towards the centre.
+    runPass(d.raysTarget.get(), d.raysPipeline.get(), d.raysSrb.get(), d.bloomSize, u, nullptr);
+
+    // 5. Back over the original, with the channels pulled apart radially.
     u.texelSize[0] = 1.0f / float(w);
     u.texelSize[1] = 1.0f / float(h);
     runPass(d.outputTarget.get(), d.compositePipeline.get(), d.outputSrb.get(), d.size, u,

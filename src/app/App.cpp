@@ -301,6 +301,7 @@ bool App::start()
 
     m_worker = new DspWorker;
     m_worker->setRing(m_audio->source()->ring());
+    m_worker->setFakeAudio(m_options.fakeAudio);
     m_worker->moveToThread(&m_dspThread);
     connect(&m_dspThread, &QThread::finished, m_worker, &QObject::deleteLater);
 
@@ -321,9 +322,17 @@ bool App::start()
         m_audio->source()->setSourceDeviceUid(source);
 
     m_audio->start();
-    QMetaObject::invokeMethod(m_worker, &DspWorker::setFormat, Qt::QueuedConnection,
-                              m_audio->source()->sampleRate(),
-                              m_audio->source()->formatEpoch());
+    // A synthetic source has no device to ask, so give the analyser a rate to
+    // configure itself against or it never builds its band tables and the whole
+    // chain sits idle producing nothing.
+    if (m_options.fakeAudio) {
+        QMetaObject::invokeMethod(m_worker, &DspWorker::setFormat, Qt::QueuedConnection, 48000.0,
+                                  1u);
+    } else {
+        QMetaObject::invokeMethod(m_worker, &DspWorker::setFormat, Qt::QueuedConnection,
+                                  m_audio->source()->sampleRate(),
+                                  m_audio->source()->formatEpoch());
+    }
     QMetaObject::invokeMethod(m_worker, &DspWorker::start, Qt::QueuedConnection);
 
     // The "Playing" list, printed on a timer, from the same call the menu uses.

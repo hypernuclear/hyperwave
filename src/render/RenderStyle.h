@@ -191,7 +191,7 @@ struct RenderStyle
         qreal floorLevel = 0.08;
         // Above 1 this pushes the quiet strokes down and lets the loud ones
         // stand out, which is what stops the whole row glowing at once.
-        qreal gamma = 2.4;
+        qreal gamma = 1.5;
         // Per-frame easing towards the band level. The upstream ballistics are
         // tuned for bars, where a fast attack reads as punch; here the bloom
         // multiplies any jump, so a hard attack strobes.
@@ -205,31 +205,56 @@ struct RenderStyle
     // --- the mirrored look ---------------------------------------------------
     struct Mirror
     {
-        int count = 64;        // strokes across the width
-        qreal widthPt = 1.0;
+        // Enough gap between strokes to still read as strokes.
+        //
+        // Sixty-four at a full point wide left a 70% duty cycle, and once the
+        // glow spread each one they welded into a continuous ribbon -- a
+        // perfectly nice shape, and not this one. A third of the pitch keeps
+        // them separate through the bloom.
+        int count = 48;
+        qreal widthPt = 0.6;
         qreal verticalInset = 0.12;
-        qreal minHalfPt = 0.5;   // a silent stroke is still a dot on the centre line
+        // Zero at rest. A stroke at silence is a point on the centre line and
+        // nothing more, so the shape opens out of the middle rather than
+        // shrinking to a minimum thickness.
+        qreal minHalfPt = 0.0;
         // Spring, not easing. Damping below about 0.9 overshoots and settles,
         // which is the bounce; at 1.0 it never loses energy and oscillates
         // forever, and near 0.7 it arrives without visible overshoot at all.
-        qreal stiffness = 0.32;
-        qreal damping = 0.82;
+        //
+        // Stiffness is deliberately low. At 0.32 the strokes chased every band
+        // individually and the row read as noise rather than as one moving
+        // envelope -- the spring was doing what it was told, there was simply
+        // too much of it. Lower is calmer and keeps the bounce.
+        qreal stiffness = 0.16;
+        qreal damping = 0.88;
     };
     Mirror mirror;
     // --- the ring look --------------------------------------------------------
     struct Ring
     {
         int segments = 180;
-        qreal baseRadius = 0.45;   // fraction of the half-extent at rest
-        qreal reach = 0.42;        // how much further a full-scale band pushes
-        qreal lineWidthPt = 0.9;
-        qreal layerOpacity = 0.85;
-        // How far the coloured copies differ in amplitude. They coincide at
-        // rest and separate where the ring bulges, which is what puts the
-        // fringes on the protrusions rather than around the whole outline.
-        qreal separation = 0.16;
-        qreal stiffness = 0.30;
-        qreal damping = 0.84;
+        qreal baseRadius = 0.52;   // fraction of the half-extent at rest
+        qreal reach = 0.40;        // how much further a full-scale band pushes
+        qreal lineWidthPt = 0.8;
+        qreal layerOpacity = 0.9;
+        // A circle, not an ellipse. The radius is taken from the shorter side
+        // and the whole thing is centred, so it stays 1:1 on a status item that
+        // is four times wider than it is tall.
+        // The disc inside the outline. Solid rather than empty: the reference
+        // is a body with a rim, and an open outline on its own reads as a
+        // wireframe of the same shape.
+        qreal fillOpacity = 0.55;
+        // Separation of the coloured copies, as a fraction of the radius. Two
+        // kinds, and both matter. The amplitude term scales with how far the
+        // ring has been pushed out, so the copies coincide where it is at rest
+        // and split where it bulges. The constant term offsets them everywhere,
+        // which is what makes the fringes read as printing out of register
+        // rather than as a glow.
+        qreal separation = 0.30;
+        qreal constantOffset = 0.035;
+        qreal stiffness = 0.22;
+        qreal damping = 0.86;
     };
     Ring ring;
     // --- bloom ---------------------------------------------------------------
@@ -246,7 +271,7 @@ struct RenderStyle
         qreal threshold = 0.14;
         qreal knee = 0.25;
         // How much of the blurred bright pass is added back.
-        qreal intensity = 1.8;
+        qreal intensity = 2.4;
         // How far the blur reaches, as a multiple of a texel. The bright pass
         // runs at half resolution, so this is doubled in effect.
         qreal radius = 3.0;
@@ -258,6 +283,16 @@ struct RenderStyle
         // that reads as depth -- edge highlights stretch away from the centre
         // as though the whole thing were behind a lens.
         qreal radialBlur = 0.10;
+
+        // Volumetric rays, the Trapcode Shine effect: light streaking along the
+        // line towards the centre of the frame rather than fogging evenly. This
+        // is what makes bright things look like they recede to a vanishing
+        // point. rayLength is the fraction of the distance to the centre that a
+        // pixel marches; rayDecay is how fast each successive tap counts for
+        // less, so near 1.0 the streak is long and even and near 0.8 it is a
+        // short flare.
+        qreal rayLength = 0.45;
+        qreal rayDecay = 0.93;
     };
     Bloom bloom;
 

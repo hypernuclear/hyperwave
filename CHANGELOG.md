@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The glow flipped every frame vertically. The post-process takes its texture
+  coordinate from the fullscreen triangle's vertex position, and clip space is
+  y-up where an uploaded QImage is v-down, so each frame was sampled upside down
+  and read back mirrored -- invisible on a symmetric look, glaring on the bars,
+  whose peak dots ended up under the bars.
+- `HYPERWAVE_FAKE_AUDIO` did nothing. It was parsed into an option that nothing
+  read, while the README and a VS Code configuration both claimed it made
+  previews behave identically on any machine. It now synthesises into the
+  analyser's input, so the FFT, band mapping and ballistics run exactly as they
+  do on real audio, and it is broadband rather than a handful of tones -- pure
+  partials light a few bands and leave the rest at the floor, which made looks
+  that depend on contrast appear broken when they were working.
 - The strand and terrain settings fought back while being typed into. A spin box
   emitted on every keystroke, and each emission came round as a re-seed that
   rewrote the text under the cursor, so the field never seemed to let go. It

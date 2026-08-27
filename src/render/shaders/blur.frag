@@ -22,6 +22,8 @@ layout(std140, binding = 0) uniform Block {
     float direction;   // 0 horizontal, 1 vertical
     float dispersion;
     float radialBlur;
+    float rayLength;
+    float rayDecay;
 } u;
 
 layout(binding = 1) uniform sampler2D source;

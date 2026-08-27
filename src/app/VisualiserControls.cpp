@@ -196,7 +196,9 @@ VisualiserControls::VisualiserControls(Options options, QWidget *parent)
     addSlider(ringForm, QStringLiteral("Reach"), 0.05, 0.8, &m_ring.reach, ringChanged);
     addSlider(ringForm, QStringLiteral("Line width pt"), 0.3, 4.0, &m_ring.lineWidthPt,
               ringChanged);
-    addSlider(ringForm, QStringLiteral("Separation"), 0.0, 0.5, &m_ring.separation, ringChanged);
+    addSlider(ringForm, QStringLiteral("Separation"), 0.0, 0.8, &m_ring.separation, ringChanged);
+    addSlider(ringForm, QStringLiteral("Offset"), 0.0, 0.15, &m_ring.constantOffset, ringChanged);
+    addSlider(ringForm, QStringLiteral("Fill"), 0.0, 1.0, &m_ring.fillOpacity, ringChanged);
     addSlider(ringForm, QStringLiteral("Stiffness"), 0.05, 0.8, &m_ring.stiffness, ringChanged);
     addSlider(ringForm, QStringLiteral("Bounce"), 0.60, 0.98, &m_ring.damping, ringChanged);
     layout->addWidget(m_ringBox);
@@ -221,7 +223,10 @@ VisualiserControls::VisualiserControls(Options options, QWidget *parent)
     addSlider(bloomForm, QStringLiteral("Radius"), 0.5, 8.0, &m_bloom.radius, bloomChanged);
     addSlider(bloomForm, QStringLiteral("Dispersion"), 0.0, 0.15, &m_bloom.dispersion,
               bloomChanged);
-    addSlider(bloomForm, QStringLiteral("Radial blur"), 0.0, 0.4, &m_bloom.radialBlur,
+    addSlider(bloomForm, QStringLiteral("Rays"), 0.0, 0.4, &m_bloom.radialBlur, bloomChanged);
+    addSlider(bloomForm, QStringLiteral("Ray length"), 0.0, 1.0, &m_bloom.rayLength,
+              bloomChanged);
+    addSlider(bloomForm, QStringLiteral("Ray decay"), 0.70, 0.99, &m_bloom.rayDecay,
               bloomChanged);
     layout->addWidget(bloomBox);
     if (m_options.showReset) {
