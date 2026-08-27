@@ -50,6 +50,65 @@ std::unique_ptr<Visualiser> App::makeVisualiser(const QString &id)
     return std::make_unique<BarRenderer>();
 }
 
+void App::refreshSurface(Surface &surface)
+{
+    if (surface.presenter) {
+        onGeometryChanged(surface);
+        return;
+    }
+    // The preview window has no presenter, so it never gets a geometry change
+    // and has to be re-styled, re-sized and repainted by hand.
+    rebuildStyle(surface);
+    ensureBuffers(surface);
+    surface.lastPresentedSeq = 0;
+    onFrameDue(surface);
+}
+
+void App::connectHudControls()
+{
+    if (!m_hud)
+        return;
+
+    m_hud->setVisualiser(m_options.vizStyle.isEmpty() ? m_settings.vizStyle()
+                                                      : m_options.vizStyle);
+    m_hud->setPreviewScale(m_options.previewScale);
+    m_hud->setStrands(m_strandTuning);
+    m_hud->setRidge(m_ridgeTuning);
+
+    connect(m_hud.get(), &DebugHud::visualiserRequested, this, [this](const QString &id) {
+        m_options.vizStyle = id;
+        m_settings.setVizStyle(id);
+        for (auto &surface : m_surfaces) {
+            surface->renderer = makeVisualiser(id);
+            refreshSurface(*surface);
+        }
+        onAudioBecameActive();
+    });
+    connect(m_hud.get(), &DebugHud::previewScaleRequested, this, [this](qreal scale) {
+        m_options.previewScale = scale;
+        for (auto &surface : m_surfaces) {
+            if (!surface->presenter)
+                surface->dpr = 2.0 * scale;
+            refreshSurface(*surface);
+        }
+        onAudioBecameActive();
+    });
+    connect(m_hud.get(), &DebugHud::strandsRequested, this,
+            [this](const RenderStyle::Strands &strands) {
+                m_strandTuning = strands;
+                for (auto &surface : m_surfaces)
+                    refreshSurface(*surface);
+                onAudioBecameActive();
+            });
+    connect(m_hud.get(), &DebugHud::ridgeRequested, this,
+            [this](const RenderStyle::Ridge &ridge) {
+                m_ridgeTuning = ridge;
+                for (auto &surface : m_surfaces)
+                    refreshSurface(*surface);
+                onAudioBecameActive();
+            });
+}
+
 App::App(Options options, QObject *parent)
     : QObject(parent)
     , m_options(std::move(options))
@@ -58,6 +117,16 @@ App::App(Options options, QObject *parent)
     , m_nowPlaying(std::make_unique<NowPlaying>())
 {
     m_dspThread.setObjectName(QStringLiteral("hyperwave.dsp"));
+
+    // The environment variable seeds the tuning rather than being consulted on
+    // every restyle, so the HUD's slider can move away from it afterwards
+    // instead of being dragged back on the next geometry change.
+    if (qEnvironmentVariableIsSet("HYPERWAVE_STRANDS")) {
+        bool ok = false;
+        const int count = qEnvironmentVariableIntValue("HYPERWAVE_STRANDS", &ok);
+        if (ok && count > 0)
+            m_strandTuning.count = count;
+    }
 }
 
 App::~App()
@@ -228,6 +297,7 @@ bool App::start()
     if (m_options.windowed || m_options.hud) {
         m_hud = std::make_unique<DebugHud>();
         m_hud->setSource(m_audio->source());
+        connectHudControls();
         m_hud->show();
 
         if (m_options.windowed) {
@@ -263,18 +333,14 @@ void App::rebuildStyle(Surface &surface)
 {
     surface.style = RenderStyle{};
 
-    // Strand count, overridable without a rebuild.
+    // Live tuning wins over the defaults.
     //
-    // It is the one parameter of that look worth turning by hand: it trades
-    // density against cost directly, and the number that reads well on a 118pt
-    // strip is not the number that reads well in a panel. Everything else about
-    // the bundle stays a constant in RenderStyle::Strands.
-    if (qEnvironmentVariableIsSet("HYPERWAVE_STRANDS")) {
-        bool ok = false;
-        const int count = qEnvironmentVariableIntValue("HYPERWAVE_STRANDS", &ok);
-        if (ok && count > 0)
-            surface.style.strands.count = count;
-    }
+    // rebuildStyle() starts from a fresh RenderStyle every time, so without
+    // this the first geometry change -- a display switch, the notch panel
+    // expanding, the preview being magnified -- would quietly revert every
+    // slider the HUD had touched.
+    surface.style.strands = m_strandTuning;
+    surface.style.ridge = m_ridgeTuning;
 
     if (surface.isNotch) {
         // The panel is the size of the hole in the display, so the strip fits

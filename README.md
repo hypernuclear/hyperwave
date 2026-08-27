@@ -285,13 +285,19 @@ otherwise.
 menu bar item; the drop-down also has windowed mode for renderer work, a HUD
 configuration, a faked notch for developing the panel in clamshell, a
 capture-only run, and one entry per test binary for stepping into a failure.
-**"Large preview (pick a look)"** is the one for looking at a visualiser
-properly. It asks which look and how much to magnify, then draws into a window
-at that scale. A synthetic-audio variant also asks for a strand count and needs
-nothing playing and no capture permission, so it behaves the same on any
-machine. Magnification is applied as device pixel ratio rather than by
-stretching a bitmap, so line thickness, insets and bar widths scale in
-proportion and what you see is what the renderer would draw at that size.
+**"Preview (live controls)"** is the one for looking at a visualiser properly.
+It opens the window with the controls attached: which look, how much to
+magnify, and every parameter of the strands and the terrain -- count, radius,
+thickness, fill, tilt, twists, spin, opacity, gain; rows, subdivision, columns,
+depth, amplitude -- each taking effect on the next frame. A synthetic-audio
+variant needs nothing playing and no capture permission, so it behaves the same
+on any machine.
+Magnification is applied as device pixel ratio rather than by stretching a
+bitmap, so thickness, insets and bar widths scale in proportion and what you
+see is what the renderer would draw at that size.
+Tuning lives in the window rather than on the command line on purpose. These
+are parameters decided by looking at them, and a flag per parameter means one
+process per combination.
 
 One wrinkle worth knowing before it costs you an afternoon: a debugger launches
 hyperwave as a child of VS Code, so **TCC uses VS Code's system-audio grant,

@@ -44,24 +44,26 @@
       }
     },
     {
-      // Looking at a visualiser properly.
+      // Looking at a visualiser properly, and changing it while you look.
       //
-      // The menu bar strip is 118 x 22 points, which is not a size at which
-      // anything can be judged -- the strands look in particular is a bundle of
-      // hundreds of fine lines that reads as a smudge at that scale.
-      // --preview-scale magnifies the canvas by applying itself as the device
-      // pixel ratio, so the whole thing scales together: thickness, insets and
-      // bar widths all stay in proportion instead of a bitmap being stretched.
+      // The window carries the controls: which look, how much to magnify, and
+      // every parameter of the strands and the terrain, each taking effect on
+      // the next frame. This used to prompt for the look, the magnification and
+      // the strand count before launching, which meant one process per
+      // combination -- the wrong loop for anything decided by eye.
       //
-      // Pick the look and the magnification when you hit F5.
-      "name": "hyperwave: Large preview (pick a look)",
+      // The menu bar strip is 91 x 22 points, which is not a size at which
+      // anything can be judged. Magnification is applied as device pixel ratio
+      // rather than by stretching a bitmap, so thickness, insets and bar widths
+      // scale in proportion and what you see is what the renderer would draw.
+      "name": "hyperwave: Preview (live controls)",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Kill running hyperwave",
-      "args": ["--windowed", "--viz", "${input:vizStyle}", "--preview-scale", "${input:previewScale}"],
+      "args": ["--windowed", "--preview-scale", "3"],
       "environment": [],
       "osx": {
         "MIMode": "lldb",
@@ -71,21 +73,18 @@
     },
     {
       // The same, driven by a synthetic sweep instead of the system mix, so
-      // there is always something moving to look at. Needs no audio playing and
-      // no capture permission at all, which makes it the one configuration that
+      // there is always something moving to look at. Needs nothing playing and
+      // no capture permission, which makes it the one configuration that
       // behaves identically on any machine.
-      "name": "hyperwave: Large preview (synthetic audio)",
+      "name": "hyperwave: Preview (synthetic audio)",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Kill running hyperwave",
-      "args": ["--windowed", "--viz", "${input:vizStyle}", "--preview-scale", "${input:previewScale}"],
-      "environment": [
-        { "name": "HYPERWAVE_FAKE_AUDIO", "value": "1" },
-        { "name": "HYPERWAVE_STRANDS", "value": "${input:strandCount}" }
-      ],
+      "args": ["--windowed", "--preview-scale", "3"],
+      "environment": [{ "name": "HYPERWAVE_FAKE_AUDIO", "value": "1" }],
       "osx": {
         "MIMode": "lldb",
         "targetArchitecture": "arm64",
@@ -231,29 +230,6 @@
       "args": [],
       "environment": [],
       "osx": { "MIMode": "lldb", "targetArchitecture": "arm64" }
-    }
-  ],
-  "inputs": [
-    {
-      "id": "vizStyle",
-      "type": "pickString",
-      "description": "Which visualiser to draw",
-      "options": ["strands", "bars", "ridge"],
-      "default": "strands"
-    },
-    {
-      "id": "previewScale",
-      "type": "pickString",
-      "description": "How much to magnify the canvas",
-      "options": ["2", "4", "6", "8", "12"],
-      "default": "6"
-    },
-    {
-      "id": "strandCount",
-      "type": "pickString",
-      "description": "Strands in the bundle (ignored by the other looks)",
-      "options": ["32", "64", "128", "256", "512", "1024"],
-      "default": "128"
     }
   ]
 }

@@ -51,8 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bars a point apart instead of two, as tight as they go while every edge still
   lands on a whole device pixel at 1x, 2x and 3x. The strip narrows from 118 to
   91 points as a result.
-- VS Code configurations for looking at a visualiser at a usable size, one of
-  which asks for the look, the magnification and the strand count at launch.
+- Live controls in the debug window: the visualiser, the magnification and
+  every parameter of the strands and the terrain, each taking effect on the
+  next frame. They replace a flag per parameter and one process per
+  combination, which is the wrong loop for anything judged by eye. Tuning is
+  held in App so a geometry change cannot silently revert it.
+- VS Code configurations for looking at a visualiser at a usable size.
 - `--preview-scale`, which magnifies the windowed and `--shot` canvas so a
   visualiser can be looked at where its detail is visible rather than at
   118 x 22 points.

@@ -97,6 +97,12 @@ private:
     void ensureBuffers(Surface &surface);
     bool frameIsAtRest(const FrameState &state) const;
 
+    // Re-style, re-size and repaint one surface after something changed under
+    // it. onGeometryChanged() cannot serve here: it returns early when there is
+    // no presenter, which is exactly what the preview window is.
+    void refreshSurface(Surface &surface);
+    void connectHudControls();
+
     void applyFrameRate();
     void setNotchTabVisible(bool visible);
     MenuModel buildMenu() const;
@@ -106,6 +112,13 @@ private:
 
     Options m_options;
     Settings m_settings;
+
+    // Live tuning, owned here rather than rebuilt from defaults every time.
+    // rebuildStyle() starts from a fresh RenderStyle on every geometry change,
+    // so anything adjusted in the HUD has to be reapplied from somewhere that
+    // outlives it, or the first resize would silently undo it.
+    RenderStyle::Strands m_strandTuning;
+    RenderStyle::Ridge m_ridgeTuning;
 
     std::unique_ptr<AudioController> m_audio;
     std::unique_ptr<NowPlaying> m_nowPlaying;
