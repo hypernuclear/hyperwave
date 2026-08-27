@@ -9,7 +9,7 @@
 #include "audio/AudioSource.h"
 #include "dsp/FrameState.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Owns the capture source and decides what we believe about permission.
 //
@@ -65,4 +65,4 @@ private:
     bool m_everHeardAudio = false;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

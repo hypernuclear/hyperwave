@@ -6,7 +6,7 @@
 
 #include "app/MenuModel.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 #ifdef __OBJC__
 
@@ -26,4 +26,4 @@ NSImage *appIconForBundle(const QString &bundleId, CGFloat size);
 
 #endif
 
-} // namespace hyperlight
+} // namespace hyperwave

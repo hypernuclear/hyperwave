@@ -2,7 +2,7 @@
 
 #include "render/Palette.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 constexpr const char *kGradientKey = "appearance/gradient";
@@ -88,4 +88,4 @@ void Settings::setNotchAutoHide(bool enabled)
     Q_EMIT notchAutoHideChanged(enabled);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

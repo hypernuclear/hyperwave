@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Interleaved N-channel float -> mono, averaged.
 //
@@ -33,4 +33,4 @@ float rmsDb(const float *data, std::uint32_t frames) noexcept;
 // permission probe depends on being able to tell those two apart.
 bool isExactlyZero(const float *data, std::uint32_t frames) noexcept;
 
-} // namespace hyperlight
+} // namespace hyperwave

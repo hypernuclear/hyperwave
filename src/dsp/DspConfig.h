@@ -8,7 +8,7 @@
 // where "quiet" and "loud" sit on the strip, and they are pure taste; expect to
 // nudge them by a few dB after listening to a handful of real tracks. Keeping
 // them here means that is a one-line change rather than a hunt.
-namespace hyperlight::dsp {
+namespace hyperwave::dsp {
 
 inline constexpr int kBandCount = 28;
 inline constexpr int kMaxBandCount = 32;   // sizes the fixed arrays in FrameState
@@ -111,4 +111,4 @@ inline int fftSizeForRate(double sampleRate)
     return n;
 }
 
-} // namespace hyperlight::dsp
+} // namespace hyperwave::dsp

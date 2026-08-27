@@ -1,4 +1,4 @@
-# hyperlight
+# hyperwave
 
 A system audio visualiser that lives in the menu bar. It does one job.
 
@@ -11,7 +11,7 @@ of dots when nothing is playing. Roughly 118 × 22 points of menu bar.
 ## What makes this one different
 
 **No virtual audio driver.** macOS 14.2 shipped CoreAudio process taps, and
-hyperlight uses one: `CATapDescription` with an empty exclusion list gives a
+hyperwave uses one: `CATapDescription` with an empty exclusion list gives a
 global mix of everything the system is playing. There is no BlackHole to
 install, no output device to switch to, and no Screen Recording permission to
 grant — just a single "System Audio Recording" grant, and the audio path is
@@ -21,11 +21,11 @@ untouched.
 
 On a notched Mac the status item is not reliable. Measured on a 1728pt built-in
 display with an editor's nine menus on the left and fourteen status items on the
-right, hyperlight's strip gets pushed underneath the camera housing and becomes
+right, hyperwave's strip gets pushed underneath the camera housing and becomes
 invisible — while macOS still reports `statusItem.visible == true`. The app is
 running, the tap is working, and you see nothing.
 
-So on those Macs hyperlight also draws a panel anchored to the housing. The
+So on those Macs hyperwave also draws a panel anchored to the housing. The
 space directly below the notch is the one part of that region no other app
 competes for. It is additional, never a replacement: the status item is still
 what people expect to find and what they can drag.
@@ -112,7 +112,7 @@ player's reads −5.9 dB, which is not a close call.
 The level decays over about two seconds rather than tracking the signal, so a
 gap between tracks does not make an app blink out of the list. A scriptable app
 that reports itself paused overrides the meter, because it knows better.
-Verified end to end, with `HYPERLIGHT_METER_DEBUG=1`: silent machine with a 3D
+Verified end to end, with `HYPERWAVE_METER_DEBUG=1`: silent machine with a 3D
 editor and a paused player running, nothing listed; YouTube playing in Chrome,
 `Google Chrome −21.3 dB`; tab stopped, the level decaying away through −33 and
 −42 to nothing.
@@ -154,12 +154,12 @@ tap creation failing outright.
 **Running from a terminal masks all of this.** TCC attributes a capture request
 to the *responsible* process, and a binary exec'd from a shell inherits the
 terminal's grant rather than using its own. So running the executable directly
-works even with no grant of its own — and hyperlight will not appear in System
+works even with no grant of its own — and hyperwave will not appear in System
 Settings, because the permission in play belongs to the terminal. To exercise
 the real path, launch through LaunchServices:
 
 ```sh
-open build/hyperlight.app
+open build/hyperwave.app
 ```
 
 ## Requirements
@@ -176,7 +176,7 @@ is left.
 ```sh
 cmake --preset dev
 cmake --build --preset dev
-open build/hyperlight.app
+open build/hyperwave.app
 ```
 
 Qt is found automatically: `QT_ROOT` if set, otherwise the newest
@@ -220,8 +220,8 @@ configuration, a faked notch for developing the panel in clamshell, a
 capture-only run, and one entry per test binary for stepping into a failure.
 
 One wrinkle worth knowing before it costs you an afternoon: a debugger launches
-hyperlight as a child of VS Code, so **TCC uses VS Code's system-audio grant,
-not hyperlight's**. If VS Code has not been granted "System Audio Recording",
+hyperwave as a child of VS Code, so **TCC uses VS Code's system-audio grant,
+not hyperwave's**. If VS Code has not been granted "System Audio Recording",
 the tap is created, the IOProc fires, and every sample is zero — the app looks
 alive and the bars stay flat. There is a "Run as a real app (LaunchServices)"
 task for checking the other side of that.
@@ -236,8 +236,8 @@ task for checking the other side of that.
 | `--shot <path>` | Render one settled frame to a PNG and exit |
 | `--source <uid>` | Listen to one output device by UID. `--source list` prints them |
 | `--fake-notch` | Pretend the display has a notch, for developing the panel on an external monitor |
-| `HYPERLIGHT_FAKE_AUDIO=1` | Drive the DSP from a synthetic sweep, so the renderer can be worked on with no audio and no permission |
-| `HYPERLIGHT_METER_DEBUG=1` | Log the metered applications in priority order, any that ran out of tap slots, and the "Playing" list itself every two seconds. Every wrong answer this list has given was found by a human opening a menu and disagreeing with it; this makes the same question answerable in one command |
+| `HYPERWAVE_FAKE_AUDIO=1` | Drive the DSP from a synthetic sweep, so the renderer can be worked on with no audio and no permission |
+| `HYPERWAVE_METER_DEBUG=1` | Log the metered applications in priority order, any that ran out of tap slots, and the "Playing" list itself every two seconds. Every wrong answer this list has given was found by a human opening a menu and disagreeing with it; this makes the same question answerable in one command |
 
 ## Layout
 
@@ -260,14 +260,14 @@ chase "the bars look different on Windows" for a day.
 
 **`QSystemTrayIcon` cannot do this on macOS.** Qt's Cocoa plugin calls
 `setTemplate:` on the status-item image, and a template image is a monochrome
-mask — the gradient would arrive as a flat silhouette. hyperlight uses a native
+mask — the gradient would arrive as a flat silhouette. hyperwave uses a native
 `NSStatusItem` hosting a layer-backed view, and never assigns `button.image`.
 `QSystemTrayIcon` remains the right answer on Windows and Linux, where nothing
 flattens the icon.
 
 **The IOProc zeroes its output buffer unconditionally.** If the tap-only
 aggregate ever fails and we fall back to including the default output device as
-a sub-device, hyperlight becomes an output client of the user's speakers and
+a sub-device, hyperwave becomes an output client of the user's speakers and
 whatever sits in that buffer is what they hear. The HAL does not promise to hand
 it over zeroed. One `memset` per callback is the cheapest insurance in the
 project.
@@ -297,15 +297,15 @@ bug in the meter. Turning the source picker's `--source list` on a quiet machine
 is the cheapest way to see the same information without it.
 
 Halving the frame rate saves more than half, because most of the per-callback
-cost is AppKit's display-link dispatch rather than anything hyperlight draws.
+cost is AppKit's display-link dispatch rather than anything hyperwave draws.
 30 fps is used automatically in Low Power Mode.
 
 ## Licence
 
-hyperlight's own source is MIT. See [LICENSE](LICENSE).
+hyperwave's own source is MIT. See [LICENSE](LICENSE).
 
 What you may do with a **binary** depends on the Qt you linked, not on this
-repository. Built against open-source Qt, every module hyperlight uses today
+repository. Built against open-source Qt, every module hyperwave uses today
 offers LGPLv3, and the app links Qt's frameworks dynamically and unmodified.
 Built against a commercial Qt licence, no such obligation arises.
 

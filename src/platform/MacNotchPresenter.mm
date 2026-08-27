@@ -92,7 +92,7 @@ CGFloat expandedHeight(CGFloat notchHeight)
 // The panel's content view. Draws the black shape; the strip is a sublayer.
 // ---------------------------------------------------------------------------
 @interface HLNotchView : NSView
-@property (nonatomic, assign) hyperlight::MacNotchPresenter *presenter;
+@property (nonatomic, assign) hyperwave::MacNotchPresenter *presenter;
 @property (nonatomic, strong) CALayer *stripLayer;
 @property (nonatomic, strong) NSTextField *titleField;
 @property (nonatomic, strong) NSTextField *artistField;
@@ -102,7 +102,7 @@ CGFloat expandedHeight(CGFloat notchHeight)
 @property (nonatomic, assign) CGFloat notchWidth;
 @property (nonatomic, assign) BOOL expanded;
 - (void)layoutContent;
-- (void)setDevices:(const hyperlight::AudioDeviceList &)devices current:(const QString &)currentUid;
+- (void)setDevices:(const hyperwave::AudioDeviceList &)devices current:(const QString &)currentUid;
 @end
 
 @implementation HLNotchView {
@@ -296,7 +296,7 @@ CGFloat expandedHeight(CGFloat notchHeight)
 // A popup rather than a row of buttons: with ten output devices on this
 // machine the row was wider than the panel, and a device is a name rather than
 // an icon anyway -- "Scarlett Solo USB" does not have a face.
-- (void)setDevices:(const hyperlight::AudioDeviceList &)devices
+- (void)setDevices:(const hyperwave::AudioDeviceList &)devices
            current:(const QString &)currentUid
 {
     [_sources removeAllItems];
@@ -309,7 +309,7 @@ CGFloat expandedHeight(CGFloat notchHeight)
     if (!devices.isEmpty())
         [menu addItem:[NSMenuItem separatorItem]];
     NSMenuItem *selected = all;
-    for (const hyperlight::AudioDevice &device : devices) {
+    for (const hyperwave::AudioDevice &device : devices) {
         NSString *title = device.isDefaultOutput
             ? [NSString stringWithFormat:@"%@  ·  output", device.name.toNSString()]
             : device.name.toNSString();
@@ -334,7 +334,7 @@ CGFloat expandedHeight(CGFloat notchHeight)
 
 // A target for the display link, since a C++ object cannot be one.
 @interface HLNotchHook : NSObject
-@property (nonatomic, assign) hyperlight::MacNotchPresenter *presenter;
+@property (nonatomic, assign) hyperwave::MacNotchPresenter *presenter;
 - (void)step:(id)sender;
 - (void)menuItemChosen:(NSMenuItem *)sender;
 - (void)screenParametersChanged:(NSNotification *)note;
@@ -358,7 +358,7 @@ CGFloat expandedHeight(CGFloat notchHeight)
 
 @end
 
-namespace hyperlight {
+namespace hyperwave {
 
 struct MacNotchPresenter::Impl
 {
@@ -463,7 +463,7 @@ bool MacNotchPresenter::install()
                name:NSApplicationDidChangeScreenParametersNotification
              object:nil];
 
-    qInfo("hyperlight: notch panel installed (%.0f x %.0f pt notch)", g.notchWidth,
+    qInfo("hyperwave: notch panel installed (%.0f x %.0f pt notch)", g.notchWidth,
           g.notchHeight);
     return true;
 }
@@ -764,4 +764,4 @@ void MacNotchPresenter::emitMenuAction(const QString &actionId)
     Q_EMIT menuActionTriggered(actionId);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

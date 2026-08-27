@@ -21,15 +21,15 @@
 #include "audio/Downmix.h"
 #include "platform/AudioProcessProbe.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
-constexpr const char *kTapName = "Hyperlight System Audio";
+constexpr const char *kTapName = "Hyperwave System Audio";
 
 // Every tap this app creates starts with this, so the startup sweep can find
 // orphans from a previous run without knowing which kind they were.
-constexpr const char *kTapNamePrefix = "Hyperlight";
+constexpr const char *kTapNamePrefix = "Hyperwave";
 
 // Frames of scratch on the realtime stack. A device handing us more than this
 // in one callback would mean a buffer longer than 170 ms, which no output
@@ -205,7 +205,7 @@ bool CoreAudioTapSource::start()
             std::this_thread::sleep_for(std::chrono::milliseconds(25));
         }
         if (m_callbackCount.load(std::memory_order_relaxed) == 0) {
-            qInfo("hyperlight: tap-only aggregate produced no callbacks, falling back");
+            qInfo("hyperwave: tap-only aggregate produced no callbacks, falling back");
             stopIo();
             destroyAggregate();
             ok = false;
@@ -269,13 +269,34 @@ bool CoreAudioTapSource::createTap()
     CATapDescription *desc = nil;
     m_sourceNote.clear();
 
-    if (m_sourceDeviceUid.isEmpty()) {
+    // A chosen device that is no longer connected must not silently become
+    // silence. Pick "AirPods", walk away, and the tap is built for a device
+    // that is not there: it stays alive, delivers zeroes forever, and looks
+    // exactly like a revoked permission or a broken app. Fall back to the whole
+    // system mix and say why -- m_sourceNote is read back into m_statusDetail,
+    // which is what the HUD and the logs show.
+    bool sourcePresent = m_sourceDeviceUid.isEmpty();
+    if (!m_sourceDeviceUid.isEmpty()) {
+        for (const AudioDevice &device : AudioProcessProbe::listOutputDevices()) {
+            if (device.uid == m_sourceDeviceUid) {
+                sourcePresent = true;
+                break;
+            }
+        }
+        if (!sourcePresent) {
+            m_sourceNote = QStringLiteral("device %1 is not connected, using the system mix")
+                               .arg(m_sourceDeviceUid);
+            qInfo("hyperwave: %s", qPrintable(m_sourceNote));
+        }
+    }
+
+    if (!sourcePresent) {
         // An empty exclusion list is what makes this a global tap: every
         // process that outputs audio is included, wherever it is going. This is
         // the default, and it follows the default output device as the user
         // changes it.
         //
-        // We exclude nothing, because hyperlight never plays anything -- if that
+        // We exclude nothing, because hyperwave never plays anything -- if that
         // ever changes, our own process object belongs in this array or the
         // meter reacts to itself.
         desc = [[CATapDescription alloc] initStereoGlobalTapButExcludeProcesses:@[]];
@@ -298,7 +319,7 @@ bool CoreAudioTapSource::createTap()
     if (status != noErr || tap == kAudioObjectUnknown) {
         m_statusDetail = QStringLiteral("AudioHardwareCreateProcessTap failed (OSStatus %1)")
                              .arg(static_cast<int>(status));
-        qWarning("hyperlight: %s", qPrintable(m_statusDetail));
+        qWarning("hyperwave: %s", qPrintable(m_statusDetail));
         return false;
     }
     m_impl->tap = tap;
@@ -321,12 +342,12 @@ bool CoreAudioTapSource::buildAggregate(bool includeOutputDevice)
     if (!m_impl->tapUid)
         return false;
 
-    NSString *aggUid = [NSString stringWithFormat:@"com.hypernuclear.hyperlight.agg.%@",
+    NSString *aggUid = [NSString stringWithFormat:@"com.hypernuclear.hyperwave.agg.%@",
                                                   [[NSUUID UUID] UUIDString]];
 
     NSMutableDictionary *composition = [@{
         @(kAudioAggregateDeviceUIDKey) : aggUid,
-        @(kAudioAggregateDeviceNameKey) : @"Hyperlight Analyzer",
+        @(kAudioAggregateDeviceNameKey) : @"Hyperwave Analyzer",
         // Private: it does not appear in Sound preferences and it dies with us.
         @(kAudioAggregateDeviceIsPrivateKey) : @1,
         @(kAudioAggregateDeviceIsStackedKey) : @0,
@@ -346,7 +367,7 @@ bool CoreAudioTapSource::buildAggregate(bool includeOutputDevice)
     const OSStatus status =
         AudioHardwareCreateAggregateDevice((__bridge CFDictionaryRef)composition, &aggregate);
     if (status != noErr || aggregate == kAudioObjectUnknown) {
-        qWarning("hyperlight: AudioHardwareCreateAggregateDevice failed (%d)",
+        qWarning("hyperwave: AudioHardwareCreateAggregateDevice failed (%d)",
                  static_cast<int>(status));
         return false;
     }
@@ -603,7 +624,7 @@ bool CoreAudioTapSource::setSourceDeviceUid(const QString &uid)
     // TCC evaluation, but the grant is already in place by the time anyone can
     // reach the source picker, so in practice it is silent.
     if (m_running && !restartCapture()) {
-        qWarning("hyperlight: could not switch source, falling back to the system mix");
+        qWarning("hyperwave: could not switch source, falling back to the system mix");
         m_sourceDeviceUid.clear();
         restartCapture();
         Q_EMIT sourceChanged(m_sourceDeviceUid);
@@ -726,14 +747,14 @@ void CoreAudioTapSource::refreshMeterProcesses()
     }
     m_meter.setProcesses(candidates);
 
-    if (qEnvironmentVariableIsSet("HYPERLIGHT_METER_DEBUG")) {
-        qInfo("hyperlight: metering %d process(es) across %d app(s): %s", int(candidates.size()),
+    if (qEnvironmentVariableIsSet("HYPERWAVE_METER_DEBUG")) {
+        qInfo("hyperwave: metering %d process(es) across %d app(s): %s", int(candidates.size()),
               int(metered.size()), qPrintable(metered.join(QStringLiteral(", "))));
         // Never drop coverage silently: an app missing from the "Playing" list
         // because it lost a race for a tap slot looks exactly like a bug in the
         // meter, and this is the line that tells the two apart.
         if (!dropped.isEmpty()) {
-            qInfo("hyperlight: no tap slots left for %d app(s): %s", int(dropped.size()),
+            qInfo("hyperwave: no tap slots left for %d app(s): %s", int(dropped.size()),
                   qPrintable(dropped.join(QStringLiteral(", "))));
         }
     }
@@ -764,7 +785,7 @@ void CoreAudioTapSource::rebuildAfterHardwareChange()
     if (m_impl->outputDevice == previousDevice && std::abs(newRate - previousRate) < 1.0)
         return;   // a duplicate notification, nothing actually moved
 
-    qInfo("hyperlight: output device changed, rebuilding aggregate (%.0f -> %.0f Hz)",
+    qInfo("hyperwave: output device changed, rebuilding aggregate (%.0f -> %.0f Hz)",
           previousRate, newRate);
 
     // Only the aggregate is rebuilt. The global tap is not bound to a device,
@@ -856,13 +877,12 @@ void CoreAudioTapSource::sweepOrphanedTaps()
 
     for (AudioObjectID tap : taps) {
         CATapDescription *desc = nil;
-    m_sourceNote.clear();
         UInt32 descSize = sizeof(desc);
         AudioObjectPropertyAddress da = addr(kAudioTapPropertyDescription);
         if (AudioObjectGetPropertyData(tap, &da, 0, nullptr, &descSize, &desc) != noErr || !desc)
             continue;
-        if ([desc.name hasPrefix:@"Hyperlight"]) {
-            qInfo("hyperlight: destroying an orphaned tap from a previous run");
+        if ([desc.name hasPrefix:@"Hyperwave"]) {
+            qInfo("hyperwave: destroying an orphaned tap from a previous run");
             AudioHardwareDestroyProcessTap(tap);
         }
     }
@@ -873,4 +893,4 @@ std::unique_ptr<AudioSource> AudioSource::create(QObject *parent)
     return std::make_unique<CoreAudioTapSource>(parent);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

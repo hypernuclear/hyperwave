@@ -8,14 +8,14 @@ cmake_minimum_required(VERSION 3.16)
 # virtual audio driver.
 set(CMAKE_OSX_DEPLOYMENT_TARGET "14.2" CACHE STRING "Minimum macOS version")
 
-project(hyperlight VERSION 0.1.0 LANGUAGES CXX)
+project(hyperwave VERSION 0.1.0 LANGUAGES CXX)
 
 if(APPLE)
     enable_language(OBJC)
     enable_language(OBJCXX)
 endif()
 
-option(HYPERLIGHT_BUILD_TESTS "Build the headless test suite" ON)
+option(HYPERWAVE_BUILD_TESTS "Build the headless test suite" ON)
 
 # --- versions ---------------------------------------------------------------
 #
@@ -83,9 +83,9 @@ if(NOT CMAKE_PREFIX_PATH)
     endif()
 endif()
 
-set(HYPERLIGHT_QT_COMPONENTS Core Gui Widgets Svg Qml Quick QuickControls2 Test)
+set(HYPERWAVE_QT_COMPONENTS Core Gui Widgets Svg Qml Quick QuickControls2 Test)
 
-find_package(Qt6 6.11 QUIET COMPONENTS ${HYPERLIGHT_QT_COMPONENTS})
+find_package(Qt6 6.11 QUIET COMPONENTS ${HYPERWAVE_QT_COMPONENTS})
 if(NOT Qt6_FOUND)
     if(WIN32)
         message(FATAL_ERROR
@@ -102,7 +102,7 @@ if(NOT Qt6_FOUND)
             "  create CMakeUserPresets.json with a preset inheriting 'dev'\n")
     endif()
 endif()
-find_package(Qt6 6.11 REQUIRED COMPONENTS ${HYPERLIGHT_QT_COMPONENTS})
+find_package(Qt6 6.11 REQUIRED COMPONENTS ${HYPERWAVE_QT_COMPONENTS})
 qt_standard_project_setup(REQUIRES 6.11)
 
 # --- the shared core --------------------------------------------------------
@@ -114,7 +114,7 @@ qt_standard_project_setup(REQUIRES 6.11)
 # macOS status item are meant to be showing pixels from the SAME renderer, and
 # the moment the two platforms run different DSP you get to chase "the bars
 # look different on Windows" for a day.
-add_library(hyperlight_core STATIC
+add_library(hyperwave_core STATIC
     src/dsp/Fft.cpp
     src/dsp/Fft.h
     src/dsp/Window.cpp
@@ -138,11 +138,11 @@ add_library(hyperlight_core STATIC
     src/render/Palette.cpp
     src/render/Palette.h
 )
-target_include_directories(hyperlight_core PUBLIC src)
-target_link_libraries(hyperlight_core PUBLIC Qt6::Core Qt6::Gui)
+target_include_directories(hyperwave_core PUBLIC src)
+target_link_libraries(hyperwave_core PUBLIC Qt6::Core Qt6::Gui)
 
 # --- the app ----------------------------------------------------------------
-qt_add_executable(hyperlight
+qt_add_executable(hyperwave
     src/main.cpp
     src/app/App.cpp
     src/app/App.h
@@ -183,33 +183,33 @@ qt_add_executable(hyperlight
     $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/LinuxBarPresenter.cpp>
 )
 
-target_include_directories(hyperlight PRIVATE src)
-target_link_libraries(hyperlight PRIVATE
-    hyperlight_core
+target_include_directories(hyperwave PRIVATE src)
+target_link_libraries(hyperwave PRIVATE
+    hyperwave_core
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg Qt6::Qml Qt6::Quick Qt6::QuickControls2)
 
-target_compile_definitions(hyperlight PRIVATE
-    HYPERLIGHT_VERSION="${APP_VERSION_DISPLAY}"
-    HYPERLIGHT_VERSION_BUILD="${APP_VERSION_BUILD}")
+target_compile_definitions(hyperwave PRIVATE
+    HYPERWAVE_VERSION="${APP_VERSION_DISPLAY}"
+    HYPERWAVE_VERSION_BUILD="${APP_VERSION_BUILD}")
 
-qt_add_qml_module(hyperlight
-    URI hyperlight
+qt_add_qml_module(hyperwave
+    URI hyperwave
     VERSION 1.0
     QML_FILES
         qml/Settings.qml
 )
 
 if(APPLE)
-    set_target_properties(hyperlight PROPERTIES
+    set_target_properties(hyperwave PROPERTIES
         MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_GUI_IDENTIFIER com.hypernuclear.hyperlight
-        MACOSX_BUNDLE_BUNDLE_NAME hyperlight
+        MACOSX_BUNDLE_GUI_IDENTIFIER com.hypernuclear.hyperwave
+        MACOSX_BUNDLE_BUNDLE_NAME hyperwave
         MACOSX_BUNDLE_BUNDLE_VERSION ${APP_VERSION_BUILD}
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in
     )
 
-    target_link_libraries(hyperlight PRIVATE
+    target_link_libraries(hyperwave PRIVATE
         "-framework AppKit"
         "-framework CoreAudio"       # the process tap and the aggregate device
         "-framework AudioToolbox"
@@ -239,25 +239,25 @@ if(APPLE)
     # re-prompts for "System Audio Recording" forever. Signing with the real
     # Developer ID means the grant survives rebuilds, which matters more here
     # than in the sibling projects because the audio permission IS the app.
-    set(HYPERLIGHT_CODESIGN_IDENTITY
+    set(HYPERWAVE_CODESIGN_IDENTITY
         "Developer ID Application: Hypernuclear LLC (67J6LGVJDP)"
         CACHE STRING "codesign identity; empty to skip signing")
-    if(HYPERLIGHT_CODESIGN_IDENTITY)
-        add_custom_command(TARGET hyperlight POST_BUILD
-            COMMAND codesign --force --sign ${HYPERLIGHT_CODESIGN_IDENTITY}
+    if(HYPERWAVE_CODESIGN_IDENTITY)
+        add_custom_command(TARGET hyperwave POST_BUILD
+            COMMAND codesign --force --sign ${HYPERWAVE_CODESIGN_IDENTITY}
                     --timestamp=none
-                    --entitlements ${CMAKE_SOURCE_DIR}/hyperlight.entitlements
-                    $<TARGET_BUNDLE_DIR:hyperlight>
+                    --entitlements ${CMAKE_SOURCE_DIR}/hyperwave.entitlements
+                    $<TARGET_BUNDLE_DIR:hyperwave>
             COMMENT "Signing so the system-audio TCC grant survives rebuilds"
             VERBATIM)
     endif()
 endif()
 
 if(WIN32)
-    set_target_properties(hyperlight PROPERTIES WIN32_EXECUTABLE TRUE)
+    set_target_properties(hyperwave PROPERTIES WIN32_EXECUTABLE TRUE)
 endif()
 
-if(HYPERLIGHT_BUILD_TESTS)
+if(HYPERWAVE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()

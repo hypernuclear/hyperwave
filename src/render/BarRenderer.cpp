@@ -6,7 +6,7 @@
 #include <QPainter>
 #include <QPainterPath>
 
-namespace hyperlight {
+namespace hyperwave {
 
 QSize BarRenderer::pixelSize(const RenderStyle &style, qreal stripHeightPt, qreal dpr)
 {
@@ -138,4 +138,4 @@ void BarRenderer::render(const FrameState &state, const RenderStyle &style,
     }
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

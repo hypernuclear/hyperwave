@@ -5,7 +5,7 @@
 
 #include "render/RenderStyle.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // The named looks, as data rather than as code paths.
 //
@@ -36,4 +36,4 @@ public:
     static void applyTo(RenderStyle &style, const QString &presetId, const QColor &foreground);
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

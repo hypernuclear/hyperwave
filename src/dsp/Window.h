@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Periodic Hann window plus its coherent gain.
 //
@@ -29,4 +29,4 @@ private:
     float m_sum = 0.0f;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

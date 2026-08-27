@@ -10,7 +10,7 @@
 #include "dsp/FrameState.h"
 #include "render/RenderStyle.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Turns one analysed frame into one image. This is the only place in the
 // project that draws anything.
@@ -47,4 +47,4 @@ private:
     std::vector<QRectF> m_geometry;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

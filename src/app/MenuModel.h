@@ -3,7 +3,7 @@
 #include <QString>
 #include <QVector>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // A platform-free description of a menu.
 //
@@ -92,4 +92,4 @@ inline constexpr const char *kTransportNext = "transport-next";
 inline constexpr const char *kTransportPrevious = "transport-previous";
 } // namespace MenuAction
 
-} // namespace hyperlight
+} // namespace hyperwave

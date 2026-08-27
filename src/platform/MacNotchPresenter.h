@@ -6,13 +6,13 @@
 #include "app/NowPlaying.h"
 #include "platform/BarPresenter.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // A panel anchored to the camera housing, for Macs that have one.
 //
 // This exists because of a measured failure, not for decoration. On a 1728pt
 // notched display with a normal app's menus on the left and fourteen status
-// items on the right, hyperlight's status item gets pushed underneath the notch
+// items on the right, hyperwave's status item gets pushed underneath the notch
 // and becomes invisible -- while macOS still cheerfully reports
 // statusItem.visible == true. The app runs, the tap works, and the user sees
 // nothing and concludes it did not launch.
@@ -100,4 +100,4 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

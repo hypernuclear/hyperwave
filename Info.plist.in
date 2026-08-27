@@ -38,7 +38,7 @@
 	     dialog, so it has to answer the only question the user actually has,
 	     which is why an app they just launched wants to hear them. -->
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>hyperlight reads the audio your Mac is playing so it can draw it in the menu bar. Nothing is recorded, stored, or sent anywhere.</string>
+	<string>hyperwave reads the audio your Mac is playing so it can draw it in the menu bar. Nothing is recorded, stored, or sent anywhere.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 Hypernuclear LLC. All rights reserved.</string>
 </dict>

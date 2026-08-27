@@ -5,7 +5,7 @@
 
 #include "audio/Downmix.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 SpectrumAnalyzer::SpectrumAnalyzer() = default;
 
@@ -117,4 +117,4 @@ void SpectrumAnalyzer::reset()
     m_ballistics.reset();
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

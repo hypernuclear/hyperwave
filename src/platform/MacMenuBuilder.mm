@@ -1,6 +1,6 @@
 #include "platform/MacMenuBuilder.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 NSImage *appIconForBundle(const QString &bundleId, CGFloat size)
 {
@@ -72,11 +72,11 @@ void buildInto(NSMenu *menu, const MenuModel &model, id target, SEL action,
 
 NSMenu *buildNSMenu(const MenuModel &model, id target, SEL action, id<NSMenuDelegate> delegate)
 {
-    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"hyperlight"];
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"hyperwave"];
     menu.autoenablesItems = NO;
     menu.delegate = delegate;
     buildInto(menu, model, target, action, delegate);
     return menu;
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

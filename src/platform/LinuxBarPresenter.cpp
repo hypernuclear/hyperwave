@@ -16,7 +16,7 @@
 // No display link here either. Qt does expose the compositor's refresh rate via
 // QScreen::refreshRate, which is enough to pick a sensible timer interval.
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -47,4 +47,4 @@ std::unique_ptr<BarPresenter> BarPresenter::create(QObject *parent)
     return std::make_unique<LinuxBarPresenter>(parent);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

@@ -4,7 +4,7 @@
 
 #include "platform/BarPresenter.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // A native NSStatusItem hosting a layer-backed view.
 //
@@ -56,4 +56,4 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

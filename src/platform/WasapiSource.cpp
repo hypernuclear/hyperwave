@@ -25,7 +25,7 @@
 //
 // See docs/windows-backend.md.
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -62,4 +62,4 @@ std::unique_ptr<AudioSource> AudioSource::create(QObject *parent)
     return std::make_unique<WasapiSource>(parent);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

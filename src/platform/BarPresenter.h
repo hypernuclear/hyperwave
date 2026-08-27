@@ -7,7 +7,7 @@
 
 #include "app/MenuModel.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // The platform seam on the display side.
 //
@@ -80,4 +80,4 @@ Q_SIGNALS:
     void menuActionTriggered(const QString &actionId);
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

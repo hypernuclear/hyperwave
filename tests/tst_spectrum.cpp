@@ -7,7 +7,7 @@
 #include "dsp/DspConfig.h"
 #include "dsp/SpectrumAnalyzer.h"
 
-using namespace hyperlight;
+using namespace hyperwave;
 
 namespace {
 

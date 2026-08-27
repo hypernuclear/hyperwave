@@ -91,8 +91,8 @@ jobs:
           cmake -S . -B build -G Ninja ${{ matrix.cmake-args }} \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
-            -DHYPERLIGHT_BUILD_TESTS=ON \
-            -DHYPERLIGHT_CODESIGN_IDENTITY=""
+            -DHYPERWAVE_BUILD_TESTS=ON \
+            -DHYPERWAVE_CODESIGN_IDENTITY=""
 
       - name: Build
         run: cmake --build build -j 4

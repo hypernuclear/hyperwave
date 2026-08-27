@@ -12,7 +12,7 @@
 
 // The Objective-C classes have to sit at global scope -- the language has one
 // flat class namespace and the compiler rejects @interface inside a C++
-// namespace outright. Everything C++ goes back inside hyperlight below.
+// namespace outright. Everything C++ goes back inside hyperwave below.
 
 // ---------------------------------------------------------------------------
 // The view. Deliberately as dumb as possible: it hosts a layer and never draws
@@ -24,7 +24,7 @@
 // renderer viable at 60 fps.
 // ---------------------------------------------------------------------------
 @interface HLBarView : NSView
-@property (nonatomic, assign) hyperlight::MacBarPresenter *presenter;
+@property (nonatomic, assign) hyperwave::MacBarPresenter *presenter;
 @end
 
 @implementation HLBarView
@@ -61,7 +61,7 @@
 // A small Objective-C shim so the display link and the notification centre have
 // something to target. The C++ object cannot be a selector target directly.
 @interface HLPresenterHook : NSObject <NSMenuDelegate>
-@property (nonatomic, assign) hyperlight::MacBarPresenter *presenter;
+@property (nonatomic, assign) hyperwave::MacBarPresenter *presenter;
 - (void)step:(id)sender;
 - (void)statusItemClicked:(id)sender;
 - (void)menuItemChosen:(NSMenuItem *)sender;
@@ -116,7 +116,7 @@
 
 @end
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -179,7 +179,7 @@ bool MacBarPresenter::install()
 
     // macOS remembers where the user dragged the item across launches, but only
     // if it has a name to remember it by.
-    m_impl->statusItem.autosaveName = @"com.hypernuclear.hyperlight.status";
+    m_impl->statusItem.autosaveName = @"com.hypernuclear.hyperwave.status";
 
     m_impl->hook = [[HLPresenterHook alloc] init];
     m_impl->hook.presenter = this;
@@ -197,8 +197,8 @@ bool MacBarPresenter::install()
     // at all: VoiceOver has nothing to announce and the accessibility API
     // reports the item as a zero-sized rect, which also defeats scripting. The
     // label costs nothing and is the only thing standing in for the pixels.
-    button.accessibilityLabel = @"hyperlight audio visualiser";
-    button.toolTip = @"hyperlight";
+    button.accessibilityLabel = @"hyperwave audio visualiser";
+    button.toolTip = @"hyperwave";
     button.target = m_impl->hook;
     button.action = @selector(statusItemClicked:);
     [button sendActionOn:NSEventMaskLeftMouseUp | NSEventMaskRightMouseUp];
@@ -352,7 +352,7 @@ void MacBarPresenter::startClock()
     }
 
     if (!m_impl->clockRunning)
-        qWarning("hyperlight: no display link available; the strip will not animate");
+        qWarning("hyperwave: no display link available; the strip will not animate");
 }
 
 void MacBarPresenter::setPreferredFps(int fps)
@@ -458,4 +458,4 @@ std::unique_ptr<BarPresenter> BarPresenter::create(QObject *parent)
     return std::make_unique<MacBarPresenter>(parent);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

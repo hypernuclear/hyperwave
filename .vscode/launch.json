@@ -1,19 +1,19 @@
 {
-  // Debugging hyperlight has one wrinkle that is not obvious and will waste an
+  // Debugging hyperwave has one wrinkle that is not obvious and will waste an
   // afternoon if you meet it cold.
   //
   // TCC attributes a system-audio capture request to the RESPONSIBLE process,
   // not to the binary that made it. A debugger launches the executable as a
   // child, so every configuration below runs under Visual Studio Code's grant
-  // rather than hyperlight's own. Two consequences:
+  // rather than hyperwave's own. Two consequences:
   //
   //   * If VS Code has not been granted "System Audio Recording", the tap will
   //     be created, the IOProc will fire, and every sample will be zero. The
   //     app looks alive and the bars stay flat. macOS does not prompt for this.
   //     Grant it to VS Code once, in System Settings > Privacy & Security.
-  //   * Conversely, hyperlight can appear to work here while having no grant of
+  //   * Conversely, hyperwave can appear to work here while having no grant of
   //     its own at all. To exercise the real path, run the bundle through
-  //     LaunchServices instead: `open build/hyperlight.app`.
+  //     LaunchServices instead: `open build/hyperwave.app`.
   //
   // Everything else -- rendering, the DSP, the menu, the notch panel -- behaves
   // identically either way.
@@ -21,19 +21,19 @@
   "configurations": [
     {
       // The everyday one: the real menu bar item, exactly as it ships.
-      "name": "hyperlight: Menu bar",
+      "name": "hyperwave: Menu bar",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "Kill running hyperlight",
+      "preLaunchTask": "Kill running hyperwave",
       "args": [],
       "environment": [
         // cppdbg wants {"name","value"} pairs and silently ignores any other
         // shape, so {"VAR": "1"} looks right and does nothing.
         //
-        // { "name": "HYPERLIGHT_FAKE_AUDIO", "value": "1" },
+        // { "name": "HYPERWAVE_FAKE_AUDIO", "value": "1" },
         // { "name": "QT_LOGGING_RULES", "value": "*.debug=true" },
         // { "name": "QSG_INFO", "value": "1" }
       ],
@@ -47,13 +47,13 @@
       // Renderer work. Draws the strip into an ordinary window instead of the
       // menu bar, so the visuals can be iterated on without fighting the shell
       // or squinting at 22 points. The HUD comes with it.
-      "name": "hyperlight: Windowed (renderer)",
+      "name": "hyperwave: Windowed (renderer)",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "Kill running hyperlight",
+      "preLaunchTask": "Kill running hyperwave",
       "args": ["--windowed"],
       "environment": [],
       "osx": {
@@ -70,13 +70,13 @@
       // distinguishes "the tap is dead" from "the tap is fine and the machine
       // is quiet" from "we are being handed silence", which look identical from
       // the outside.
-      "name": "hyperlight: Menu bar + HUD",
+      "name": "hyperwave: Menu bar + HUD",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "Kill running hyperlight",
+      "preLaunchTask": "Kill running hyperwave",
       "args": ["--hud"],
       "environment": [],
       "osx": {
@@ -93,13 +93,13 @@
       // otherwise be developed in clamshell, and because on a real notched Mac
       // the top half of the panel is hidden behind the camera housing -- here
       // the whole shape is visible, which is what you want while laying it out.
-      "name": "hyperlight: Notch panel (faked)",
+      "name": "hyperwave: Notch panel (faked)",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "Kill running hyperlight",
+      "preLaunchTask": "Kill running hyperwave",
       "args": ["--fake-notch", "--hud"],
       "environment": [],
       "osx": {
@@ -114,13 +114,13 @@
       //
       // The fastest answer to "can it hear the system", and the right place to
       // put a breakpoint when the answer is no.
-      "name": "hyperlight: Verify capture",
+      "name": "hyperwave: Verify capture",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "Kill running hyperlight",
+      "preLaunchTask": "Kill running hyperwave",
       "args": ["--verify-audio"],
       "environment": [],
       "osx": {

@@ -2,7 +2,7 @@
 
 #include "dsp/DspConfig.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // The part of the chain that turns correct numbers into a display that feels
 // musical: attack/release smoothing, falling peak dots, slow automatic gain,
@@ -38,4 +38,4 @@ private:
     int m_silentFrames = 0;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

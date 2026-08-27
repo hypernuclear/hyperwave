@@ -5,7 +5,7 @@
 #include <QString>
 #include <QTimer>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // What is playing, and the controls for it.
 //
@@ -77,4 +77,4 @@ private:
     bool m_enabled = false;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

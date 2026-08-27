@@ -4,7 +4,7 @@
 #include <cmath>
 #include <utility>
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
@@ -133,4 +133,4 @@ void Fft::powerSpectrum(const float *in, float windowSum, float *outPower)
     }
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

@@ -5,7 +5,7 @@
 
 #include "dsp/DspConfig.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -99,4 +99,4 @@ void BandMapper::aggregate(const float *power, float *outDb) const
     }
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

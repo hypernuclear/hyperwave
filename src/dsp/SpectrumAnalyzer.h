@@ -9,7 +9,7 @@
 #include "dsp/FrameState.h"
 #include "dsp/Window.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Owns the whole analysis chain for one audio stream and produces one
 // FrameState per display frame.
@@ -74,4 +74,4 @@ private:
     std::uint32_t m_seq = 0;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

@@ -17,7 +17,7 @@
 //
 // See docs/windows-backend.md, which covers the Linux notes too.
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -54,4 +54,4 @@ std::unique_ptr<AudioSource> AudioSource::create(QObject *parent)
     return std::make_unique<PulseSource>(parent);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

@@ -3,7 +3,7 @@
 #include <QString>
 #include <QVector>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // An output device the system can play through.
 //
@@ -24,4 +24,4 @@ struct AudioDevice
 
 using AudioDeviceList = QVector<AudioDevice>;
 
-} // namespace hyperlight
+} // namespace hyperwave

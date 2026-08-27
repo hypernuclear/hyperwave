@@ -17,7 +17,7 @@
 #include "render/BarRenderer.h"
 #include "render/RenderStyle.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 class DebugHud;
 
@@ -111,4 +111,4 @@ private:
     int m_verifyTicks = 0;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

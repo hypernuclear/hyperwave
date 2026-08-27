@@ -1,6 +1,6 @@
 #include "app/NowPlaying.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Nothing here yet. Windows has GlobalSystemMediaTransportControlsSessionManager
 // in WinRT, which is the closest thing to what MediaRemote used to be on macOS
@@ -37,4 +37,4 @@ void NowPlaying::sendCommand(TransportCommand)
 {
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

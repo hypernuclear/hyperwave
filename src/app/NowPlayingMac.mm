@@ -4,7 +4,7 @@
 
 #include <QDebug>
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -62,7 +62,7 @@ QString runScript(NSString *source)
         static bool complained = false;
         if (!complained) {
             complained = true;
-            qWarning("hyperlight: now playing unavailable (%s)",
+            qWarning("hyperwave: now playing unavailable (%s)",
                      [[error description] UTF8String]);
         }
         return {};
@@ -186,4 +186,4 @@ void NowPlaying::sendCommand(TransportCommand command)
     QTimer::singleShot(250, this, &NowPlaying::poll);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

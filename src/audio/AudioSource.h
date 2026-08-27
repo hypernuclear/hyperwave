@@ -10,7 +10,7 @@
 #include "audio/AudioRing.h"
 #include "dsp/FrameState.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // The platform seam on the capture side.
 //
@@ -76,4 +76,4 @@ Q_SIGNALS:
     void processesChanged();
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

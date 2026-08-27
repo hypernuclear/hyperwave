@@ -4,7 +4,7 @@
     {
       // Every launch config depends on this, and it is not housekeeping.
       //
-      // hyperlight is a background agent with no window and no Dock icon, so a
+      // hyperwave is a background agent with no window and no Dock icon, so a
       // previous debug session that was stopped rather than quit leaves an
       // invisible process behind. That process still owns a status item, a
       // CoreAudio process tap, an aggregate device, and one metering tap per
@@ -15,9 +15,9 @@
       // that is what stops the IOProc before the ring it writes into is freed.
       // Wait up to three seconds, then insist. Always exits 0, so "nothing was
       // running" does not abort the launch.
-      "label": "Kill running hyperlight",
+      "label": "Kill running hyperwave",
       "type": "shell",
-      "command": "pkill -x hyperlight 2>/dev/null; for i in $(seq 1 30); do pgrep -x hyperlight >/dev/null || exit 0; sleep 0.1; done; pkill -9 -x hyperlight 2>/dev/null; exit 0",
+      "command": "pkill -x hyperwave 2>/dev/null; for i in $(seq 1 30); do pgrep -x hyperwave >/dev/null || exit 0; sleep 0.1; done; pkill -9 -x hyperwave 2>/dev/null; exit 0",
       "problemMatcher": [],
       "presentation": {
         "reveal": "silent",
@@ -48,16 +48,16 @@
     {
       // The one thing the debugger cannot do for you.
       //
-      // Launching under a debugger runs hyperlight as a child of VS Code, so
+      // Launching under a debugger runs hyperwave as a child of VS Code, so
       // TCC uses VS Code's system-audio grant. This task runs the real bundle
-      // through LaunchServices, where hyperlight is its own responsible process
+      // through LaunchServices, where hyperwave is its own responsible process
       // and its own permission applies. If it works here and not there, the
       // grant is the difference.
       "label": "Run as a real app (LaunchServices)",
       "type": "shell",
       "command": "open",
-      "args": ["${workspaceFolder}/build/hyperlight.app"],
-      "dependsOn": "Kill running hyperlight",
+      "args": ["${workspaceFolder}/build/hyperwave.app"],
+      "dependsOn": "Kill running hyperwave",
       "problemMatcher": [],
       "presentation": {
         "reveal": "silent",
@@ -68,7 +68,7 @@
       // Prints every output device with its UID, which is what --source takes.
       "label": "List audio sources",
       "type": "shell",
-      "command": "${workspaceFolder}/build/hyperlight.app/Contents/MacOS/hyperlight",
+      "command": "${workspaceFolder}/build/hyperwave.app/Contents/MacOS/hyperwave",
       "args": ["--source", "list"],
       "problemMatcher": [],
       "presentation": {

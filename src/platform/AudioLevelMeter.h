@@ -4,7 +4,7 @@
 
 #include <QVector>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Per-application output level.
 //
@@ -64,4 +64,4 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

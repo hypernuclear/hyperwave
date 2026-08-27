@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
@@ -30,4 +30,4 @@ void HannWindow::apply(const float *in, float *out) const
         out[i] = in[i] * m_w[i];
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

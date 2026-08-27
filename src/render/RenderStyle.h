@@ -2,7 +2,7 @@
 
 #include <QColor>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Everything the renderer needs to know about how the strip should look,
 // in points. The renderer multiplies by the device pixel ratio exactly once,
@@ -55,4 +55,4 @@ struct RenderStyle
     }
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

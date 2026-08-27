@@ -11,7 +11,7 @@
 #include "dsp/SeqLock.h"
 #include "dsp/SpectrumAnalyzer.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Owns the analysis loop and lives on its own thread.
 //
@@ -82,4 +82,4 @@ private:
     bool m_throttled = false;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

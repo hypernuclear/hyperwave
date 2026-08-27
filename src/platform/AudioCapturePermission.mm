@@ -2,7 +2,7 @@
 
 #import <AppKit/AppKit.h>
 
-namespace hyperlight::AudioCapturePermission {
+namespace hyperwave::AudioCapturePermission {
 
 void openSystemSettings()
 {
@@ -41,4 +41,4 @@ void notifyOnNextActivation(void (*callback)(void *), void *context)
                 }];
 }
 
-} // namespace hyperlight::AudioCapturePermission
+} // namespace hyperwave::AudioCapturePermission

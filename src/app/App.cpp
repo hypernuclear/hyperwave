@@ -18,7 +18,7 @@
 #include "platform/MacNotchPresenter.h"
 #endif
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -39,7 +39,7 @@ App::App(Options options, QObject *parent)
     , m_audio(std::make_unique<AudioController>())
     , m_nowPlaying(std::make_unique<NowPlaying>())
 {
-    m_dspThread.setObjectName(QStringLiteral("hyperlight.dsp"));
+    m_dspThread.setObjectName(QStringLiteral("hyperwave.dsp"));
 }
 
 App::~App()
@@ -151,7 +151,7 @@ bool App::start()
     // found by someone opening a menu and disagreeing with it, which is a slow
     // and unreliable way to test a measurement. This makes the same question
     // answerable in one command with no clicking.
-    if (qEnvironmentVariableIsSet("HYPERLIGHT_METER_DEBUG")) {
+    if (qEnvironmentVariableIsSet("HYPERWAVE_METER_DEBUG")) {
         auto *timer = new QTimer(this);
         timer->setInterval(2000);
         connect(timer, &QTimer::timeout, this, [this] {
@@ -164,7 +164,7 @@ bool App::start()
             QStringList playing;
             for (const AudioProcess &p : processes)
                 playing << QStringLiteral("%1 %2 dB").arg(p.name).arg(p.levelDb, 0, 'f', 1);
-            qInfo("hyperlight: playing: %s",
+            qInfo("hyperwave: playing: %s",
                   playing.isEmpty() ? "(nothing)" : qPrintable(playing.join(QStringLiteral(", "))));
         });
         timer->start();
@@ -181,7 +181,7 @@ bool App::start()
     if (!m_options.windowed) {
         addSurface(BarPresenter::create(this), false);
         if (m_surfaces.empty()) {
-            qCritical("hyperlight: could not create a menu bar item");
+            qCritical("hyperwave: could not create a menu bar item");
             return false;
         }
 
@@ -381,7 +381,7 @@ void App::onFrameDue(Surface &surface)
     // all zeros, which makes for a useless reference image.
     if (!m_options.shotPath.isEmpty() && surface.lastPresentedSeq > 120) {
         target.save(m_options.shotPath);
-        qInfo("hyperlight: wrote %s (%dx%d px, %.1f x %.1f pt @ %.0fx)",
+        qInfo("hyperwave: wrote %s (%dx%d px, %.1f x %.1f pt @ %.0fx)",
               qPrintable(m_options.shotPath), target.width(), target.height(),
               surface.style.stripWidthPt(), surface.heightPt, surface.dpr);
         QCoreApplication::quit();
@@ -420,7 +420,7 @@ void App::onPermissionChanged(int state)
                               state);
 
     if (static_cast<PermissionState>(state) == PermissionState::LikelyDenied) {
-        qWarning("hyperlight: system audio access appears to be denied. "
+        qWarning("hyperwave: system audio access appears to be denied. "
                  "Open the menu bar item to grant it.");
     }
     refreshMenu();
@@ -534,13 +534,13 @@ MenuModel App::buildMenu() const
                                  QStringLiteral("System Audio Access…")));
     if (m_audio->needsRestartToRecover()) {
         menu.append(MenuItem::action(QLatin1String(MenuAction::kRestart),
-                                     QStringLiteral("Restart hyperlight")));
+                                     QStringLiteral("Restart hyperwave")));
     }
     menu.append(MenuItem::separator());
     menu.append(
-        MenuItem::action(QLatin1String(MenuAction::kAbout), QStringLiteral("About hyperlight")));
+        MenuItem::action(QLatin1String(MenuAction::kAbout), QStringLiteral("About hyperwave")));
     menu.append(
-        MenuItem::action(QLatin1String(MenuAction::kQuit), QStringLiteral("Quit hyperlight")));
+        MenuItem::action(QLatin1String(MenuAction::kQuit), QStringLiteral("Quit hyperwave")));
     return menu;
 }
 void App::refreshMenu()
@@ -689,8 +689,8 @@ void App::applyFrameRate()
 void App::showAbout()
 {
     QMessageBox box;
-    box.setWindowTitle(QStringLiteral("hyperlight"));
-    box.setText(QStringLiteral("<b>hyperlight</b> %1").arg(QStringLiteral(HYPERLIGHT_VERSION)));
+    box.setWindowTitle(QStringLiteral("hyperwave"));
+    box.setText(QStringLiteral("<b>hyperwave</b> %1").arg(QStringLiteral(HYPERWAVE_VERSION)));
     box.setInformativeText(QStringLiteral("A system audio visualiser that lives in the menu bar."
                                           "\n\nCapture: %1\nRate: %2 Hz\n\n"
                                           "© 2026 Hypernuclear LLC")
@@ -737,4 +737,4 @@ void App::runVerifyTick()
     }
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

@@ -8,7 +8,7 @@
 #include "dsp/Fft.h"
 #include "dsp/Window.h"
 
-using namespace hyperlight;
+using namespace hyperwave;
 
 namespace {
 

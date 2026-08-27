@@ -11,7 +11,7 @@ Window {
 
     width: 380
     height: 240
-    title: qsTr("hyperlight")
+    title: qsTr("hyperwave")
 
     signal permissionRequested()
 

@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MIT licence, matching hyperbin, and `THIRD-PARTY-NOTICES.md` covering what a
   build actually links. Every Qt module's terms were read out of the
   `SPDX-License-Identifier` in its own installed headers rather than from the
-  documentation: everything hyperlight uses offers LGPLv3, and Qt Quick 3D —
+  documentation: everything hyperwave uses offers LGPLv3, and Qt Quick 3D —
   anticipated but not yet linked — is `LicenseRef-Qt-Commercial OR
   GPL-3.0-only`, with no LGPL option, which would make an open-source-Qt binary
   GPLv3 the moment it is added.
@@ -45,4 +45,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   6.11's repository layout, building and testing arm64 and x86_64 on every push
   and pull request.
 
-[Unreleased]: https://github.com/hypernuclear/hyperlight/commits/main
+[Unreleased]: https://github.com/hypernuclear/hyperwave/commits/main

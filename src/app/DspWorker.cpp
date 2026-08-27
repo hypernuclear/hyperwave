@@ -4,7 +4,7 @@
 
 #include "audio/Downmix.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -149,4 +149,4 @@ void DspWorker::tick()
     Q_EMIT silenceRunChanged(m_analyzer.exactZeroFrames());
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

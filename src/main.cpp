@@ -4,7 +4,7 @@
 
 #include "app/App.h"
 
-using namespace hyperlight;
+using namespace hyperwave;
 
 int main(int argc, char **argv)
 {
@@ -12,9 +12,9 @@ int main(int argc, char **argv)
     // debug HUD are Widgets. The menu bar item itself is native AppKit and
     // wants nothing from Qt at all.
     QApplication app(argc, argv);
-    app.setApplicationName(QStringLiteral("hyperlight"));
+    app.setApplicationName(QStringLiteral("hyperwave"));
     app.setOrganizationName(QStringLiteral("Hypernuclear"));
-    app.setApplicationVersion(QStringLiteral(HYPERLIGHT_VERSION));
+    app.setApplicationVersion(QStringLiteral(HYPERWAVE_VERSION));
 
     // The status item IS the app. Nothing here should die because a window
     // closed, and most of the time there are no windows at all.
@@ -64,10 +64,10 @@ int main(int argc, char **argv)
     options.shotPath = parser.value(shotOption);
     options.sourceBundleId = parser.value(sourceOption);
     options.fakeNotch = parser.isSet(fakeNotchOption);
-    options.fakeAudio = !qEnvironmentVariableIsEmpty("HYPERLIGHT_FAKE_AUDIO");
+    options.fakeAudio = !qEnvironmentVariableIsEmpty("HYPERWAVE_FAKE_AUDIO");
 
-    App hyperlightApp(options);
-    if (!hyperlightApp.start())
+    App hyperwaveApp(options);
+    if (!hyperwaveApp.start())
         return 1;
 
     return QApplication::exec();

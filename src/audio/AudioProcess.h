@@ -3,7 +3,7 @@
 #include <QString>
 #include <QVector>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // One process the audio system knows about.
 //
@@ -49,4 +49,4 @@ struct AudioProcess
 
 using AudioProcessList = QVector<AudioProcess>;
 
-} // namespace hyperlight
+} // namespace hyperwave

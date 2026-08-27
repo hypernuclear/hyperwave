@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Real-input FFT, power-of-two sizes, producing a normalised power spectrum.
 //
@@ -45,4 +45,4 @@ private:
     std::vector<float> m_re, m_im;               // scratch, allocated once
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

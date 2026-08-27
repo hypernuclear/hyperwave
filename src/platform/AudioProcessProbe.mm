@@ -9,7 +9,7 @@
 #import <AppKit/AppKit.h>
 #import <CoreAudio/AudioHardware.h>
 
-namespace hyperlight::AudioProcessProbe {
+namespace hyperwave::AudioProcessProbe {
 
 namespace {
 
@@ -233,4 +233,4 @@ AudioDeviceList listOutputDevices()
     return result;
 }
 
-} // namespace hyperlight::AudioProcessProbe
+} // namespace hyperwave::AudioProcessProbe

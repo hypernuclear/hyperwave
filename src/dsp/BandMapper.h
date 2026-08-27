@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Maps FFT bins onto the geometrically spaced display bands, and carries the
 // per-band aesthetic tilt.
@@ -40,4 +40,4 @@ private:
     int m_binMax = 0;   // and above this (codec artefacts, dither)
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

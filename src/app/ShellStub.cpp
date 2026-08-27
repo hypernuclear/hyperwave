@@ -3,7 +3,7 @@
 #include <QCoreApplication>
 #include <QProcess>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // No portable equivalent. Windows exposes a power-saver state through
 // SYSTEM_POWER_STATUS and PowerSettingRegisterNotification, and Linux desktops
@@ -26,4 +26,4 @@ void relaunchApp()
     QCoreApplication::quit();
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

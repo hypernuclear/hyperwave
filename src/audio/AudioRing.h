@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Lock-free single-producer / single-consumer float ring.
 //
@@ -104,4 +104,4 @@ private:
 // only grows the worst-case staleness we would then discard anyway.
 using MonoRing = AudioRing<65536>;
 
-} // namespace hyperlight
+} // namespace hyperwave

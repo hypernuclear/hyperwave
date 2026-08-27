@@ -3,7 +3,7 @@
 #include "audio/AudioDevice.h"
 #include "audio/AudioProcess.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // What the audio system knows about which processes exist and which are making
 // noise, independent of whether our tap is allowed to hear any of it.
@@ -51,4 +51,4 @@ QString appNameForBundleId(const QString &bundleId);
 
 } // namespace AudioProcessProbe
 
-} // namespace hyperlight
+} // namespace hyperwave

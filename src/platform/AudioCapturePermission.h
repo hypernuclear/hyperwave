@@ -1,6 +1,6 @@
 #pragma once
 
-namespace hyperlight {
+namespace hyperwave {
 
 // The two things the app needs to do about the system-audio grant that require
 // AppKit: send the user to the right place, and notice when they come back.
@@ -20,4 +20,4 @@ void notifyOnNextActivation(void (*callback)(void *), void *context);
 
 } // namespace AudioCapturePermission
 
-} // namespace hyperlight
+} // namespace hyperwave

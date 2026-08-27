@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace hyperlight {
+namespace hyperwave {
 
 void downmixInterleaved(const float *src, float *dst, std::uint32_t frames,
                         std::uint32_t channels) noexcept
@@ -76,4 +76,4 @@ bool isExactlyZero(const float *data, std::uint32_t frames) noexcept
     return true;
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

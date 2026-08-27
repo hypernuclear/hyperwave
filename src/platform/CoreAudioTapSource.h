@@ -12,7 +12,7 @@
 // Deliberately free of any Objective-C or CoreAudio type. The whole point of
 // this header is that App and AudioController can include it without dragging
 // AppKit into a translation unit that has no business seeing it.
-namespace hyperlight {
+namespace hyperwave {
 
 class CoreAudioTapSource : public AudioSource
 {
@@ -107,4 +107,4 @@ private:
     QString m_statusDetail;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

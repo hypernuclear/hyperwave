@@ -32,7 +32,7 @@
 //
 // See docs/windows-backend.md.
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -63,4 +63,4 @@ std::unique_ptr<BarPresenter> BarPresenter::create(QObject *parent)
     return std::make_unique<WinBarPresenter>(parent);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

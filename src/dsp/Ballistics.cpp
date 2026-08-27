@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace hyperlight {
+namespace hyperwave {
 
 void Ballistics::reset()
 {
@@ -126,4 +126,4 @@ void Ballistics::process(const float *levelDb, int bandCount, float frameRmsDb,
     }
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

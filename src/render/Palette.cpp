@@ -1,6 +1,6 @@
 #include "render/Palette.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -78,4 +78,4 @@ void Palette::applyTo(RenderStyle &style, const QString &presetId, const QColor 
     style.shadowColor = QColor(0, 0, 0, 42);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

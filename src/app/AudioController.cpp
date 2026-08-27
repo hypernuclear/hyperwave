@@ -9,7 +9,7 @@
 #include "platform/AudioProcessProbe.h"
 #endif
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -130,17 +130,17 @@ void AudioController::retryAfterGrant()
     // it does.
     switch (m_recoveryStage) {
     case 0:
-        qInfo("hyperlight: re-probing after a possible grant (rebuilding the aggregate)");
+        qInfo("hyperwave: re-probing after a possible grant (rebuilding the aggregate)");
         m_source->stop();
         m_source->start();
         break;
     case 1:
-        qInfo("hyperlight: still silent; recreating the tap");
+        qInfo("hyperwave: still silent; recreating the tap");
         m_source->stop();
         m_source->start();
         break;
     default:
-        qInfo("hyperlight: still silent after recreating the tap; a restart is needed");
+        qInfo("hyperwave: still silent after recreating the tap; a restart is needed");
         break;
     }
 
@@ -159,4 +159,4 @@ void AudioController::setPermission(PermissionState state)
     Q_EMIT permissionChanged(static_cast<int>(state));
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

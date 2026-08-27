@@ -7,7 +7,7 @@
 #include "audio/AudioRing.h"
 #include "audio/Downmix.h"
 
-using namespace hyperlight;
+using namespace hyperwave;
 
 class TstRing : public QObject
 {

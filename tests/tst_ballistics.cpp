@@ -6,7 +6,7 @@
 #include "dsp/Ballistics.h"
 #include "dsp/DspConfig.h"
 
-using namespace hyperlight;
+using namespace hyperwave;
 
 namespace {
 

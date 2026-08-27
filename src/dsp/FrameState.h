@@ -5,7 +5,7 @@
 
 #include "dsp/DspConfig.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 // What the capture layer currently believes about its permission to listen.
 //
@@ -41,4 +41,4 @@ static_assert(std::is_trivially_copyable_v<FrameState>,
               "FrameState travels through a seqlock and is memcpy'd wholesale");
 static_assert(sizeof(FrameState) < 512);
 
-} // namespace hyperlight
+} // namespace hyperwave

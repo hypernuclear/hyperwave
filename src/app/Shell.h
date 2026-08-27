@@ -1,6 +1,6 @@
 #pragma once
 
-namespace hyperlight {
+namespace hyperwave {
 
 // The handful of questions this app has to ask the operating system that Qt
 // either does not answer or answers wrongly for a background agent. Small on
@@ -27,4 +27,4 @@ void activateApp();
 // that is guaranteed to work.
 void relaunchApp();
 
-} // namespace hyperlight
+} // namespace hyperwave

@@ -2,7 +2,7 @@
 
 #import <AppKit/AppKit.h>
 
-namespace hyperlight {
+namespace hyperwave {
 
 bool isLowPowerMode()
 {
@@ -30,7 +30,7 @@ void relaunchApp()
                configuration:config
            completionHandler:^(NSRunningApplication *, NSError *error) {
                if (error)
-                   NSLog(@"hyperlight: relaunch failed: %@", error);
+                   NSLog(@"hyperwave: relaunch failed: %@", error);
                // Terminate from the main queue whatever thread this lands on.
                dispatch_async(dispatch_get_main_queue(), ^{
                    [NSApp terminate:nil];
@@ -38,4 +38,4 @@ void relaunchApp()
            }];
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

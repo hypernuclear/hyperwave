@@ -6,7 +6,7 @@
 
 class QLabel;
 
-namespace hyperlight {
+namespace hyperwave {
 
 class AudioSource;
 
@@ -42,4 +42,4 @@ private:
     FrameState m_frame;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

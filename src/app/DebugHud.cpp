@@ -8,7 +8,7 @@
 #include "audio/AudioSource.h"
 #include "dsp/DspConfig.h"
 
-namespace hyperlight {
+namespace hyperwave {
 
 namespace {
 
@@ -44,7 +44,7 @@ QString asciiBars(const FrameState &state)
 DebugHud::DebugHud(QWidget *parent)
     : QWidget(parent)
 {
-    setWindowTitle(QStringLiteral("hyperlight — debug"));
+    setWindowTitle(QStringLiteral("hyperwave — debug"));
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(16, 16, 16, 16);
@@ -124,4 +124,4 @@ void DebugHud::refresh()
     m_stats->setText(text);
 }
 
-} // namespace hyperlight
+} // namespace hyperwave

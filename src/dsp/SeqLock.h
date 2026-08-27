@@ -5,7 +5,7 @@
 #include <cstring>
 #include <type_traits>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // Single-writer, multi-reader publication of a small POD.
 //
@@ -56,4 +56,4 @@ private:
     alignas(64) T m_value{};
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

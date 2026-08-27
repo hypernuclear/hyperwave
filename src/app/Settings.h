@@ -4,7 +4,7 @@
 #include <QSettings>
 #include <QString>
 
-namespace hyperlight {
+namespace hyperwave {
 
 // The handful of things worth remembering between launches.
 //
@@ -18,7 +18,7 @@ public:
     // The store name is injectable so tests can use a throwaway one rather
     // than trampling the real preferences.
     explicit Settings(QObject *parent = nullptr,
-                      const QString &application = QStringLiteral("hyperlight"));
+                      const QString &application = QStringLiteral("hyperwave"));
 
     QString gradientId() const;
     void setGradientId(const QString &id);
@@ -60,4 +60,4 @@ private:
     QSettings m_store;
 };
 
-} // namespace hyperlight
+} // namespace hyperwave

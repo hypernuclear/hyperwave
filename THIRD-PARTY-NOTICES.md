@@ -1,6 +1,6 @@
 # Third-party notices
 
-hyperlight's own source is MIT — see `LICENSE`. This file covers everything
+hyperwave's own source is MIT — see `LICENSE`. This file covers everything
 else that ends up in, or is linked by, a build.
 
 Every claim below was checked against the licence text actually present in the
@@ -22,7 +22,7 @@ this repository says.
 
 Two consequences worth stating plainly:
 
-* **As hyperlight is built today** — Core, Gui, Widgets, Svg, Qml, Quick, Quick
+* **As hyperwave is built today** — Core, Gui, Widgets, Svg, Qml, Quick, Quick
   Controls 2, Test — every linked module offers LGPLv3, so a binary built
   against open-source Qt may be distributed under LGPLv3's terms: dynamic
   linking against unmodified Qt, and users able to relink against their own Qt.
@@ -32,7 +32,7 @@ Two consequences worth stating plainly:
 
 ### If Quick 3D is adopted
 
-Quick 3D is **not linked today** — it is absent from `HYPERLIGHT_QT_COMPONENTS`
+Quick 3D is **not linked today** — it is absent from `HYPERWAVE_QT_COMPONENTS`
 in `CMakeLists.txt`. It is listed here because it is anticipated, and because
 adopting it is the single change that would alter what may be shipped.
 
@@ -54,7 +54,7 @@ a GPLv3-encumbered binary even though this source is MIT.
 
 ## Everything else
 
-hyperlight vendors nothing. There is no `third_party/`, no submodule, no
+hyperwave vendors nothing. There is no `third_party/`, no submodule, no
 fetched dependency, no bundled font, and no committed artwork beyond the
 screenshots in `docs/`, which are our own.
 
