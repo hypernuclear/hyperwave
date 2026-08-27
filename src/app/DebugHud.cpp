@@ -1,5 +1,7 @@
 #include "app/DebugHud.h"
 
+#include <algorithm>
+
 #include <QFont>
 #include <QLabel>
 #include <QPixmap>
@@ -78,10 +80,17 @@ void DebugHud::setPreview(const QImage &image)
 {
     if (image.isNull())
         return;
-    // Nearest-neighbour on purpose: at this scale a smooth filter would hide
-    // exactly the pixel-level detail the preview exists to show.
+    // Magnify enough to be legible, but not past a window that fits on screen.
+    //
+    // A fixed 3x was right when the only thing to look at was a 236x44 strip.
+    // With --preview-scale the incoming image is already large, and tripling a
+    // 1416px render produces a four-thousand-pixel window that cannot be seen
+    // at all. Nearest-neighbour still, because the whole point of magnifying
+    // is to show the pixel-level detail a smooth filter would hide.
+    constexpr int kMaxPreviewWidth = 1200;
+    const int factor = std::max(1, kMaxPreviewWidth / std::max(1, image.width()));
     m_preview->setPixmap(QPixmap::fromImage(image).scaled(
-        image.size() * 3, Qt::KeepAspectRatio, Qt::FastTransformation));
+        image.size() * factor, Qt::KeepAspectRatio, Qt::FastTransformation));
 }
 
 void DebugHud::setFrame(const FrameState &state)

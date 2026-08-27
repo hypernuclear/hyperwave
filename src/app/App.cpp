@@ -240,6 +240,11 @@ bool App::start()
             // null and the first frame dereferences it.
             s->renderer = makeVisualiser(m_options.vizStyle.isEmpty() ? m_settings.vizStyle()
                                                                       : m_options.vizStyle);
+            // No presenter here, so onGeometryChanged() never runs and nothing
+            // else would apply the preview scale. Without this line
+            // --preview-scale silently did nothing in the one mode that exists
+            // to look at the visuals.
+            s->dpr = 2.0 * m_options.previewScale;
             m_surfaces.push_back(std::move(surface));
             rebuildStyle(*s);
             ensureBuffers(*s);
@@ -306,7 +311,13 @@ void App::rebuildStyle(Surface &surface)
         surface.style.insetRightPt = pad;
 #endif
     } else {
-        const bool compact = m_settings.compact() || surface.presenter->prefersCompact();
+        // The windowed surface has no presenter, and this dereferenced it
+        // unconditionally: --windowed segfaulted on launch, before drawing a
+        // single frame. It had been broken long enough to be committed to a
+        // VS Code configuration and documented in the README as the way to
+        // iterate on the visuals.
+        const bool compact = m_settings.compact()
+                             || (surface.presenter && surface.presenter->prefersCompact());
         surface.style.bandCount = compact ? kCompactBands : dsp::kBandCount;
     }
 

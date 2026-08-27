@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `--windowed` segfaulted on launch. The windowed surface has no presenter, and
+  `rebuildStyle()` dereferenced one unconditionally to ask whether it preferred
+  a compact strip — so the mode documented as the way to iterate on the visuals,
+  and committed as a VS Code configuration, crashed before drawing a frame.
+
 ### Added
 
 - System audio capture on macOS via CoreAudio process taps, with no virtual
@@ -41,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than the bars do -- 10.8% of a core against 12.0% -- and the strand count is
   effectively free, with 32 and 1024 measuring the same, because the whole CPU
   cost is the fixed offscreen round trip. Settable with HYPERWAVE_STRANDS.
+- Bars a point apart instead of two, as tight as they go while every edge still
+  lands on a whole device pixel at 1x, 2x and 3x. The strip narrows from 118 to
+  91 points as a result.
+- VS Code configurations for looking at a visualiser at a usable size, one of
+  which asks for the look, the magnification and the strand count at launch.
 - `--preview-scale`, which magnifies the windowed and `--shot` canvas so a
   visualiser can be looked at where its detail is visible rather than at
   118 x 22 points.

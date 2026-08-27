@@ -6,7 +6,13 @@ A system audio visualiser that lives in the menu bar. It does one job.
 
 Twenty-eight bars, a violet-to-cyan gradient anchored to the strip rather than
 to each bar, peak-hold dots that fall under gravity, and a fade to a resting row
-of dots when nothing is playing. Roughly 118 × 22 points of menu bar.
+of dots when nothing is playing. Roughly 91 × 22 points of menu bar.
+The bars sit a point apart, which is as tight as they go while staying crisp:
+they are positioned at `insetLeft + k * (width + gap)` and scaled by the device
+pixel ratio at paint time, so a 3pt stride is 3px at 1x, 6px at 2x and 9px at
+3x -- whole pixels everywhere. Half a point would be a half pixel on a
+non-Retina display, which looks fine on a laptop and blurry on someone's
+external monitor.
 
 ## Three looks
 
@@ -279,6 +285,13 @@ otherwise.
 menu bar item; the drop-down also has windowed mode for renderer work, a HUD
 configuration, a faked notch for developing the panel in clamshell, a
 capture-only run, and one entry per test binary for stepping into a failure.
+**"Large preview (pick a look)"** is the one for looking at a visualiser
+properly. It asks which look and how much to magnify, then draws into a window
+at that scale. A synthetic-audio variant also asks for a strand count and needs
+nothing playing and no capture permission, so it behaves the same on any
+machine. Magnification is applied as device pixel ratio rather than by
+stretching a bitmap, so line thickness, insets and bar widths scale in
+proportion and what you see is what the renderer would draw at that size.
 
 One wrinkle worth knowing before it costs you an afternoon: a debugger launches
 hyperwave as a child of VS Code, so **TCC uses VS Code's system-audio grant,

@@ -44,6 +44,55 @@
       }
     },
     {
+      // Looking at a visualiser properly.
+      //
+      // The menu bar strip is 118 x 22 points, which is not a size at which
+      // anything can be judged -- the strands look in particular is a bundle of
+      // hundreds of fine lines that reads as a smudge at that scale.
+      // --preview-scale magnifies the canvas by applying itself as the device
+      // pixel ratio, so the whole thing scales together: thickness, insets and
+      // bar widths all stay in proportion instead of a bitmap being stretched.
+      //
+      // Pick the look and the magnification when you hit F5.
+      "name": "hyperwave: Large preview (pick a look)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Kill running hyperwave",
+      "args": ["--windowed", "--viz", "${input:vizStyle}", "--preview-scale", "${input:previewScale}"],
+      "environment": [],
+      "osx": {
+        "MIMode": "lldb",
+        "targetArchitecture": "arm64",
+        "logging": { "moduleLoad": false }
+      }
+    },
+    {
+      // The same, driven by a synthetic sweep instead of the system mix, so
+      // there is always something moving to look at. Needs no audio playing and
+      // no capture permission at all, which makes it the one configuration that
+      // behaves identically on any machine.
+      "name": "hyperwave: Large preview (synthetic audio)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Kill running hyperwave",
+      "args": ["--windowed", "--viz", "${input:vizStyle}", "--preview-scale", "${input:previewScale}"],
+      "environment": [
+        { "name": "HYPERWAVE_FAKE_AUDIO", "value": "1" },
+        { "name": "HYPERWAVE_STRANDS", "value": "${input:strandCount}" }
+      ],
+      "osx": {
+        "MIMode": "lldb",
+        "targetArchitecture": "arm64",
+        "logging": { "moduleLoad": false }
+      }
+    },
+    {
       // Renderer work. Draws the strip into an ordinary window instead of the
       // menu bar, so the visuals can be iterated on without fighting the shell
       // or squinting at 22 points. The HUD comes with it.
@@ -182,6 +231,29 @@
       "args": [],
       "environment": [],
       "osx": { "MIMode": "lldb", "targetArchitecture": "arm64" }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "vizStyle",
+      "type": "pickString",
+      "description": "Which visualiser to draw",
+      "options": ["strands", "bars", "ridge"],
+      "default": "strands"
+    },
+    {
+      "id": "previewScale",
+      "type": "pickString",
+      "description": "How much to magnify the canvas",
+      "options": ["2", "4", "6", "8", "12"],
+      "default": "6"
+    },
+    {
+      "id": "strandCount",
+      "type": "pickString",
+      "description": "Strands in the bundle (ignored by the other looks)",
+      "options": ["32", "64", "128", "256", "512", "1024"],
+      "default": "128"
     }
   ]
 }

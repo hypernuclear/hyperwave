@@ -13,7 +13,18 @@ struct RenderStyle
     int bandCount = 28;
 
     qreal barWidthPt = 2.0;
-    qreal barGapPt = 2.0;
+
+    // One point, which is as tight as this can go and stay crisp.
+    //
+    // Bars sit at insetLeft + k * (width + gap) and are scaled by the device
+    // pixel ratio at paint time, so every one of those edges has to land on a
+    // whole device pixel or the raster engine antialiases the vertical sides
+    // and the row goes soft. With a 1pt gap the stride is 3pt, which is 3px at
+    // 1x, 6px at 2x and 9px at 3x -- integers everywhere. 0.5pt would be half a
+    // pixel on a non-Retina display, and 1.5pt would be one and a half; both
+    // look fine on this laptop and blurry on someone's external monitor, which
+    // is the worst way for a thing like this to be wrong.
+    qreal barGapPt = 1.0;
     qreal insetLeftPt = 4.0;
     qreal insetRightPt = 4.0;
 
