@@ -4,6 +4,8 @@
 #include <QSettings>
 #include <QString>
 
+#include "render/RenderStyle.h"
+
 namespace hyperwave {
 
 // The handful of things worth remembering between launches.
@@ -28,6 +30,17 @@ public:
     // without becoming a different look by accident.
     QString vizStyle() const;
     void setVizStyle(const QString &id);
+    // The visualiser parameters, persisted field by field.
+    //
+    // Field by field rather than as a blob because a blob written by a newer
+    // build is unreadable by an older one, and because a single unknown key is
+    // then the difference between one parameter falling back to its default and
+    // all of them doing so.
+    RenderStyle::Strands strands() const;
+    void setStrands(const RenderStyle::Strands &strands);
+    RenderStyle::Ridge ridge() const;
+    void setRidge(const RenderStyle::Ridge &ridge);
+    void resetVisualiserParameters();
 
     // Compact mode narrows the strip and drops the band count. Worth having as
     // a preference rather than a pure heuristic: on a notched display a 108pt
@@ -57,6 +70,7 @@ public:
 
 Q_SIGNALS:
     void gradientIdChanged(const QString &id);
+    void visualiserParametersChanged();
     void vizStyleChanged(const QString &id);
     void compactChanged(bool compact);
     void sourceDeviceUidChanged(const QString &uid);

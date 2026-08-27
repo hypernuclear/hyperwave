@@ -51,6 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bars a point apart instead of two, as tight as they go while every edge still
   lands on a whole device pixel at 1x, 2x and 3x. The strip narrows from 118 to
   91 points as a result.
+- A settings window, opened from `Settings…` in the menu, with every parameter
+  of the running visualiser. Values take effect on the next frame and persist
+  field by field, so a store written by an older build keeps whatever it knows
+  and picks up new parameters at their defaults.
+- Tuned defaults for both new looks, chosen by eye rather than by argument. The
+  terrain drops from forty rows to ten, which reads as distinct travelling
+  ridges instead of a solid mass and is cheaper besides; the strands go to
+  thirty-two at full opacity and a tenth-point thickness, which is woven rather
+  than smeared.
 - Live controls in the debug window: the visualiser, the magnification and
   every parameter of the strands and the terrain, each taking effect on the
   next frame. They replace a flag per parameter and one process per

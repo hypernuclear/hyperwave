@@ -49,6 +49,17 @@ ridge of mountains sliding backwards as it ages.
 ![terrain](docs/terrain.png)
 
 Switch in `Appearance ▸`, or `--viz ridge` for one run.
+**`Settings…`** in the menu opens a window with every parameter of whichever
+look is running -- count, radius, thickness, fill, tilt, twists, spin, opacity
+and gain for the strands; rows, subdivision, columns, depth, amplitude and line
+width for the terrain -- each taking effect on the next frame and saved as it
+changes. "Reset to defaults" clears the stored values rather than writing the
+current ones back, so a later change to a default is picked up rather than
+frozen at whatever shipped.
+It is the same widget the debug HUD embeds. Keeping it one widget is what stops
+a parameter existing for development and being unreachable by anyone outside
+this repository.
+![settings](docs/settings.png)
 
 It is projected in software, not on the GPU, and that is a deliberate choice
 rather than a shortcut. The targets are a 118 × 22 pt status item and a notch

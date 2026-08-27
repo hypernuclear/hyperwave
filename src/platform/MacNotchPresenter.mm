@@ -349,6 +349,18 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _presenter->emitFrameDue();
 }
 
+- (void)menuItemChosen:(NSMenuItem *)sender
+{
+    // Declared but never implemented, while the panel's menu wired every item
+    // to it. Choosing anything in that menu raised an unrecognised selector and
+    // took the app down -- and that menu is not a convenience, it is the only
+    // way in on a display where the status item has been crowded under the
+    // notch. The compiler had been saying so the whole time, as
+    // -Wincomplete-implementation.
+    if (_presenter && [sender.representedObject isKindOfClass:[NSString class]])
+        _presenter->emitMenuAction(QString::fromNSString(sender.representedObject));
+}
+
 - (void)screenParametersChanged:(NSNotification *)note
 {
     (void)note;

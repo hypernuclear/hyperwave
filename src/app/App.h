@@ -12,6 +12,7 @@
 #include "app/MenuModel.h"
 #include "app/NowPlaying.h"
 #include "app/Settings.h"
+#include "app/VisualiserControls.h"
 #include "dsp/FrameState.h"
 #include "platform/BarPresenter.h"
 #include "render/BarRenderer.h"
@@ -101,7 +102,9 @@ private:
     // it. onGeometryChanged() cannot serve here: it returns early when there is
     // no presenter, which is exactly what the preview window is.
     void refreshSurface(Surface &surface);
-    void connectHudControls();
+    void connectControls(VisualiserControls *controls);
+    void applyVisualiserTuning();
+    void showSettings();
 
     void applyFrameRate();
     void setNotchTabVisible(bool visible);
@@ -123,6 +126,10 @@ private:
     std::unique_ptr<AudioController> m_audio;
     std::unique_ptr<NowPlaying> m_nowPlaying;
     std::unique_ptr<DebugHud> m_hud;
+    // The user-facing settings window. Lazily built, kept alive so it reopens
+    // where it was left rather than being rebuilt each time.
+    std::unique_ptr<QWidget> m_settingsWindow;
+    VisualiserControls *m_settingsControls = nullptr;
 
     // Deque rather than vector: surfaces hand out references that outlive the
     // call, and a vector reallocating on the second push would dangle them.

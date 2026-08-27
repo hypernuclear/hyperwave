@@ -8,6 +8,7 @@
 #include <QGuiApplication>
 #include <QMessageBox>
 #include <QPalette>
+#include <QVBoxLayout>
 #include <QTimer>
 
 #include "app/DebugHud.h"
@@ -64,18 +65,32 @@ void App::refreshSurface(Surface &surface)
     onFrameDue(surface);
 }
 
-void App::connectHudControls()
+void App::applyVisualiserTuning()
 {
-    if (!m_hud)
+    for (auto &surface : m_surfaces)
+        refreshSurface(*surface);
+    onAudioBecameActive();
+    // Both panels show the same values, so whichever one did not originate the
+    // change has to be told. Seeding is guarded against echoing back.
+    if (m_hud && m_hud->controls()) {
+        m_hud->controls()->setStrands(m_strandTuning);
+        m_hud->controls()->setRidge(m_ridgeTuning);
+    }
+    if (m_settingsControls) {
+        m_settingsControls->setStrands(m_strandTuning);
+        m_settingsControls->setRidge(m_ridgeTuning);
+    }
+}
+void App::connectControls(VisualiserControls *controls)
+{
+    if (!controls)
         return;
-
-    m_hud->setVisualiser(m_options.vizStyle.isEmpty() ? m_settings.vizStyle()
-                                                      : m_options.vizStyle);
-    m_hud->setPreviewScale(m_options.previewScale);
-    m_hud->setStrands(m_strandTuning);
-    m_hud->setRidge(m_ridgeTuning);
-
-    connect(m_hud.get(), &DebugHud::visualiserRequested, this, [this](const QString &id) {
+    controls->setVisualiser(m_options.vizStyle.isEmpty() ? m_settings.vizStyle()
+                                                         : m_options.vizStyle);
+    controls->setPreviewScale(m_options.previewScale);
+    controls->setStrands(m_strandTuning);
+    controls->setRidge(m_ridgeTuning);
+    connect(controls, &VisualiserControls::visualiserRequested, this, [this](const QString &id) {
         m_options.vizStyle = id;
         m_settings.setVizStyle(id);
         for (auto &surface : m_surfaces) {
@@ -83,8 +98,12 @@ void App::connectHudControls()
             refreshSurface(*surface);
         }
         onAudioBecameActive();
+        if (m_hud && m_hud->controls())
+            m_hud->controls()->setVisualiser(id);
+        if (m_settingsControls)
+            m_settingsControls->setVisualiser(id);
     });
-    connect(m_hud.get(), &DebugHud::previewScaleRequested, this, [this](qreal scale) {
+    connect(controls, &VisualiserControls::previewScaleRequested, this, [this](qreal scale) {
         m_options.previewScale = scale;
         for (auto &surface : m_surfaces) {
             if (!surface->presenter)
@@ -93,22 +112,46 @@ void App::connectHudControls()
         }
         onAudioBecameActive();
     });
-    connect(m_hud.get(), &DebugHud::strandsRequested, this,
+    connect(controls, &VisualiserControls::strandsRequested, this,
             [this](const RenderStyle::Strands &strands) {
                 m_strandTuning = strands;
-                for (auto &surface : m_surfaces)
-                    refreshSurface(*surface);
-                onAudioBecameActive();
+                m_settings.setStrands(strands);
+                applyVisualiserTuning();
             });
-    connect(m_hud.get(), &DebugHud::ridgeRequested, this,
+    connect(controls, &VisualiserControls::ridgeRequested, this,
             [this](const RenderStyle::Ridge &ridge) {
                 m_ridgeTuning = ridge;
-                for (auto &surface : m_surfaces)
-                    refreshSurface(*surface);
-                onAudioBecameActive();
+                m_settings.setRidge(ridge);
+                applyVisualiserTuning();
             });
+    connect(controls, &VisualiserControls::resetRequested, this, [this] {
+        m_settings.resetVisualiserParameters();
+        const RenderStyle defaults;
+        m_strandTuning = defaults.strands;
+        m_ridgeTuning = defaults.ridge;
+        applyVisualiserTuning();
+    });
 }
-
+void App::showSettings()
+{
+    if (!m_settingsWindow) {
+        m_settingsWindow = std::make_unique<QWidget>();
+        m_settingsWindow->setWindowTitle(QStringLiteral("hyperwave settings"));
+        auto *layout = new QVBoxLayout(m_settingsWindow.get());
+        layout->setContentsMargins(18, 18, 18, 18);
+        // No magnification here: it exists to inspect a renderer at a size the
+        // menu bar cannot show, which is a development concern rather than
+        // something to offer alongside the look itself.
+        m_settingsControls =
+            new VisualiserControls({false, true}, m_settingsWindow.get());
+        layout->addWidget(m_settingsControls);
+        layout->addStretch();
+        connectControls(m_settingsControls);
+    }
+    m_settingsWindow->show();
+    m_settingsWindow->raise();
+    m_settingsWindow->activateWindow();
+}
 App::App(Options options, QObject *parent)
     : QObject(parent)
     , m_options(std::move(options))
@@ -117,6 +160,9 @@ App::App(Options options, QObject *parent)
     , m_nowPlaying(std::make_unique<NowPlaying>())
 {
     m_dspThread.setObjectName(QStringLiteral("hyperwave.dsp"));
+    // Whatever was tuned last time, before anything draws a frame.
+    m_strandTuning = m_settings.strands();
+    m_ridgeTuning = m_settings.ridge();
 
     // The environment variable seeds the tuning rather than being consulted on
     // every restyle, so the HUD's slider can move away from it afterwards
@@ -297,7 +343,7 @@ bool App::start()
     if (m_options.windowed || m_options.hud) {
         m_hud = std::make_unique<DebugHud>();
         m_hud->setSource(m_audio->source());
-        connectHudControls();
+        connectControls(m_hud->controls());
         m_hud->show();
 
         if (m_options.windowed) {
@@ -668,6 +714,8 @@ MenuModel App::buildMenu() const
                                      QStringLiteral("Restart hyperwave")));
     }
     menu.append(MenuItem::separator());
+    menu.append(MenuItem::action(QLatin1String(MenuAction::kSettings),
+                                QStringLiteral("Settings…")));
     menu.append(
         MenuItem::action(QLatin1String(MenuAction::kAbout), QStringLiteral("About hyperwave")));
     menu.append(
@@ -804,6 +852,10 @@ void App::onMenuAction(const QString &actionId)
     }
     if (actionId == QLatin1String(MenuAction::kRestart)) {
         relaunch();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kSettings)) {
+        showSettings();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kAbout)) {

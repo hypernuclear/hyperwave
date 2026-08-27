@@ -85,6 +85,7 @@ inline constexpr const char *kToggleNowPlaying = "toggle-now-playing";
 inline constexpr const char *kToggleNotch = "toggle-notch";
 inline constexpr const char *kRequestPermission = "request-permission";
 inline constexpr const char *kRestart = "restart";
+inline constexpr const char *kSettings = "settings";
 inline constexpr const char *kAbout = "about";
 inline constexpr const char *kQuit = "quit";
 inline constexpr const char *kToggleAutoHide = "toggle-auto-hide";

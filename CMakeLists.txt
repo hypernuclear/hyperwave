@@ -161,6 +161,7 @@ qt_add_executable(hyperwave
     src/app/Settings.cpp
     src/app/Settings.h
     src/app/DebugHud.cpp
+    src/app/VisualiserControls.cpp
     src/app/DebugHud.h
     src/app/Shell.h
     src/app/NowPlaying.h

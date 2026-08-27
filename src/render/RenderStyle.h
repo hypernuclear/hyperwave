@@ -66,41 +66,41 @@ struct RenderStyle
     // one struct is cheaper than a variant and keeps App's style code single.
     struct Ridge
     {
-        // Time slices held in the terrain. Forty at a row per frame is two
-        // thirds of a second of history at 60 fps: long enough to watch a
-        // phrase arrive, short enough that the back of the terrain is still
-        // related to what you are hearing.
+        // Time slices held in the terrain. Ten at a row per frame is about a
+        // sixth of a second of history at 60 fps -- short, deliberately: a long
+        // tail turned the shape into a solid mass, and what reads best is a few
+        // distinct ridges you can watch travel backwards.
         //
         // This is also the dominant cost. Halving it very nearly halves the
         // frame, which no other knob here does, so it is the first thing to
         // reach for and the last thing to raise.
-        int rows = 40;
+        int rows = 10;
         int frameStride = 1;
 
         // Antialiasing is the single most expensive thing this look does, and
-        // with forty overlapping translucent ridges it buys less than it does
-        // for a lone curve -- the terrain is its own antialiasing. Measured
-        // both ways before choosing.
+        // it matters more now than it did at forty rows: with only ten ridges
+        // there is far less overlap to hide a stair-stepped edge. Measured both
+        // ways before choosing.
         bool antialias = true;
 
         // Lines the other way, every Nth sample, which is what turns a stack of
         // separate curves into one surface you can read the shape of. Zero
         // turns them off. They are drawn after the ridges and fainter, so they
         // suggest the mesh rather than competing with it.
-        int columnStride = 8;
+        int columnStride = 5;
         qreal columnOpacity = 0.35;
 
         // Interpolation between bands, Catmull-Rom. Twenty-eight points across
-        // a strip is visibly faceted; three samples per band turns the ridges
-        // into curves for about a fifth of the frame.
-        int subdivision = 3;
+        // a strip is visibly faceted; four samples per band turns the ridges
+        // into curves, and with ten rows the extra points are affordable.
+        int subdivision = 4;
 
         // Perspective. depth is how much further the oldest row is than the
-        // newest, as a multiple of the eye distance, so 1.6 means the back of
-        // the terrain is 2.6x away and draws at 38% scale.
-        qreal depth = 1.6;
+        // newest, as a multiple of the eye distance, so 1.9 means the back of
+        // the terrain is 2.9x away and draws at 34% scale.
+        qreal depth = 1.9;
         qreal spreadX = 0.92;    // fraction of the width the nearest row spans
-        qreal amplitude = 0.55;  // fraction of the height a full-scale band rises
+        qreal amplitude = 0.75;  // fraction of the height a full-scale band rises
         qreal baseline = 0.88;   // where the nearest row sits, 0 = top
         qreal horizon = 0.30;    // where infinitely far rows converge to
         // A little lateral slide with depth. Pure symmetric convergence reads
@@ -110,7 +110,7 @@ struct RenderStyle
         // front and steep at the back, which keeps the near ridges legible
         // without the far ones turning into a solid mass.
         qreal fadeExponent = 1.5;
-        qreal lineWidthPt = 0.7;
+        qreal lineWidthPt = 0.2;
     };
     Ridge ridge;
 
@@ -125,34 +125,34 @@ struct RenderStyle
         // the one parameter that trades density against cost, and the right
         // number is not the same for a 118pt strip and a panel. Instanced, so
         // raising it makes the draw bigger rather than making more draws.
-        int count = 64;
+        int count = 32;
 
         // Points along each strand, expanded to two vertices each. Uploaded
         // once at startup and never touched again.
         int segments = 200;
 
-        qreal radius = 0.10;      // resting radius of the tube, model units
+        qreal radius = 0.21;      // resting radius of the tube, model units
         // Ribbon width in points, converted to clip units against the target
         // height before it reaches the shader. The original expressed this in
         // clip space, which is fine for a full window and useless here: 0.01 of
         // a 44px-tall strip is a quarter of a pixel, which is nothing at all.
-        qreal thicknessPt = 0.6;
+        qreal thicknessPt = 0.1;
         // How much of the height the tube fills. The model radius is small so
         // that the noise octaves stay in a sane range; this scales the whole
         // bundle up to the target afterwards.
-        qreal fill = 1.8;
+        qreal fill = 2.2;
         // Tilt, in degrees, so the tube reads as a solid object rather than a
         // flat ribbon that happens to wobble.
-        qreal tiltDegrees = 18.0;
-        qreal twists = 0.5;       // turns along the length -- the finger trap
-        qreal opacity = 0.5;
+        qreal tiltDegrees = 30.4;
+        qreal twists = 0.44;       // turns along the length -- the finger trap
+        qreal opacity = 1.0;
 
         // The spectrum arrives 0..1 already, but a strip that has to read at a
         // glance wants the quiet parts pushed up. Applied before clamping.
-        qreal audioGain = 1.0;
+        qreal audioGain = 0.73;
 
-        // Radians per second the bundle turns. Slow, because this is ambient.
-        qreal spinRate = 0.35;
+        // Radians per second the bundle turns.
+        qreal spinRate = 0.93;
     };
     Strands strands;
 
