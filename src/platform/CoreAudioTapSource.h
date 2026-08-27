@@ -41,6 +41,10 @@ public:
     bool setInputEnabled(bool enabled) override;
     bool inputEnabled() const override { return m_inputEnabled; }
     MonoRing *inputRing() override { return m_input.ring(); }
+    std::uint64_t inputBacklogFrames() const override
+    {
+        return m_inputEnabled ? m_input.backlogFrames() : 0;
+    }
 
     std::uint64_t callbackCount() const override
     {

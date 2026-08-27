@@ -161,6 +161,26 @@ void DspWorker::tick()
             // of it, and beats resampling a signal that is going to be reduced
             // to twenty-eight numbers anyway.
             if (m_inputRing) {
+                // Throw away the input's backlog first, exactly as the output
+                // ring does above.
+                //
+                // Without this the microphone ran over a second late and stayed
+                // there. Two devices on two clocks never deliver in step, so any
+                // excess the input produces accumulates; the ring holds 65,536
+                // frames, so it filled up and simply stayed full, and every
+                // sample mixed in was a second and a bit old. The output path
+                // had always discarded its backlog to stay current -- the input
+                // path was the one that did not.
+                // Keep only what is about to be mixed, which is far less than
+                // the output ring keeps.
+                //
+                // The output holds two windows because the analyser reads a
+                // whole FFT frame out of it. The input is summed into a block
+                // that has already been read, so anything beyond that block is
+                // not early, it is late: at two windows the microphone sat 85 ms
+                // behind, which is inaudible on music you are already hearing
+                // and very obvious on a room.
+                m_inputRing->discardAllButNewest(got);
                 const auto want = static_cast<std::uint32_t>(
                     std::min<std::uint64_t>(m_inputRing->available(), got));
                 if (want > 0) {

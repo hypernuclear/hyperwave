@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The microphone ran most of a second late. The output ring discards its backlog
+  every tick to stay current and the input ring did not, so with two devices on
+  two clocks the excess simply accumulated until the ring was full and stayed
+  there. It now keeps only the block about to be mixed, which is much less than
+  the output keeps: the analyser reads a whole FFT frame out of the output ring,
+  while anything in the input ring beyond the current block is not early but
+  late. Measured queue depth went from 65,536 frames to about 1,024 -- roughly
+  680 ms to 11 ms at 96 kHz -- and the depth is now shown in the HUD and in
+  `--verify-audio`, because a queue that grows is latency and should be visible
+  rather than inferred.
 - The glow flipped every frame vertically. The post-process takes its texture
   coordinate from the fullscreen triangle's vertex position, and clip space is
   y-up where an uploaded QImage is v-down, so each frame was sampled upside down
@@ -62,6 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows and Linux presenters, each documenting the chosen approach.
 - Headless tests for the ring buffer, the FFT (against a naive DFT), the
   spectrum analyser and the ballistics.
+- The ring has glow on by default, alongside the lines. Both draw something
+  that emits rather than something that reflects, which is the distinction that
+  decides it.
 - "Include microphone input" in the menu, which mixes an input device into the
   analysis alongside the system output so the visualiser answers "what can this
   machine hear" as well as "what is it playing". Off by default, because it

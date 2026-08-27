@@ -60,7 +60,10 @@ std::unique_ptr<Visualiser> App::makeVisualiser(const QString &id)
 RenderStyle::Bloom App::defaultBloomFor(const QString &id)
 {
     RenderStyle::Bloom bloom;
-    if (id == QLatin1String("lines")) {
+    // The lines are strokes of light and the ring is a lit rim; both are
+    // drawing something that emits rather than something that reflects, and
+    // both look wrong without it. The rest are objects with edges.
+    if (id == QLatin1String("lines") || id == QLatin1String("ring")) {
         bloom.enabled = true;
     }
     return bloom;
@@ -1047,12 +1050,13 @@ void App::runVerifyTick()
     }
 
     qInfo("rms %7.1f dB   agc %5.1f dB   presence %4.2f   loudest band %2d (%.2f)   "
-          "callbacks %llu   overruns %llu",
+          "callbacks %llu   overruns %llu   mic queue %llu",
           static_cast<double>(state.rmsDb), static_cast<double>(state.agcDb),
           static_cast<double>(state.presence), loudest,
           static_cast<double>(state.bars[loudest]),
           static_cast<unsigned long long>(m_audio->source()->callbackCount()),
-          static_cast<unsigned long long>(m_audio->source()->overrunCount()));
+          static_cast<unsigned long long>(m_audio->source()->overrunCount()),
+          static_cast<unsigned long long>(m_audio->source()->inputBacklogFrames()));
 
     if (++m_verifyTicks >= static_cast<int>(kVerifySeconds * 4)) {
         qInfo("capture: %s", qPrintable(m_audio->source()->statusDetail()));

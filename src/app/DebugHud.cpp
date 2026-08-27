@@ -133,11 +133,13 @@ void DebugHud::refresh()
                                "rate      %1 Hz\n"
                                "callbacks %2\n"
                                "overruns  %3\n"
-                               "capture   %4")
+                               "capture   %4\n"
+                               "mic queue %5 frames")
                     .arg(m_source->sampleRate(), 8, 'f', 0)
                     .arg(m_source->callbackCount(), 8)
                     .arg(m_source->overrunCount(), 8)
-                    .arg(m_source->statusDetail());
+                    .arg(m_source->statusDetail())
+                    .arg(m_source->inputBacklogFrames(), 8);
     }
 
     m_stats->setText(text);

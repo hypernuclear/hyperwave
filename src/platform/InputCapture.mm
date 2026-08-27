@@ -133,6 +133,10 @@ MonoRing *InputCapture::ring()
 {
     return &m_impl->ring;
 }
+std::uint64_t InputCapture::backlogFrames() const
+{
+    return m_impl->ring.available();
+}
 
 bool InputCapture::start()
 {

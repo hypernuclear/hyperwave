@@ -81,6 +81,10 @@ public:
     }
     virtual bool inputEnabled() const { return false; }
     virtual MonoRing *inputRing() { return nullptr; }
+    // Frames waiting in the input ring. This is latency, directly: anything
+    // sitting here is sound that has been heard and not yet drawn, so a number
+    // that climbs and stays high is a microphone running late.
+    virtual std::uint64_t inputBacklogFrames() const { return 0; }
 
 Q_SIGNALS:
     void permissionStateChanged(int state);

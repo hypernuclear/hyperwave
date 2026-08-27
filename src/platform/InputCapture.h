@@ -43,6 +43,7 @@ public:
     double sampleRate() const;
 
     MonoRing *ring();
+    std::uint64_t backlogFrames() const;
 
     // Public only because the C IO proc trampoline has to reach it; nothing
     // outside that file has any business with it.
