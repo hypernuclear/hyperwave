@@ -36,6 +36,13 @@ std::unique_ptr<Visualiser> App::makeVisualiser(const QString &id)
 {
     if (id == QLatin1String("ridge"))
         return std::make_unique<RidgeRenderer>();
+    if (id == QLatin1String("strands")) {
+        // A machine with no usable GPU gets the bars rather than an empty
+        // status item, which is indistinguishable from a crash.
+        if (StrandRenderer::isAvailable())
+            return std::make_unique<StrandRenderer>();
+        qWarning("hyperwave: no GPU available for the strands look, using bars");
+    }
     // Bars are the default and the fallback. An unknown id in a settings file
     // -- a downgrade, a typo, a look that was removed -- must produce the
     // ordinary visualiser rather than an empty menu bar item, which is
@@ -251,6 +258,19 @@ void App::rebuildStyle(Surface &surface)
 {
     surface.style = RenderStyle{};
 
+    // Strand count, overridable without a rebuild.
+    //
+    // It is the one parameter of that look worth turning by hand: it trades
+    // density against cost directly, and the number that reads well on a 118pt
+    // strip is not the number that reads well in a panel. Everything else about
+    // the bundle stays a constant in RenderStyle::Strands.
+    if (qEnvironmentVariableIsSet("HYPERWAVE_STRANDS")) {
+        bool ok = false;
+        const int count = qEnvironmentVariableIntValue("HYPERWAVE_STRANDS", &ok);
+        if (ok && count > 0)
+            surface.style.strands.count = count;
+    }
+
     if (surface.isNotch) {
         // The panel is the size of the hole in the display, so the strip fits
         // itself to that rather than the other way round. There is room for the
@@ -321,7 +341,7 @@ void App::onGeometryChanged(Surface &surface)
     if (!surface.presenter)
         return;
     surface.heightPt = surface.presenter->heightPt();
-    surface.dpr = surface.presenter->devicePixelRatio();
+    surface.dpr = surface.presenter->devicePixelRatio() * m_options.previewScale;
     rebuildStyle(surface);
     surface.presenter->setWidthPt(surface.style.stripWidthPt());
     ensureBuffers(surface);
@@ -533,7 +553,14 @@ MenuModel App::buildMenu() const
                                                            : m_options.vizStyle;
     gradients.append(MenuItem::action(QLatin1String(MenuAction::kVizPrefix) + QStringLiteral("bars"),
                                       QStringLiteral("Bars"))
-                         .withCheck(activeViz != QLatin1String("ridge")));
+                         .withCheck(activeViz != QLatin1String("ridge")
+                                    && activeViz != QLatin1String("strands")));
+    if (StrandRenderer::isAvailable()) {
+        gradients.append(
+            MenuItem::action(QLatin1String(MenuAction::kVizPrefix) + QStringLiteral("strands"),
+                             QStringLiteral("Strands"))
+                .withCheck(activeViz == QLatin1String("strands")));
+    }
     gradients.append(MenuItem::action(QLatin1String(MenuAction::kVizPrefix) + QStringLiteral("ridge"),
                                       QStringLiteral("Terrain"))
                          .withCheck(activeViz == QLatin1String("ridge")));

@@ -8,10 +8,33 @@ Twenty-eight bars, a violet-to-cyan gradient anchored to the strip rather than
 to each bar, peak-hold dots that fall under gravity, and a fade to a resting row
 of dots when nothing is playing. Roughly 118 × 22 points of menu bar.
 
-## Two looks
+## Three looks
 
 **Bars** is the default and what the screenshot above shows.
 
+
+**Strands** is a bundle of lines wrapped around an axis: each is the same
+straight line, displaced radially by a radius that the spectrum and three
+octaves of simplex noise push around, twisting like a finger trap and tapered
+to points at both ends. X is frequency, so the tube swells where the music is.
+A port of Matt DesLauriers' codevember #21 (MIT, credited in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)).
+![strands](docs/strands.png)
+It runs on the GPU through QRhi -- Metal on macOS -- because that is what the
+technique *is* rather than because a GPU was available. The geometry is static,
+uploaded once and never touched; every frame's motion is a vertex shader, and
+the CPU's whole job is a 256-byte spectrum texture and a clock.
+The consequence is the interesting part. **It costs less than the bars.**
+Measured end to end, RelWithDebInfo, same run: 10.8% of a core for the strands
+against 12.0% for twenty-eight rectangles drawn with QPainter. And the strand
+count is very nearly free -- 32 strands and 1024 strands both measure within
+noise of each other, because the entire CPU cost is the fixed round trip and
+the GPU absorbs 204,800 vertices without noticing. `HYPERWAVE_STRANDS=n` sets
+it; `RenderStyle::Strands` holds the rest.
+Rendered offscreen and read back, because every presenter here consumes a
+QImage. The whole round trip -- submit, wait, copy 41 KB back -- measures
+0.166 ms at status item size, about 1% of a core at 60 fps, and costs a frame
+of latency that nobody can see on a visualiser.
 **Terrain** is the same analysis with a memory. Each time slice becomes a
 polyline across the frequency bands, and the slices stack away from you under
 perspective — frequency across, level up, time receding — so what you watch is a
@@ -273,7 +296,9 @@ task for checking the other side of that.
 | `--hud` | Diagnostics window: OSStatus, callback count, RMS, AGC, sample rate, overruns |
 | `--shot <path>` | Render one settled frame to a PNG and exit |
 | `--source <uid>` | Listen to one output device by UID. `--source list` prints them |
-| `--viz <style>` | Which visualiser to draw: `bars` (default) or `ridge`, the terrain. Overrides the saved preference for one run |
+| `--viz <style>` | Which visualiser to draw: `bars` (default), `strands` or `ridge`. Overrides the saved preference for one run |
+| `--preview-scale <n>` | Magnify the windowed and `--shot` canvas, for looking at a visualiser at a size where its detail is visible. Applied as device pixel ratio, so every measurement scales with it |
+| `HYPERWAVE_STRANDS=n` | How many strands in the bundle. Very nearly free: 32 and 1024 measure the same |
 | `--fake-notch` | Pretend the display has a notch, for developing the panel on an external monitor |
 | `HYPERWAVE_FAKE_AUDIO=1` | Drive the DSP from a synthetic sweep, so the renderer can be worked on with no audio and no permission |
 | `HYPERWAVE_METER_DEBUG=1` | Log the metered applications in priority order, any that ran out of tap slots, and the "Playing" list itself every two seconds. Every wrong answer this list has given was found by a human opening a menu and disagreeing with it; this makes the same question answerable in one command |
@@ -325,6 +350,7 @@ Measured on an M-series Mac, Release build, 60 fps, one P-core:
 |---|---|
 | Visualising at 60 fps, bars | ~7% |
 | Visualising at 60 fps, terrain | ~22% |
+| Visualising at 60 fps, strands (GPU) | less than the bars |
 | Visualising at 30 fps | ~4% |
 | Nothing playing | display link stops; the strip holds its resting frame |
 About 2 points of that is the per-application metering. Forty live taps cost no

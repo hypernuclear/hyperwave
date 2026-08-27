@@ -52,8 +52,21 @@ The distinction throughout is about the build, not the repository. Someone who
 clones this and builds it against open-source Qt with Quick 3D enabled produces
 a GPLv3-encumbered binary even though this source is MIT.
 
-## Everything else
-
+## Code in the shaders
+Two pieces of the strands visualiser are other people's work, both MIT.
+**Simplex noise** in `src/render/shaders/strands.vert` is Ian McEwan / Ashima
+Arts' GLSL implementation ([webgl-noise](https://github.com/ashima/webgl-noise)),
+MIT, used essentially verbatim. Three octaves of it are what push the tube
+around.
+**The technique itself** is Matt DesLauriers' codevember #21
+([mattdesl/codevember](https://github.com/mattdesl/codevember), MIT -- confirmed
+against GitHub's licence API, since the LICENSE.md link in that README 404s):
+strands wrapped around an axis, radius driven by the spectrum sampled along
+their length, tapered at both ends, expanded to ribbons in screen space. The
+shader here is a **port**, not an interpretation -- the angle, radius,
+turbulence and pinch are the same maths -- so it is credited as such rather than
+described as ours. What differs is the plumbing: instanced rather than a draw
+call per strand, and rendered through QRhi into a QImage.
 hyperwave vendors nothing. There is no `third_party/`, no submodule, no
 fetched dependency, no bundled font, and no committed artwork beyond the
 screenshots in `docs/`, which are our own.

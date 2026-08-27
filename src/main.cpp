@@ -61,7 +61,14 @@ int main(int argc, char **argv)
     parser.addOption(sourceOption);
     parser.addOption(fakeNotchOption);
     parser.addOption(shotOption);
+    const QCommandLineOption previewScaleOption(
+        QStringLiteral("preview-scale"),
+        QStringLiteral("Magnify the windowed and --shot canvas by this factor, for looking at "
+                       "a visualiser at a size where its detail is visible. Applied as device "
+                       "pixel ratio, so every measurement scales with it."),
+        QStringLiteral("factor"));
     parser.addOption(vizOption);
+    parser.addOption(previewScaleOption);
     parser.process(app);
 
     App::Options options;
@@ -72,6 +79,12 @@ int main(int argc, char **argv)
     options.sourceBundleId = parser.value(sourceOption);
     options.fakeNotch = parser.isSet(fakeNotchOption);
     options.vizStyle = parser.value(vizOption);
+    if (parser.isSet(previewScaleOption)) {
+        bool ok = false;
+        const double scale = parser.value(previewScaleOption).toDouble(&ok);
+        if (ok && scale > 0.0)
+            options.previewScale = scale;
+    }
     options.fakeAudio = !qEnvironmentVariableIsEmpty("HYPERWAVE_FAKE_AUDIO");
 
     App hyperwaveApp(options);

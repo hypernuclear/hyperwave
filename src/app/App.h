@@ -17,6 +17,7 @@
 #include "render/BarRenderer.h"
 #include "render/RenderStyle.h"
 #include "render/RidgeRenderer.h"
+#include "render/StrandRenderer.h"
 #include "render/Visualiser.h"
 
 namespace hyperwave {
@@ -38,7 +39,8 @@ public:
         bool fakeNotch = false;   // pretend the display has a notch
         QString shotPath;         // grab one frame and exit
         QString sourceBundleId;   // listen to one app; "list" prints and exits
-        QString vizStyle;         // "bars" or "ridge"; empty means the setting
+        QString vizStyle;         // "bars", "ridge" or "strands"; empty = the setting
+        qreal previewScale = 1.0; // magnifies the windowed/shot canvas
     };
 
     // The looks, by id. Kept next to Options because the command line, the

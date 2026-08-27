@@ -102,6 +102,49 @@ struct RenderStyle
         qreal lineWidthPt = 0.7;
     };
     Ridge ridge;
+
+    // --- the strands look ----------------------------------------------------
+    //
+    // A bundle of lines wrapped around an axis, radius driven by the spectrum
+    // and by noise. Drawn on the GPU, because that is what the technique is:
+    // the geometry is static and all of the motion is a vertex shader.
+    struct Strands
+    {
+        // How many strands in the bundle. Tunable rather than a constant: it is
+        // the one parameter that trades density against cost, and the right
+        // number is not the same for a 118pt strip and a panel. Instanced, so
+        // raising it makes the draw bigger rather than making more draws.
+        int count = 64;
+
+        // Points along each strand, expanded to two vertices each. Uploaded
+        // once at startup and never touched again.
+        int segments = 200;
+
+        qreal radius = 0.10;      // resting radius of the tube, model units
+        // Ribbon width in points, converted to clip units against the target
+        // height before it reaches the shader. The original expressed this in
+        // clip space, which is fine for a full window and useless here: 0.01 of
+        // a 44px-tall strip is a quarter of a pixel, which is nothing at all.
+        qreal thicknessPt = 0.6;
+        // How much of the height the tube fills. The model radius is small so
+        // that the noise octaves stay in a sane range; this scales the whole
+        // bundle up to the target afterwards.
+        qreal fill = 1.8;
+        // Tilt, in degrees, so the tube reads as a solid object rather than a
+        // flat ribbon that happens to wobble.
+        qreal tiltDegrees = 18.0;
+        qreal twists = 0.5;       // turns along the length -- the finger trap
+        qreal opacity = 0.5;
+
+        // The spectrum arrives 0..1 already, but a strip that has to read at a
+        // glance wants the quiet parts pushed up. Applied before clamping.
+        qreal audioGain = 1.0;
+
+        // Radians per second the bundle turns. Slow, because this is ambient.
+        qreal spinRate = 0.35;
+    };
+    Strands strands;
+
     qreal stripWidthPt() const
     {
         return insetLeftPt + insetRightPt

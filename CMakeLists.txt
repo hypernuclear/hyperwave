@@ -83,7 +83,7 @@ if(NOT CMAKE_PREFIX_PATH)
     endif()
 endif()
 
-set(HYPERWAVE_QT_COMPONENTS Core Gui Widgets Svg Qml Quick QuickControls2 Test)
+set(HYPERWAVE_QT_COMPONENTS Core Gui GuiPrivate Widgets Svg Qml Quick QuickControls2 ShaderTools Test)
 
 find_package(Qt6 6.11 QUIET COMPONENTS ${HYPERWAVE_QT_COMPONENTS})
 if(NOT Qt6_FOUND)
@@ -133,6 +133,7 @@ add_library(hyperwave_core STATIC
     src/audio/Downmix.cpp
     src/audio/Downmix.h
     src/render/BarRenderer.cpp
+    src/render/StrandRenderer.cpp
     src/render/RidgeRenderer.cpp
     src/render/BarRenderer.h
     src/render/RenderStyle.h
@@ -140,7 +141,13 @@ add_library(hyperwave_core STATIC
     src/render/Palette.h
 )
 target_include_directories(hyperwave_core PUBLIC src)
-target_link_libraries(hyperwave_core PUBLIC Qt6::Core Qt6::Gui)
+target_link_libraries(hyperwave_core PUBLIC Qt6::Core Qt6::Gui Qt6::GuiPrivate)
+qt_add_shaders(hyperwave_core "hyperwave_strand_shaders"
+    PREFIX "/shaders"
+    BASE "src/render/shaders"
+    FILES
+        src/render/shaders/strands.vert
+        src/render/shaders/strands.frag)
 
 # --- the app ----------------------------------------------------------------
 qt_add_executable(hyperwave

@@ -33,6 +33,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows and Linux presenters, each documenting the chosen approach.
 - Headless tests for the ring buffer, the FFT (against a naive DFT), the
   spectrum analyser and the ballistics.
+- A third visualiser, "Strands": a bundle of lines wrapped around an axis with
+  the spectrum and three octaves of simplex noise driving the radius, tapered to
+  points at both ends. A port of Matt DesLauriers' codevember #21 (MIT, credited
+  in THIRD-PARTY-NOTICES.md), on the GPU through QRhi and Metal because the
+  geometry is static and every frame's motion is a vertex shader. It costs less
+  than the bars do -- 10.8% of a core against 12.0% -- and the strand count is
+  effectively free, with 32 and 1024 measuring the same, because the whole CPU
+  cost is the fixed offscreen round trip. Settable with HYPERWAVE_STRANDS.
+- `--preview-scale`, which magnifies the windowed and `--shot` canvas so a
+  visualiser can be looked at where its detail is visible rather than at
+  118 x 22 points.
 - A second visualiser, "Terrain": a spectrogram ridgeline with frequency across,
   level up and time receding under perspective, chosen in `Appearance` or with
   `--viz ridge`. Projected in software rather than on the GPU, because at status
