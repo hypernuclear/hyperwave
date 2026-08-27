@@ -7,6 +7,7 @@
 #include <QTimer>
 
 #include "audio/AudioSource.h"
+#include "platform/InputCapture.h"
 #include "platform/AudioLevelMeter.h"
 
 // Deliberately free of any Objective-C or CoreAudio type. The whole point of
@@ -36,6 +37,10 @@ public:
     void setPermissionState(PermissionState state);
 
     MonoRing *ring() override { return m_ring.get(); }
+
+    bool setInputEnabled(bool enabled) override;
+    bool inputEnabled() const override { return m_inputEnabled; }
+    MonoRing *inputRing() override { return m_input.ring(); }
 
     std::uint64_t callbackCount() const override
     {
@@ -81,6 +86,11 @@ private:
     void noteHardwareChange();
 
     std::unique_ptr<MonoRing> m_ring;   // declared first: destroyed last
+
+    // A second capture on its own clock, summed into the analysis by the DSP.
+    // Not part of the tap: a process tap cannot hear a microphone.
+    InputCapture m_input;
+    bool m_inputEnabled = false;
 
     struct Impl;
     std::unique_ptr<Impl> m_impl;

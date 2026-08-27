@@ -56,6 +56,10 @@ public:
     // a preference rather than a pure heuristic: on a notched display a 108pt
     // item can get pushed into the overflow and never be seen at all, and the
     // user is better placed than we are to know how crowded their bar is.
+    // Mix an input device into the analysis alongside the system output.
+    bool inputEnabled() const;
+    void setInputEnabled(bool enabled);
+
     bool compact() const;
     void setCompact(bool compact);
 

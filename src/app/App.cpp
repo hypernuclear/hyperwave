@@ -333,6 +333,7 @@ bool App::start()
     m_worker = new DspWorker;
     m_worker->setRing(m_audio->source()->ring());
     m_worker->setFakeAudio(m_options.fakeAudio);
+    m_worker->setInputRing(m_audio->source()->inputRing());
     m_worker->moveToThread(&m_dspThread);
     connect(&m_dspThread, &QThread::finished, m_worker, &QObject::deleteLater);
 
@@ -353,6 +354,10 @@ bool App::start()
         m_audio->source()->setSourceDeviceUid(source);
 
     m_audio->start();
+    // Restore the input mix after capture is up, so a failure to start it
+    // cannot take the output tap down with it.
+    if (m_settings.inputEnabled() && !m_audio->source()->setInputEnabled(true))
+        m_settings.setInputEnabled(false);
     // A synthetic source has no device to ask, so give the analyser a rate to
     // configure itself against or it never builds its band tables and the whole
     // chain sits idle producing nothing.
@@ -803,6 +808,9 @@ MenuModel App::buildMenu() const
                              .withCheck(m_settings.notchAutoHide()));
     }
     menu.append(MenuItem::submenu(QStringLiteral("Appearance"), gradients));
+    menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleInput),
+                                QStringLiteral("Include microphone input"))
+                    .withCheck(m_audio->source()->inputEnabled()));
     menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleNowPlaying),
                                  QStringLiteral("Track info and controls"))
                     .withCheck(m_settings.nowPlayingEnabled()));
@@ -958,6 +966,19 @@ void App::onMenuAction(const QString &actionId)
     }
     if (actionId == QLatin1String(MenuAction::kRestart)) {
         relaunch();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kToggleInput)) {
+        const bool want = !m_audio->source()->inputEnabled();
+        // Ask the source first and record what actually happened. Starting can
+        // fail -- no input device, no channels, a refused IO proc -- and a menu
+        // that ticks itself regardless would be lying about what the app is
+        // listening to.
+        const bool ok = m_audio->source()->setInputEnabled(want);
+        m_settings.setInputEnabled(want && ok);
+        if (want && !ok)
+            qWarning("hyperwave: could not start input capture");
+        onAudioBecameActive();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kSettings)) {

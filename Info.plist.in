@@ -37,6 +37,8 @@
 	     what appears in the "would like access to record your system audio"
 	     dialog, so it has to answer the only question the user actually has,
 	     which is why an app they just launched wants to hear them. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>hyperwave can mix what your microphone hears into the visualiser, alongside the audio your Mac is playing. It is off unless you turn it on, and nothing is recorded or sent anywhere.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>hyperwave reads the audio your Mac is playing so it can draw it in the menu bar. Nothing is recorded, stored, or sent anywhere.</string>
 	<key>NSHumanReadableCopyright</key>

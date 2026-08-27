@@ -152,6 +152,27 @@ void DspWorker::tick()
             if (m_scratch.size() < available)
                 m_scratch.resize(available);
             const std::uint32_t got = m_ring->read(m_scratch.data(), available);
+
+            // Sum the input in, sample for sample as far as it goes.
+            //
+            // Two devices means two clocks, so the counts drift apart; the
+            // input is mixed over as much of the block as it has and the rest
+            // is left alone. Summing what is there beats stalling for the rest
+            // of it, and beats resampling a signal that is going to be reduced
+            // to twenty-eight numbers anyway.
+            if (m_inputRing) {
+                const auto want = static_cast<std::uint32_t>(
+                    std::min<std::uint64_t>(m_inputRing->available(), got));
+                if (want > 0) {
+                    if (m_inputScratch.size() < want)
+                        m_inputScratch.resize(want);
+                    const std::uint32_t heard = m_inputRing->read(m_inputScratch.data(), want);
+                    for (std::uint32_t i = 0; i < heard; ++i)
+                        m_scratch[i] += m_inputScratch[i];
+                    sanitize(m_scratch.data(), got);
+                }
+            }
+
             m_analyzer.pushSamples(m_scratch.data(), got);
         }
     }

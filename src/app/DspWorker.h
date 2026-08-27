@@ -34,6 +34,10 @@ public:
 
     // Set once, before the thread starts.
     void setRing(MonoRing *ring) { m_ring = ring; }
+
+    // Summed into the analysis when present. Its own ring because it has its
+    // own clock: two producers on one single-producer ring is not a ring.
+    void setInputRing(MonoRing *ring) { m_inputRing = ring; }
     // Drive the analysis from a synthetic signal instead of the capture ring.
     //
     // Synthesised into the *input* rather than faked at the output, so the FFT,
@@ -68,6 +72,8 @@ private:
     void applyIdleThrottle(bool silent);
 
     MonoRing *m_ring = nullptr;
+    MonoRing *m_inputRing = nullptr;
+    std::vector<float> m_inputScratch;
     SpectrumAnalyzer m_analyzer;
     SeqLock<FrameState> m_frames;
     // Created in start(), which runs on this object's own thread. A QTimer

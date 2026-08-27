@@ -62,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows and Linux presenters, each documenting the chosen approach.
 - Headless tests for the ring buffer, the FFT (against a naive DFT), the
   spectrum analyser and the ballistics.
+- "Include microphone input" in the menu, which mixes an input device into the
+  analysis alongside the system output so the visualiser answers "what can this
+  machine hear" as well as "what is it playing". Off by default, because it
+  needs its own permission and a menu bar decoration should not ask for the
+  microphone on first run. A process tap cannot do this -- it answers a
+  different question -- so it is a second IO proc on its own clock writing to
+  its own ring, summed by the DSP over as much of each block as both have.
 - Glow is per look rather than one switch for the whole app, and only the lines
   have it on by default. The bars are objects with edges and haloing them turns
   a legible meter into a smear; the lines are strokes of light and are barely

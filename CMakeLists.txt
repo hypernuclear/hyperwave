@@ -190,6 +190,8 @@ qt_add_executable(hyperwave
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioLevelMeter.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioProcessProbe.h>
     $<$<PLATFORM_ID:Darwin>:src/platform/AudioProcessProbe.mm>
+    $<$<PLATFORM_ID:Darwin>:src/platform/InputCapture.h>
+    $<$<PLATFORM_ID:Darwin>:src/platform/InputCapture.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacBarPresenter.h>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacBarPresenter.mm>
     $<$<PLATFORM_ID:Darwin>:src/platform/MacMenuBuilder.h>
@@ -243,6 +245,7 @@ if(APPLE)
         src/platform/CoreAudioTapSource.mm
         src/platform/AudioCapturePermission.mm
         src/platform/AudioProcessProbe.mm
+        src/platform/InputCapture.mm
         src/platform/AudioLevelMeter.mm
         src/platform/MacBarPresenter.mm
         src/platform/MacNotchPresenter.mm

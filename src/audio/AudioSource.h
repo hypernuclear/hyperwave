@@ -69,6 +69,19 @@ public:
     }
     virtual QString sourceDeviceUid() const { return {}; }
 
+    // Mix an input device -- a microphone, a line in -- into the analysis
+    // alongside the system output, so the visualiser answers "what can this
+    // machine hear" as well as "what is it playing". Off by default: it needs
+    // its own permission, and a menu bar decoration should not ask for the
+    // microphone the first time it is run.
+    virtual bool setInputEnabled(bool enabled)
+    {
+        Q_UNUSED(enabled);
+        return false;
+    }
+    virtual bool inputEnabled() const { return false; }
+    virtual MonoRing *inputRing() { return nullptr; }
+
 Q_SIGNALS:
     void permissionStateChanged(int state);
     void formatChanged(double sampleRate, unsigned epoch);

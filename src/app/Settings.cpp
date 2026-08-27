@@ -240,6 +240,16 @@ void Settings::resetVisualiserParameters()
     Q_EMIT visualiserParametersChanged();
 }
 
+bool Settings::inputEnabled() const
+{
+    return m_store.value(QStringLiteral("audio/inputEnabled"), false).toBool();
+}
+void Settings::setInputEnabled(bool enabled)
+{
+    if (inputEnabled() == enabled)
+        return;
+    m_store.setValue(QStringLiteral("audio/inputEnabled"), enabled);
+}
 bool Settings::compact() const
 {
     return m_store.value(QLatin1String(kCompactKey), false).toBool();

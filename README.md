@@ -193,6 +193,27 @@ built-in speakers while audio was routed to a virtual device: the tap stayed
 alive at 463 callbacks and reported −120 dB, against −14.2 dB for the device
 actually in use.
 
+## Hearing the room
+
+`Include microphone input` mixes an input device into the analysis alongside the
+system output, so the visualiser answers "what can this machine hear" as well as
+"what is it playing". Off unless you turn it on: it needs its own permission,
+and a menu bar decoration has no business asking for the microphone the first
+time it runs.
+
+It could not reuse the tap. A CoreAudio process tap answers what the machine is
+*playing*; there is no variant of it that answers what the machine can *hear*.
+So this is a second IO proc on the default input device, on its own clock,
+writing to its own ring — two producers on one single-producer ring is not a
+ring — and the DSP sums the two over as much of each block as both have.
+
+Two honest limits. The analysis is configured from the *output* rate, so an
+interface running its input at a different rate lands the mixed-in signal off
+pitch; both are usually the same and it does not arise, which is why the input
+rate is logged rather than assumed. And a denied microphone grant produces a
+running IO proc delivering silence, exactly as a denied audio-capture grant
+does, so nothing here treats silence as evidence of either.
+
 ## What is playing
 
 `Playing ▸` lists the applications actually making a sound, loudest first, with

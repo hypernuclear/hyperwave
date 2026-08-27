@@ -512,6 +512,25 @@ int CoreAudioTapSource::renderCallback(const void *inputBufferList, void *output
     return 0;
 }
 
+bool CoreAudioTapSource::setInputEnabled(bool enabled)
+{
+    if (enabled == m_inputEnabled)
+        return true;
+    m_inputEnabled = enabled;
+    if (!enabled) {
+        m_input.stop();
+        return true;
+    }
+    // Starting can fail -- no input device, no channels, a refused proc -- and
+    // that is reported rather than swallowed, but it is not fatal: the output
+    // tap carries on and the visualiser simply hears less.
+    if (!m_input.start()) {
+        m_inputEnabled = false;
+        return false;
+    }
+    return true;
+}
+
 AudioProcessList CoreAudioTapSource::audioProcesses() const
 {
     AudioProcessList processes = AudioProcessProbe::listProcesses();
