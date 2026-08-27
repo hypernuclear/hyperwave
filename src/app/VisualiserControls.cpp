@@ -68,7 +68,15 @@ VisualiserControls::VisualiserControls(Options options, QWidget *parent)
         rowLayout->addWidget(readout);
         connect(slider, &QSlider::valueChanged, this,
                 [this, min, max, value, readout, onChange](int raw) {
-                    *value = min + (max - min) * (raw / 1000.0);
+                    // While seeding, the slider is being told what the value is
+                    // and has nothing to say about it. Writing back here would
+                    // replace the authored number with whichever of a thousand
+                    // steps is nearest -- 0.12 became 0.11998 and 0.8 became
+                    // 0.7981, and those degraded values then got saved the next
+                    // time any other control moved.
+                    if (!m_seeding) {
+                        *value = min + (max - min) * (raw / 1000.0);
+                    }
                     // Two decimals, not three significant figures: a thousand
                     // steps across 0.1..4.0 lands on 0.599 for what is plainly
                     // 0.6, and a readout that contradicts the default it is
@@ -94,10 +102,18 @@ VisualiserControls::VisualiserControls(Options options, QWidget *parent)
                                 int *value, std::function<void()> onChange) {
         auto *spin = new QSpinBox(this);
         spin->setRange(min, max);
+        // Commit on Enter or on leaving the field, not on every keystroke.
+        //
+        // With tracking on, typing "64" fires valueChanged at "6" as well,
+        // which restyles every surface and -- worse -- comes back round as a
+        // re-seed that rewrites the text under the cursor. The field then
+        // fights whatever you type and never seems to let go.
+        spin->setKeyboardTracking(false);
         connect(spin, &QSpinBox::valueChanged, this, [this, value, onChange](int v) {
+            if (m_seeding)
+                return;   // being told, not telling; same reason as the sliders
             *value = v;
-            if (!m_seeding)
-                onChange();
+            onChange();
         });
         form->addRow(label, spin);
         m_seeders.push_back([spin, value] { spin->setValue(*value); });

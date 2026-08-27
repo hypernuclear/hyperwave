@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The strand and terrain settings fought back while being typed into. A spin box
+  emitted on every keystroke, and each emission came round as a re-seed that
+  rewrote the text under the cursor, so the field never seemed to let go. It
+  commits on Enter or focus-out now, and a change is no longer echoed back to
+  the panel it came from.
+- Every value lost precision each time a panel was seeded. Setting a slider
+  emitted valueChanged, whose handler wrote the position back through a
+  thousand-step quantisation: 0.12 became 0.11998, 0.8 became 0.7981, and the
+  degraded numbers were saved the next time any other control moved. A control
+  being told what to show no longer answers back.
 
 - `--windowed` segfaulted on launch. The windowed surface has no presenter, and
   `rebuildStyle()` dereferenced one unconditionally to ask whether it preferred
@@ -55,11 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of the running visualiser. Values take effect on the next frame and persist
   field by field, so a store written by an older build keeps whatever it knows
   and picks up new parameters at their defaults.
-- Tuned defaults for both new looks, chosen by eye rather than by argument. The
-  terrain drops from forty rows to ten, which reads as distinct travelling
-  ridges instead of a solid mass and is cheaper besides; the strands go to
-  thirty-two at full opacity and a tenth-point thickness, which is woven rather
-  than smeared.
+- Tuned defaults for both new looks, chosen by eye rather than by argument.
+  Sixty-four strands at full opacity, and a terrain of sixty-four rows with a
+  column line at every sample, which is a mesh surface rather than a stack of
+  ridges. Measured: bars 10.1% of a core, strands 10.7%, terrain 18.6%.
 - Live controls in the debug window: the visualiser, the magnification and
   every parameter of the strands and the terrain, each taking effect on the
   next frame. They replace a flag per parameter and one process per

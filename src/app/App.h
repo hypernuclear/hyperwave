@@ -103,7 +103,10 @@ private:
     // no presenter, which is exactly what the preview window is.
     void refreshSurface(Surface &surface);
     void connectControls(VisualiserControls *controls);
-    void applyVisualiserTuning();
+    // `origin` is the panel the change came from, which must not be seeded
+    // back: re-setting a spin box while its text is being edited moves the
+    // cursor and reselects, and the field stops behaving like a field.
+    void applyVisualiserTuning(VisualiserControls *origin);
     void showSettings();
 
     void applyFrameRate();

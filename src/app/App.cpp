@@ -65,21 +65,22 @@ void App::refreshSurface(Surface &surface)
     onFrameDue(surface);
 }
 
-void App::applyVisualiserTuning()
+void App::applyVisualiserTuning(VisualiserControls *origin)
 {
     for (auto &surface : m_surfaces)
         refreshSurface(*surface);
     onAudioBecameActive();
-    // Both panels show the same values, so whichever one did not originate the
-    // change has to be told. Seeding is guarded against echoing back.
-    if (m_hud && m_hud->controls()) {
-        m_hud->controls()->setStrands(m_strandTuning);
-        m_hud->controls()->setRidge(m_ridgeTuning);
-    }
-    if (m_settingsControls) {
-        m_settingsControls->setStrands(m_strandTuning);
-        m_settingsControls->setRidge(m_ridgeTuning);
-    }
+    // Whichever panel did not originate the change has to be told, and the one
+    // that did must not be: seeding it rewrites the widget the user is
+    // currently editing.
+    const auto seed = [this, origin](VisualiserControls *panel) {
+        if (!panel || panel == origin)
+            return;
+        panel->setStrands(m_strandTuning);
+        panel->setRidge(m_ridgeTuning);
+    };
+    seed(m_hud ? m_hud->controls() : nullptr);
+    seed(m_settingsControls);
 }
 void App::connectControls(VisualiserControls *controls)
 {
@@ -113,23 +114,23 @@ void App::connectControls(VisualiserControls *controls)
         onAudioBecameActive();
     });
     connect(controls, &VisualiserControls::strandsRequested, this,
-            [this](const RenderStyle::Strands &strands) {
+            [this, controls](const RenderStyle::Strands &strands) {
                 m_strandTuning = strands;
                 m_settings.setStrands(strands);
-                applyVisualiserTuning();
+                applyVisualiserTuning(controls);
             });
     connect(controls, &VisualiserControls::ridgeRequested, this,
-            [this](const RenderStyle::Ridge &ridge) {
+            [this, controls](const RenderStyle::Ridge &ridge) {
                 m_ridgeTuning = ridge;
                 m_settings.setRidge(ridge);
-                applyVisualiserTuning();
+                applyVisualiserTuning(controls);
             });
     connect(controls, &VisualiserControls::resetRequested, this, [this] {
         m_settings.resetVisualiserParameters();
         const RenderStyle defaults;
         m_strandTuning = defaults.strands;
         m_ridgeTuning = defaults.ridge;
-        applyVisualiserTuning();
+        applyVisualiserTuning(nullptr);   // a reset must reach every panel
     });
 }
 void App::showSettings()

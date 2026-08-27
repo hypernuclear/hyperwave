@@ -74,7 +74,7 @@ struct RenderStyle
         // This is also the dominant cost. Halving it very nearly halves the
         // frame, which no other knob here does, so it is the first thing to
         // reach for and the last thing to raise.
-        int rows = 10;
+        int rows = 64;
         int frameStride = 1;
 
         // Antialiasing is the single most expensive thing this look does, and
@@ -87,20 +87,20 @@ struct RenderStyle
         // separate curves into one surface you can read the shape of. Zero
         // turns them off. They are drawn after the ridges and fainter, so they
         // suggest the mesh rather than competing with it.
-        int columnStride = 5;
+        int columnStride = 1;
         qreal columnOpacity = 0.35;
 
         // Interpolation between bands, Catmull-Rom. Twenty-eight points across
         // a strip is visibly faceted; four samples per band turns the ridges
         // into curves, and with ten rows the extra points are affordable.
-        int subdivision = 4;
+        int subdivision = 2;
 
         // Perspective. depth is how much further the oldest row is than the
         // newest, as a multiple of the eye distance, so 1.9 means the back of
         // the terrain is 2.9x away and draws at 34% scale.
-        qreal depth = 1.9;
+        qreal depth = 4.0;
         qreal spreadX = 0.92;    // fraction of the width the nearest row spans
-        qreal amplitude = 0.75;  // fraction of the height a full-scale band rises
+        qreal amplitude = 0.93;  // fraction of the height a full-scale band rises
         qreal baseline = 0.88;   // where the nearest row sits, 0 = top
         qreal horizon = 0.30;    // where infinitely far rows converge to
         // A little lateral slide with depth. Pure symmetric convergence reads
@@ -110,7 +110,7 @@ struct RenderStyle
         // front and steep at the back, which keeps the near ridges legible
         // without the far ones turning into a solid mass.
         qreal fadeExponent = 1.5;
-        qreal lineWidthPt = 0.2;
+        qreal lineWidthPt = 0.58;
     };
     Ridge ridge;
 
@@ -125,34 +125,51 @@ struct RenderStyle
         // the one parameter that trades density against cost, and the right
         // number is not the same for a 118pt strip and a panel. Instanced, so
         // raising it makes the draw bigger rather than making more draws.
-        int count = 32;
+        int count = 64;
 
         // Points along each strand, expanded to two vertices each. Uploaded
         // once at startup and never touched again.
         int segments = 200;
 
-        qreal radius = 0.21;      // resting radius of the tube, model units
+        qreal radius = 0.12;      // resting radius of the tube, model units
         // Ribbon width in points, converted to clip units against the target
         // height before it reaches the shader. The original expressed this in
         // clip space, which is fine for a full window and useless here: 0.01 of
         // a 44px-tall strip is a quarter of a pixel, which is nothing at all.
-        qreal thicknessPt = 0.1;
+        qreal thicknessPt = 0.8;
         // How much of the height the tube fills. The model radius is small so
         // that the noise octaves stay in a sane range; this scales the whole
         // bundle up to the target afterwards.
-        qreal fill = 2.2;
-        // Tilt, in degrees, so the tube reads as a solid object rather than a
-        // flat ribbon that happens to wobble.
-        qreal tiltDegrees = 30.4;
-        qreal twists = 0.44;       // turns along the length -- the finger trap
+        qreal fill = 3.55;
+        // Rotation of the bundle about its own long axis, in degrees.
+        //
+        // Named "tilt" and it is not one, which is worth stating rather than
+        // leaving the name to imply something the code does not do. A strand
+        // point is (x, r*cos(phi), r*sin(phi)); the transform rotates about X,
+        // giving screen_y = fill * r * cos(phi + theta); and z is then thrown
+        // away, because the projection carries no perspective term -- w stays
+        // 1 -- and there is no depth test. So rotating about X is algebraically
+        // a phase offset added to the angle: the same thing spinRate does,
+        // without the animation.
+        //
+        // Verified rather than reasoned: rendered at 0, 30, 60 and 90 degrees
+        // with the spin stopped, and the silhouette, the vertical extent and
+        // the density are the same in all four. What changes is which strand
+        // sits where and which slice of the noise field shows.
+        //
+        // Still a useful knob, because re-phasing the noise changes the shape.
+        // It simply cannot lean the tube towards or away from the viewer; that
+        // would need a perspective term in the projection.
+        qreal tiltDegrees = 60.4;
+        qreal twists = 1.38;       // turns along the length -- the finger trap
         qreal opacity = 1.0;
 
         // The spectrum arrives 0..1 already, but a strip that has to read at a
         // glance wants the quiet parts pushed up. Applied before clamping.
-        qreal audioGain = 0.73;
+        qreal audioGain = 0.87;
 
         // Radians per second the bundle turns.
-        qreal spinRate = 0.93;
+        qreal spinRate = 1.16;
     };
     Strands strands;
 
