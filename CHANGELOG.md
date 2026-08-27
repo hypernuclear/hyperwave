@@ -62,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows and Linux presenters, each documenting the chosen approach.
 - Headless tests for the ring buffer, the FFT (against a naive DFT), the
   spectrum analyser and the ballistics.
+- Glow is per look rather than one switch for the whole app, and only the lines
+  have it on by default. The bars are objects with edges and haloing them turns
+  a legible meter into a smear; the lines are strokes of light and are barely
+  worth drawing without it.
+- The status item is sized by the look rather than by the bar style, so the ring
+  asks for a square 22 x 22 points instead of sitting in the middle of a 91pt
+  strip with the rest of it empty.
 - Three more visualisers. "Mirror" is the bars grown from the centre line in
   both directions, moved by an underdamped spring so they overshoot and settle
   rather than easing into place. "Lines" is a wall of upright strokes lit by the

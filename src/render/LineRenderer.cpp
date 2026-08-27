@@ -9,10 +9,6 @@
 
 namespace hyperwave {
 
-QSize LineRenderer::pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const
-{
-    return QSize(std::lround(style.stripWidthPt() * dpr), std::lround(heightPt * dpr));
-}
 
 void LineRenderer::render(const FrameState &state, const RenderStyle &style, qreal heightPt,
                           qreal dpr, QImage &target)

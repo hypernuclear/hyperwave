@@ -9,10 +9,6 @@
 
 namespace hyperwave {
 
-QSize MirrorRenderer::pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const
-{
-    return QSize(std::lround(style.stripWidthPt() * dpr), std::lround(heightPt * dpr));
-}
 
 void MirrorRenderer::reset()
 {

@@ -15,9 +15,11 @@ namespace {
 constexpr qreal kTau = 6.283185307179586;
 }
 
-QSize RingRenderer::pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const
+
+qreal RingRenderer::widthPt(const RenderStyle &style, qreal heightPt) const
 {
-    return QSize(std::lround(style.stripWidthPt() * dpr), std::lround(heightPt * dpr));
+    Q_UNUSED(style);
+    return heightPt;
 }
 
 void RingRenderer::reset()
@@ -113,7 +115,11 @@ void RingRenderer::render(const FrameState &state, const RenderStyle &style, qre
         for (int i = 1; i <= segments; ++i)
             path.lineTo(m_points[static_cast<std::size_t>(i)]);
         path.closeSubpath();
-        QColor fill = style.gradientBottom;
+        // A dark body, not a saturated one. The reference is a black disc with
+        // a bright rim, and the rim is what carries the shape; filling with the
+        // gradient colour at full saturation made the disc the loudest thing on
+        // screen and left the outline looking like trim around it.
+        QColor fill = style.gradientBottom.darker(320);
         fill.setAlphaF(std::clamp<qreal>(opacity * r.fillOpacity, 0.0, 1.0));
         p.setPen(Qt::NoPen);
         p.setBrush(fill);

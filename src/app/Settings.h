@@ -46,8 +46,10 @@ public:
     void setMirror(const RenderStyle::Mirror &mirror);
     RenderStyle::Ring ring() const;
     void setRing(const RenderStyle::Ring &ring);
-    RenderStyle::Bloom bloom() const;
-    void setBloom(const RenderStyle::Bloom &bloom);
+    // Per visualiser, so each look keeps its own glow. The fallback is passed
+    // in rather than assumed, because the right default differs by look.
+    RenderStyle::Bloom bloom(const QString &vizId, const RenderStyle::Bloom &fallback) const;
+    void setBloom(const QString &vizId, const RenderStyle::Bloom &bloom);
     void resetVisualiserParameters();
 
     // Compact mode narrows the strip and drops the band count. Worth having as

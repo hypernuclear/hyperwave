@@ -94,9 +94,14 @@ this repository.
 
 ## Glow
 
-![bars with glow](docs/bars-glow.png)
+![lines](docs/lines.png)
 
-The bars, unchanged, with the post-process on top.
+The lines, which are the look glow exists for.
+It is set **per look, not once for the app**, and only the lines arrive with it
+on. That is not a preference so much as part of what a look is: the lines are
+strokes of light and are barely worth drawing without it, while the bars are
+objects with edges and haloing them turns a legible meter into a smear. A single
+switch for all six meant choosing which half to spoil.
 
 Bloom is not a property of any look. Deciding which pixels are lit and deciding
 what light does to them afterwards are different questions, so it is four

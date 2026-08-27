@@ -234,8 +234,8 @@ struct RenderStyle
     struct Ring
     {
         int segments = 180;
-        qreal baseRadius = 0.52;   // fraction of the half-extent at rest
-        qreal reach = 0.40;        // how much further a full-scale band pushes
+        qreal baseRadius = 0.74;   // fraction of the half-extent at rest
+        qreal reach = 0.15;        // how much further a full-scale band pushes
         qreal lineWidthPt = 0.8;
         qreal layerOpacity = 0.9;
         // A circle, not an ellipse. The radius is taken from the shorter side
@@ -251,10 +251,10 @@ struct RenderStyle
         // and split where it bulges. The constant term offsets them everywhere,
         // which is what makes the fringes read as printing out of register
         // rather than as a glow.
-        qreal separation = 0.30;
+        qreal separation = 0.22;
         qreal constantOffset = 0.035;
-        qreal stiffness = 0.22;
-        qreal damping = 0.86;
+        qreal stiffness = 0.18;
+        qreal damping = 0.88;
     };
     Ring ring;
     // --- bloom ---------------------------------------------------------------
@@ -264,7 +264,14 @@ struct RenderStyle
     // whatever the visualiser drew, so every look gets it on the same terms.
     struct Bloom
     {
-        bool enabled = true;
+        // Off by default, and set per look rather than once for the app.
+        //
+        // Glow is not a global preference, it is part of what a look is. The
+        // lines are strokes of light and are barely worth drawing without it;
+        // the bars are objects with edges, and haloing them turns a legible
+        // meter into a smear. One switch for all six meant choosing which half
+        // to spoil.
+        bool enabled = false;
         // What counts as bright enough to glow, measured as luminance on the
         // premultiplied colour, with a soft knee so a line brightening past the
         // threshold fades its glow up rather than switching it on.

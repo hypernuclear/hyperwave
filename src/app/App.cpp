@@ -57,6 +57,26 @@ std::unique_ptr<Visualiser> App::makeVisualiser(const QString &id)
     return std::make_unique<BarRenderer>();
 }
 
+RenderStyle::Bloom App::defaultBloomFor(const QString &id)
+{
+    RenderStyle::Bloom bloom;
+    if (id == QLatin1String("lines")) {
+        bloom.enabled = true;
+    }
+    return bloom;
+}
+
+QString App::activeVizId() const
+{
+    return m_options.vizStyle.isEmpty() ? m_settings.vizStyle() : m_options.vizStyle;
+}
+
+RenderStyle::Bloom App::bloomFor(const QString &id) const
+{
+    const auto it = m_bloomTuning.constFind(id);
+    return it != m_bloomTuning.constEnd() ? *it : defaultBloomFor(id);
+}
+
 void App::refreshSurface(Surface &surface)
 {
     if (surface.presenter) {
@@ -87,7 +107,7 @@ void App::applyVisualiserTuning(VisualiserControls *origin)
         panel->setLines(m_lineTuning);
         panel->setMirror(m_mirrorTuning);
         panel->setRing(m_ringTuning);
-        panel->setBloom(m_bloomTuning);
+        panel->setBloom(bloomFor(activeVizId()));
     };
     seed(m_hud ? m_hud->controls() : nullptr);
     seed(m_settingsControls);
@@ -104,7 +124,7 @@ void App::connectControls(VisualiserControls *controls)
     controls->setLines(m_lineTuning);
     controls->setMirror(m_mirrorTuning);
     controls->setRing(m_ringTuning);
-    controls->setBloom(m_bloomTuning);
+    controls->setBloom(bloomFor(activeVizId()));
     connect(controls, &VisualiserControls::visualiserRequested, this, [this](const QString &id) {
         m_options.vizStyle = id;
         m_settings.setVizStyle(id);
@@ -117,6 +137,12 @@ void App::connectControls(VisualiserControls *controls)
             m_hud->controls()->setVisualiser(id);
         if (m_settingsControls)
             m_settingsControls->setVisualiser(id);
+        // The glow panel is showing the previous look's settings until told
+        // otherwise, because glow is per look now.
+        if (m_hud && m_hud->controls())
+            m_hud->controls()->setBloom(bloomFor(id));
+        if (m_settingsControls)
+            m_settingsControls->setBloom(bloomFor(id));
     });
     connect(controls, &VisualiserControls::previewScaleRequested, this, [this](qreal scale) {
         m_options.previewScale = scale;
@@ -159,8 +185,9 @@ void App::connectControls(VisualiserControls *controls)
             });
     connect(controls, &VisualiserControls::bloomRequested, this,
             [this, controls](const RenderStyle::Bloom &bloom) {
-                m_bloomTuning = bloom;
-                m_settings.setBloom(bloom);
+                const QString id = activeVizId();
+                m_bloomTuning.insert(id, bloom);
+                m_settings.setBloom(id, bloom);
                 applyVisualiserTuning(controls);
             });
     connect(controls, &VisualiserControls::resetRequested, this, [this] {
@@ -171,7 +198,7 @@ void App::connectControls(VisualiserControls *controls)
         m_lineTuning = defaults.lines;
         m_mirrorTuning = defaults.mirror;
         m_ringTuning = defaults.ring;
-        m_bloomTuning = defaults.bloom;
+        m_bloomTuning.clear();
         applyVisualiserTuning(nullptr);   // a reset must reach every panel
     });
 }
@@ -209,7 +236,11 @@ App::App(Options options, QObject *parent)
     m_lineTuning = m_settings.lines();
     m_mirrorTuning = m_settings.mirror();
     m_ringTuning = m_settings.ring();
-    m_bloomTuning = m_settings.bloom();
+    for (const QString &id : {QStringLiteral("bars"), QStringLiteral("mirror"),
+                              QStringLiteral("lines"), QStringLiteral("ring"),
+                              QStringLiteral("strands"), QStringLiteral("ridge")}) {
+        m_bloomTuning.insert(id, m_settings.bloom(id, defaultBloomFor(id)));
+    }
 
     // The environment variable seeds the tuning rather than being consulted on
     // every restyle, so the HUD's slider can move away from it afterwards
@@ -446,7 +477,7 @@ void App::rebuildStyle(Surface &surface)
     surface.style.lines = m_lineTuning;
     surface.style.mirror = m_mirrorTuning;
     surface.style.ring = m_ringTuning;
-    surface.style.bloom = m_bloomTuning;
+    surface.style.bloom = bloomFor(activeVizId());
 
     if (surface.isNotch) {
         // The panel is the size of the hole in the display, so the strip fits
@@ -526,7 +557,9 @@ void App::onGeometryChanged(Surface &surface)
     surface.heightPt = surface.presenter->heightPt();
     surface.dpr = surface.presenter->devicePixelRatio() * m_options.previewScale;
     rebuildStyle(surface);
-    surface.presenter->setWidthPt(surface.style.stripWidthPt());
+    // The look decides how much menu bar it needs, not the bar style.
+    surface.presenter->setWidthPt(
+        surface.renderer->widthPt(surface.style, surface.heightPt));
     ensureBuffers(surface);
 
     // Draw one frame right now rather than waiting for the clock.
@@ -609,7 +642,8 @@ void App::onFrameDue(Surface &surface)
         target.save(m_options.shotPath);
         qInfo("hyperwave: wrote %s (%dx%d px, %.1f x %.1f pt @ %.0fx)",
               qPrintable(m_options.shotPath), target.width(), target.height(),
-              surface.style.stripWidthPt(), surface.heightPt, surface.dpr);
+              surface.renderer->widthPt(surface.style, surface.heightPt), surface.heightPt,
+              surface.dpr);
         QCoreApplication::quit();
     }
 }

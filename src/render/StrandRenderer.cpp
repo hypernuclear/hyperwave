@@ -156,12 +156,6 @@ void StrandRenderer::reset()
     m_impl->clock.restart();
 }
 
-QSize StrandRenderer::pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const
-{
-    // Same footprint as every other look: this is a different picture in the
-    // same slot, not a claim on more of the menu bar.
-    return QSize(std::lround(style.stripWidthPt() * dpr), std::lround(heightPt * dpr));
-}
 
 void StrandRenderer::render(const FrameState &state, const RenderStyle &style, qreal heightPt,
                             qreal dpr, QImage &target)

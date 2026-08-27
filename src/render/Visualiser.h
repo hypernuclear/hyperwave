@@ -25,8 +25,26 @@ class Visualiser
 public:
     virtual ~Visualiser() = default;
 
-    // The pixel size this look needs at this style and scale.
-    virtual QSize pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const = 0;
+    // How wide this look wants to be, in points.
+    //
+    // The status item is sized from this, so a look that is not a strip does
+    // not have to sit in the middle of one. A ring is as wide as it is tall and
+    // asking for 91 points of menu bar to draw a circle in the middle of would
+    // be taking space to leave it empty.
+    virtual qreal widthPt(const RenderStyle &style, qreal heightPt) const
+    {
+        Q_UNUSED(heightPt);
+        return style.stripWidthPt();
+    }
+
+    // The pixel size this look needs at this style and scale. Derived from
+    // widthPt() rather than restated, so the buffer and the item it goes into
+    // cannot disagree about how wide the look is.
+    virtual QSize pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const
+    {
+        return QSize(qMax(1, qRound(widthPt(style, heightPt) * dpr)),
+                     qMax(1, qRound(heightPt * dpr)));
+    }
 
     // `target` must be ARGB32_Premultiplied and already sized to pixelSize().
     // Implementations fill it and must never resize it: on macOS the buffer

@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 
+#include <QHash>
 #include <QImage>
 #include <QObject>
 #include <QThread>
@@ -51,6 +52,10 @@ public:
     // The looks, by id. Kept next to Options because the command line, the
     // settings and the menu all have to agree on the same spelling.
     static std::unique_ptr<Visualiser> makeVisualiser(const QString &id);
+
+    // What a look's glow should be before anyone has touched it. Only the lines
+    // arrive with it switched on.
+    static RenderStyle::Bloom defaultBloomFor(const QString &id);
 
     explicit App(Options options, QObject *parent = nullptr);
     ~App() override;
@@ -112,6 +117,8 @@ private:
     // cursor and reselects, and the field stops behaving like a field.
     void applyVisualiserTuning(VisualiserControls *origin);
     void showSettings();
+    QString activeVizId() const;
+    RenderStyle::Bloom bloomFor(const QString &id) const;
 
     void applyFrameRate();
     void setNotchTabVisible(bool visible);
@@ -132,7 +139,9 @@ private:
     RenderStyle::Lines m_lineTuning;
     RenderStyle::Mirror m_mirrorTuning;
     RenderStyle::Ring m_ringTuning;
-    RenderStyle::Bloom m_bloomTuning;
+    // Keyed by visualiser id, because glow belongs to a look and not to the
+    // application. Missing keys fall back to that look's default.
+    QHash<QString, RenderStyle::Bloom> m_bloomTuning;
     // Bloom is a post-process over whatever a look drew, so it lives here
     // rather than inside any renderer. One instance: it holds GPU resources
     // sized to the frame, and every surface is the same size at a time.

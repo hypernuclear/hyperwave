@@ -38,7 +38,6 @@ public:
     StrandRenderer();
     ~StrandRenderer() override;
 
-    QSize pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const override;
     void render(const FrameState &state, const RenderStyle &style, qreal heightPt, qreal dpr,
                 QImage &target) override;
     void reset() override;

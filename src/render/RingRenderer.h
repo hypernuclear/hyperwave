@@ -23,7 +23,12 @@ namespace hyperwave {
 class RingRenderer : public Visualiser
 {
 public:
-    QSize pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const override;
+    // Square. The radius comes from the shorter side, so on a strip four times
+    // wider than it is tall the circle would sit in the middle of a lot of
+    // nothing; asking for only the width it uses lets the status item shrink to
+    // fit it.
+    qreal widthPt(const RenderStyle &style, qreal heightPt) const override;
+
     void render(const FrameState &state, const RenderStyle &style, qreal heightPt, qreal dpr,
                 QImage &target) override;
     void reset() override;

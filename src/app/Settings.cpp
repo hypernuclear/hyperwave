@@ -192,37 +192,41 @@ void Settings::setRing(const RenderStyle::Ring &r)
     m_store.setValue(QStringLiteral("ring/damping"), r.damping);
     Q_EMIT visualiserParametersChanged();
 }
-RenderStyle::Bloom Settings::bloom() const
+RenderStyle::Bloom Settings::bloom(const QString &vizId,
+                                  const RenderStyle::Bloom &fallback) const
 {
-    const RenderStyle defaults;
-    RenderStyle::Bloom b = defaults.bloom;
-    const auto num = [this](const char *key, qreal fallback) {
-        return m_store.value(QLatin1String(key), fallback).toDouble();
+    RenderStyle::Bloom b = fallback;
+    const QString prefix = QStringLiteral("bloom/") + vizId + QLatin1Char('/');
+    const auto num = [this, &prefix](const char *key, qreal value) {
+        return m_store.value(prefix + QLatin1String(key), value).toDouble();
     };
-    b.enabled = m_store.value(QStringLiteral("bloom/enabled"), b.enabled).toBool();
-    b.threshold = num("bloom/threshold", b.threshold);
-    b.knee = num("bloom/knee", b.knee);
-    b.intensity = num("bloom/intensity", b.intensity);
-    b.radius = num("bloom/radius", b.radius);
-    b.dispersion = num("bloom/dispersion", b.dispersion);
-    b.radialBlur = num("bloom/radialBlur", b.radialBlur);
-    b.rayLength = num("bloom/rayLength", b.rayLength);
-    b.rayDecay = num("bloom/rayDecay", b.rayDecay);
+    b.enabled = m_store.value(prefix + QStringLiteral("enabled"), b.enabled).toBool();
+    b.threshold = num("threshold", b.threshold);
+    b.knee = num("knee", b.knee);
+    b.intensity = num("intensity", b.intensity);
+    b.radius = num("radius", b.radius);
+    b.dispersion = num("dispersion", b.dispersion);
+    b.radialBlur = num("radialBlur", b.radialBlur);
+    b.rayLength = num("rayLength", b.rayLength);
+    b.rayDecay = num("rayDecay", b.rayDecay);
     return b;
 }
-void Settings::setBloom(const RenderStyle::Bloom &b)
+
+void Settings::setBloom(const QString &vizId, const RenderStyle::Bloom &b)
 {
-    m_store.setValue(QStringLiteral("bloom/enabled"), b.enabled);
-    m_store.setValue(QStringLiteral("bloom/threshold"), b.threshold);
-    m_store.setValue(QStringLiteral("bloom/knee"), b.knee);
-    m_store.setValue(QStringLiteral("bloom/intensity"), b.intensity);
-    m_store.setValue(QStringLiteral("bloom/radius"), b.radius);
-    m_store.setValue(QStringLiteral("bloom/dispersion"), b.dispersion);
-    m_store.setValue(QStringLiteral("bloom/radialBlur"), b.radialBlur);
-    m_store.setValue(QStringLiteral("bloom/rayLength"), b.rayLength);
-    m_store.setValue(QStringLiteral("bloom/rayDecay"), b.rayDecay);
+    const QString prefix = QStringLiteral("bloom/") + vizId + QLatin1Char('/');
+    m_store.setValue(prefix + QStringLiteral("enabled"), b.enabled);
+    m_store.setValue(prefix + QStringLiteral("threshold"), b.threshold);
+    m_store.setValue(prefix + QStringLiteral("knee"), b.knee);
+    m_store.setValue(prefix + QStringLiteral("intensity"), b.intensity);
+    m_store.setValue(prefix + QStringLiteral("radius"), b.radius);
+    m_store.setValue(prefix + QStringLiteral("dispersion"), b.dispersion);
+    m_store.setValue(prefix + QStringLiteral("radialBlur"), b.radialBlur);
+    m_store.setValue(prefix + QStringLiteral("rayLength"), b.rayLength);
+    m_store.setValue(prefix + QStringLiteral("rayDecay"), b.rayDecay);
     Q_EMIT visualiserParametersChanged();
 }
+
 // Clears every stored visualiser parameter, so the next read falls through to
 // the defaults rather than to whatever was last saved.
 void Settings::resetVisualiserParameters()

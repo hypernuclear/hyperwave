@@ -34,14 +34,6 @@ float sampleRow(const float *row, int count, float position)
 
 } // namespace
 
-QSize RidgeRenderer::pixelSize(const RenderStyle &style, qreal heightPt, qreal dpr) const
-{
-    // Deliberately the same footprint as the bars. The terrain is a different
-    // look at the same data in the same slot, not a claim on more of the menu
-    // bar, and a look that silently resized the status item would be a look
-    // people turn off.
-    return QSize(std::lround(style.stripWidthPt() * dpr), std::lround(heightPt * dpr));
-}
 
 void RidgeRenderer::reset()
 {
