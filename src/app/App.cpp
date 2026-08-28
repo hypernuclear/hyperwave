@@ -1,4 +1,8 @@
+#include <QSysInfo>
+
 #include "app/App.h"
+
+#include "analytics/Analytics.h"
 
 #include <algorithm>
 
@@ -319,6 +323,18 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
 
 bool App::start()
 {
+    // Null in a build with no app key, which is every local build. Created
+    // before anything that records, so the launch event is not lost.
+    m_analytics = Analytics::create(this);
+    if (m_analytics && m_analytics->enabled()) {
+        m_analytics->property(Prop::kVersion, QStringLiteral(HYPERWAVE_VERSION));
+        m_analytics->property(Prop::kOs, QSysInfo::productType());
+        m_analytics->property(Prop::kOsVersion, QSysInfo::productVersion());
+        m_analytics->property(Prop::kLook, m_settings.vizStyle());
+        m_analytics->property(Prop::kGradient, m_settings.gradientId());
+        m_analytics->event(Ev::kLaunch);
+    }
+
     // Null on every platform without an updater, and on any build made without
     // a signing key. The menu asks before it offers the entry.
     m_updater = AppUpdater::create(this);
@@ -818,6 +834,12 @@ MenuModel App::buildMenu() const
                                 QStringLiteral("Settings…")));
     menu.append(MenuItem::action(QLatin1String(MenuAction::kShowSplash),
                                  QStringLiteral("Show Splash")));
+    if (m_analytics) {
+        // Absent, not greyed out, in a build that has nothing to send to.
+        menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleAnalytics),
+                                     QStringLiteral("Send Anonymous Usage Data"))
+                        .withCheck(m_analytics->enabled()));
+    }
     if (m_updater) {
         // Only when there is something behind it. A build with no updater
         // compiled in -- Linux, or any build without a signing key -- shows no
@@ -853,6 +875,12 @@ void App::onMenuAction(const QString &actionId)
 
     if (actionId.startsWith(sourcePrefix)) {
         const QString uid = actionId.mid(sourcePrefix.size());
+        if (m_analytics) {
+            // WHETHER a specific device was chosen, never which one. A device
+            // name is the user's business and does not leave the machine.
+            m_analytics->event(Ev::kSourcePicked,
+                               {{QStringLiteral("specific"), !uid.isEmpty()}});
+        }
         m_settings.setSourceDeviceUid(uid);
         m_audio->source()->setSourceDeviceUid(uid);
         // The tap was torn down and rebuilt, so the analysis is looking at a
@@ -866,6 +894,10 @@ void App::onMenuAction(const QString &actionId)
 
     if (actionId.startsWith(QLatin1String(MenuAction::kVizPrefix))) {
         const QString id = actionId.mid(QLatin1String(MenuAction::kVizPrefix).size());
+        if (m_analytics) {
+            m_analytics->event(Ev::kLook, {{QStringLiteral("look"), id}});
+            m_analytics->property(Prop::kLook, id);
+        }
         m_settings.setVizStyle(id);
         for (auto &surface : m_surfaces) {
             surface->renderer = makeVisualiser(id);
@@ -921,6 +953,12 @@ void App::onMenuAction(const QString &actionId)
     }
     if (actionId == QLatin1String(MenuAction::kSettings)) {
         showSettings();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kToggleAnalytics)) {
+        if (m_analytics)
+            m_analytics->setEnabled(!m_analytics->enabled());
+        refreshMenu();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kShowSplash)) {

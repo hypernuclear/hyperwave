@@ -83,6 +83,12 @@ jobs:
       - name: Install Ninja
         run: brew list ninja >/dev/null 2>&1 || brew install ninja
 
+      # Deliberately no HYPERWAVE_COUNTLY_APP_KEY. A pull request build has
+      # nothing to report and nobody to report it as, and a CI machine opening
+      # a session per run would put a stream of installs into the dashboard
+      # that are not installs. Analytics::create() returns null without a key,
+      # so this path is exercised too -- it is the same one every contributor's
+      # local build takes.
       - name: Configure
         # install-qt-action exports QT_ROOT_DIR and puts qmake on PATH;
         # CMakeLists.txt reads QT_ROOT, so hand it across explicitly rather

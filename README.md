@@ -288,6 +288,32 @@ editor and a paused player running, nothing listed; YouTube playing in Chrome,
 `Google Chrome −21.3 dB`; tab stopped, the level decaying away through −33 and
 −42 to nothing.
 
+## What it sends
+
+Usage analytics, on by default, switched off in the menu under **Send Anonymous
+Usage Data**. Off is the real thing: the SDK is never initialised, no device id
+is computed, and no request is made. A build with no app key compiled in -- which
+is every local build, including yours -- has no backend at all and hides the
+menu entry rather than showing a switch that does nothing.
+
+What goes out is which look and colour are running, whether the microphone is
+mixed in, whether a specific output device was chosen rather than the whole
+system mix, the platform, and the app version.
+
+What does not, and cannot: **anything the app hears**. No audio, no spectrum, no
+track titles, no application names from the `Playing` list, no output device
+names. This is worth stating plainly because hyperwave is in an unusual position
+to leak it -- it can hear everything the machine plays, and everything the
+microphone hears when that is turned on. The interface takes a name and a small
+map of values, every call site passes constants or a bounded string like `ridge`
+or `rainbow`, and the rule in `src/analytics/Analytics.h` is that an event
+needing a value from the audio system is an event that does not get added.
+
+The install is identified by a SHA-256 of the machine's hardware id. The hash is
+one-way, the raw id never leaves the machine, and it is computed the same way in
+the sibling products -- so the same machine reports the same id to each of them,
+which is a correlation worth knowing about and a reason the switch exists.
+
 ## Permission
 
 The system-audio grant is **required and silently enforced**. Without it

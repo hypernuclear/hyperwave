@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-28
+
 ### Fixed
 - The ring was fuzzy and drew outside itself. Its bloom ran at a quarter
   resolution, which on a 44-pixel square status item is an eleven-pixel texture
@@ -54,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and committed as a VS Code configuration, crashed before drawing a frame.
 
 ### Added
+- A release pipeline. A `v*` tag builds macOS arm64, macOS x64 and Windows x64,
+  signs and notarizes the Mac bundles, packages a DMG and an Inno installer,
+  signs both feeds with one ed25519 key, and publishes to R2. Sparkle on macOS
+  and WinSparkle on Windows read the same appcast and verify the same signature.
+  Pull requests are built by `ci`; the release workflow runs only on a tag or a
+  manual dispatch.
+- An app icon on both platforms, a splash screen, and the mark and logotype as
+  QML components whose colour is a property rather than baked into the artwork.
 
 - System audio capture on macOS via CoreAudio process taps, with no virtual
   audio driver and no Screen Recording permission. Probes for a tap-only
@@ -162,4 +172,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   6.11's repository layout, building and testing arm64 and x86_64 on every push
   and pull request.
 
-[Unreleased]: https://github.com/hypernuclear/hyperwave/commits/main
+[Unreleased]: https://github.com/hypernuclear/hyperwave/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/hypernuclear/hyperwave/releases/tag/v0.1.0

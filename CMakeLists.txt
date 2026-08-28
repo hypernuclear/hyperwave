@@ -83,7 +83,8 @@ if(NOT CMAKE_PREFIX_PATH)
     endif()
 endif()
 
-set(HYPERWAVE_QT_COMPONENTS Core Gui GuiPrivate Widgets Svg Qml Quick QuickControls2 ShaderTools Test)
+set(HYPERWAVE_QT_COMPONENTS Core Gui GuiPrivate Widgets Svg Network Qml Quick
+    QuickControls2 ShaderTools Test)
 
 find_package(Qt6 6.11 QUIET COMPONENTS ${HYPERWAVE_QT_COMPONENTS})
 if(NOT Qt6_FOUND)
@@ -203,6 +204,76 @@ qt_add_executable(hyperwave
     $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/LinuxBarPresenter.cpp>
 )
 
+# --- analytics --------------------------------------------------------------
+#
+# On at runtime, switchable off in the menu, and absent entirely unless an app
+# key was compiled in. The key is not a credential -- it says which Countly app
+# a request belongs to, and it ships inside every binary -- but this repo is
+# public, and a key sitting in a public tree is an invitation to write junk into
+# the dashboard. So CI passes it from a secret and local builds have no backend
+# at all, which is also why a contributor never sends anything by accident.
+option(HYPERWAVE_ANALYTICS "Include usage analytics (Countly)" ON)
+set(HYPERWAVE_COUNTLY_APP_KEY "" CACHE STRING "Countly app key; CI passes this")
+set(HYPERWAVE_COUNTLY_SERVER "https://analytics.hypernuclear.com" CACHE STRING
+    "Countly server URL")
+
+if(HYPERWAVE_ANALYTICS)
+    include(FetchContent)
+    # Pinned to a SHA rather than a tag: a tag can move, and this one is fetched
+    # into every release build.
+    FetchContent_Declare(countly
+        GIT_REPOSITORY https://github.com/Countly/countly-sdk-cpp.git
+        GIT_TAG        e34904b9c798024223d1657c69f6bf17cb786db3)
+
+    # Qt already provides HTTP and SHA-256, and this app links both. The SDK's
+    # own defaults would drag libcurl and OpenSSL into a menu bar app for no
+    # gain. Set BEFORE the SDK is added.
+    set(COUNTLY_USE_CUSTOM_HTTP   ON  CACHE BOOL "" FORCE)
+    set(COUNTLY_USE_CUSTOM_SHA256 ON  CACHE BOOL "" FORCE)
+    set(COUNTLY_BUILD_TESTS       OFF CACHE BOOL "" FORCE)
+    set(COUNTLY_BUILD_SAMPLE      OFF CACHE BOOL "" FORCE)
+    # The SDK declares cmake_minimum_required(VERSION 3.0), which CMake 4
+    # refuses outright. Cannot patch a fetched tree, so raise the floor it is
+    # allowed to ask for.
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+    set(_hw_shared_saved ${BUILD_SHARED_LIBS})
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(countly)
+    set(BUILD_SHARED_LIBS ${_hw_shared_saved} CACHE BOOL "" FORCE)
+
+    # Its headers are SYSTEM headers as far as we are concerned.
+    #
+    # The SDK vendors nlohmann/json, which uses a literal operator spelling that
+    # current clang deprecates, so every translation unit including countly.hpp
+    # emits warnings from code this project does not own and cannot fix. Two
+    # warnings in every build is how a project teaches people to stop reading
+    # them.
+    if(TARGET countly)
+        get_target_property(_hw_countly_inc countly INTERFACE_INCLUDE_DIRECTORIES)
+        if(_hw_countly_inc)
+            set_target_properties(countly PROPERTIES
+                INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_hw_countly_inc}")
+        endif()
+    endif()
+
+    # A failed fetch leaves a directory that exists and builds nothing. Say so
+    # here rather than letting it surface as an unresolved link to `countly`.
+    if(NOT TARGET countly)
+        message(FATAL_ERROR
+            "countly-sdk-cpp did not provide a `countly` target.\n"
+            "Build without analytics instead: -DHYPERWAVE_ANALYTICS=OFF")
+    endif()
+
+    set(HYPERWAVE_ANALYTICS_SOURCES
+        src/analytics/Analytics.h
+        src/analytics/MachineId.h
+        src/analytics/MachineId.cpp
+        src/analytics/CountlyAnalytics.h
+        src/analytics/CountlyAnalytics.cpp)
+else()
+    set(HYPERWAVE_ANALYTICS_SOURCES src/analytics/Analytics.h src/analytics/NoAnalytics.cpp)
+endif()
+
 # --- auto-update -----------------------------------------------------------
 #
 # Sparkle on macOS, WinSparkle on Windows, nothing anywhere else. Both read the
@@ -271,15 +342,29 @@ else()
 endif()
 
 target_sources(hyperwave PRIVATE src/update/AppUpdater.h ${HYPERWAVE_UPDATE_SOURCES})
+target_sources(hyperwave PRIVATE ${HYPERWAVE_ANALYTICS_SOURCES})
 
 target_include_directories(hyperwave PRIVATE src)
 target_link_libraries(hyperwave PRIVATE
     hyperwave_core
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg Qt6::Qml Qt6::Quick Qt6::QuickControls2
+    Qt6::Network)
 
 target_compile_definitions(hyperwave PRIVATE
     HYPERWAVE_VERSION="${APP_VERSION_DISPLAY}"
     HYPERWAVE_VERSION_BUILD="${APP_VERSION_BUILD}")
+
+if(HYPERWAVE_ANALYTICS)
+    target_link_libraries(hyperwave PRIVATE countly)
+    # Only defined when there is a key. Analytics::create() tests for the macro,
+    # so a build without one compiles the Countly backend but never constructs
+    # it -- and never computes a device id.
+    if(HYPERWAVE_COUNTLY_APP_KEY)
+        target_compile_definitions(hyperwave PRIVATE
+            HYPERWAVE_COUNTLY_APP_KEY="${HYPERWAVE_COUNTLY_APP_KEY}"
+            HYPERWAVE_COUNTLY_SERVER="${HYPERWAVE_COUNTLY_SERVER}")
+    endif()
+endif()
 
 if(HYPERWAVE_AUTO_UPDATE)
     target_compile_definitions(hyperwave PRIVATE HYPERWAVE_AUTO_UPDATE=1)

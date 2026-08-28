@@ -12,6 +12,7 @@
 #include "app/DspWorker.h"
 #include "app/MenuModel.h"
 #include "app/Settings.h"
+#include "analytics/Analytics.h"
 #include "update/AppUpdater.h"
 #include "app/VisualiserControls.h"
 #include "dsp/FrameState.h"
@@ -138,6 +139,10 @@ private:
     // Null where the platform has no updater, or where the build was made
     // without a signing key. Every use is guarded rather than assumed.
     AppUpdater *m_updater = nullptr;
+    // Null in any build without an app key compiled in, which is every local
+    // one. Guarded at every use, and the menu entry is absent rather than
+    // inert.
+    Analytics *m_analytics = nullptr;
 
     // Live tuning, owned here rather than rebuilt from defaults every time.
     // rebuildStyle() starts from a fresh RenderStyle on every geometry change,
