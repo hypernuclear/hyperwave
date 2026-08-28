@@ -28,6 +28,12 @@ already works.
 > two-second `SHQueryUserNotificationState` poll. The sections below record
 > the original reasoning and are kept because they explain what was tried and
 > why it lost.
+>
+> Track info and transport went with them, on both platforms rather than
+> ported: the macOS implementation was per-app AppleScript behind an
+> Automation prompt, covering two apps, and it was cut instead of being
+> reimplemented on a third API. PanelPresenter is down to visibility and the
+> source picker.
 
 macOS gives this app a reserved strip that no window ever covers. Windows has
 no such thing on offer to a third party, so the question is which of the

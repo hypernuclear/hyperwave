@@ -10,7 +10,6 @@ constexpr const char *kVizKey = "appearance/visualiser";
 constexpr const char *kCompactKey = "appearance/compact";
 constexpr const char *kHalfRateKey = "power/halfRateOnBattery";
 constexpr const char *kSourceKey = "audio/sourceDeviceUid";
-constexpr const char *kNowPlayingKey = "nowPlaying/enabled";
 constexpr const char *kNotchAutoHideKey = "notch/autoHide";
 } // namespace
 
@@ -288,17 +287,6 @@ void Settings::setSourceDeviceUid(const QString &uid)
         return;
     m_store.setValue(QLatin1String(kSourceKey), uid);
     Q_EMIT sourceDeviceUidChanged(uid);
-}
-bool Settings::nowPlayingEnabled() const
-{
-    return m_store.value(QLatin1String(kNowPlayingKey), false).toBool();
-}
-void Settings::setNowPlayingEnabled(bool enabled)
-{
-    if (nowPlayingEnabled() == enabled)
-        return;
-    m_store.setValue(QLatin1String(kNowPlayingKey), enabled);
-    Q_EMIT nowPlayingEnabledChanged(enabled);
 }
 bool Settings::notchAutoHide() const
 {

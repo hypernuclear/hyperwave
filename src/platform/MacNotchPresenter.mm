@@ -73,17 +73,13 @@ constexpr CGFloat kTabHeight = 20.0;
 // changing any one row does not silently start overlapping the next.
 constexpr CGFloat kExpandedOverhang = 96.0;
 constexpr CGFloat kExpandedStripHeight = 54.0;
-constexpr CGFloat kExpandedTitleHeight = 18.0;
-constexpr CGFloat kExpandedArtistHeight = 15.0;
-constexpr CGFloat kExpandedTransportHeight = 26.0;
 constexpr CGFloat kExpandedSourcesHeight = 22.0;
 constexpr CGFloat kExpandedPad = 10.0;
 constexpr CGFloat kCornerRadius = 14.0;
 CGFloat expandedHeight(CGFloat notchHeight)
 {
-    return notchHeight + kExpandedPad + kExpandedTitleHeight + kExpandedArtistHeight
-        + kExpandedPad + kExpandedTransportHeight + kExpandedPad + kExpandedSourcesHeight
-        + kExpandedPad + kExpandedStripHeight + kExpandedPad;
+    return notchHeight + kExpandedPad + kExpandedSourcesHeight + kExpandedPad
+        + kExpandedStripHeight + kExpandedPad;
 }
 
 } // namespace
@@ -94,9 +90,6 @@ CGFloat expandedHeight(CGFloat notchHeight)
 @interface HLNotchView : NSView
 @property (nonatomic, assign) hyperwave::MacNotchPresenter *presenter;
 @property (nonatomic, strong) CALayer *stripLayer;
-@property (nonatomic, strong) NSTextField *titleField;
-@property (nonatomic, strong) NSTextField *artistField;
-@property (nonatomic, strong) NSStackView *transport;
 @property (nonatomic, strong) NSPopUpButton *sources;
 @property (nonatomic, assign) CGFloat notchHeight;
 @property (nonatomic, assign) CGFloat notchWidth;
@@ -107,35 +100,6 @@ CGFloat expandedHeight(CGFloat notchHeight)
 
 @implementation HLNotchView {
     NSTrackingArea *_tracking;
-}
-
-- (NSButton *)makeTransportButton:(NSString *)symbol tag:(NSInteger)tag
-{
-    NSImage *icon = [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:symbol];
-    NSButton *button = [NSButton buttonWithImage:icon target:self
-                                          action:@selector(transportPressed:)];
-    button.bezelStyle = NSBezelStyleAccessoryBarAction;
-    button.bordered = NO;
-    button.contentTintColor = NSColor.whiteColor;
-    button.tag = tag;
-    return button;
-}
-
-- (void)transportPressed:(NSButton *)sender
-{
-    if (_presenter)
-        _presenter->handleTransport(static_cast<int>(sender.tag));
-}
-
-- (NSTextField *)makeLabel:(CGFloat)size weight:(NSFontWeight)weight alpha:(CGFloat)alpha
-{
-    NSTextField *field = [NSTextField labelWithString:@""];
-    field.font = [NSFont systemFontOfSize:size weight:weight];
-    field.textColor = [NSColor.whiteColor colorWithAlphaComponent:alpha];
-    field.lineBreakMode = NSLineBreakByTruncatingTail;
-    field.alignment = NSTextAlignmentCenter;
-    field.hidden = YES;
-    return field;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame
@@ -156,20 +120,6 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _stripLayer.masksToBounds = YES;
         [self.layer addSublayer:_stripLayer];
 
-        _titleField = [self makeLabel:13.0 weight:NSFontWeightSemibold alpha:1.0];
-        _artistField = [self makeLabel:11.0 weight:NSFontWeightRegular alpha:0.62];
-        [self addSubview:_titleField];
-        [self addSubview:_artistField];
-
-        _transport = [NSStackView stackViewWithViews:@[
-            [self makeTransportButton:@"backward.fill" tag:2],
-            [self makeTransportButton:@"playpause.fill" tag:0],
-            [self makeTransportButton:@"forward.fill" tag:1],
-        ]];
-        _transport.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-        _transport.spacing = 18.0;
-        _transport.hidden = YES;
-        [self addSubview:_transport];
         _sources = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
         _sources.bezelStyle = NSBezelStyleRoundRect;
         _sources.controlSize = NSControlSizeSmall;
@@ -182,43 +132,29 @@ CGFloat expandedHeight(CGFloat notchHeight)
     return self;
 }
 
-// Laid out by hand rather than with constraints. The panel has five elements
+// Laid out by hand rather than with constraints. The panel has two elements
 // and two states; a constraint graph would be more machinery than arithmetic.
 - (void)layoutContent
 {
     const NSRect b = self.bounds;
     const BOOL show = _expanded;
 
-    _titleField.hidden = !show || _titleField.stringValue.length == 0;
-    _artistField.hidden = !show || _artistField.stringValue.length == 0;
-    _transport.hidden = !show;
     _sources.hidden = !show;
 
     if (!show)
         return;
 
     const CGFloat pad = 14.0;
-    const CGFloat width = b.size.width - 2 * pad;
 
-    // Top down from under the housing: title, artist, transport. The strip has
-    // already been given the bottom row by expandedHeight(), so nothing here
-    // may reach into it -- laying these out against whatever was "left over"
-    // is what put the bars straight through the transport buttons.
-    CGFloat y = b.size.height - _notchHeight - kExpandedPad - kExpandedTitleHeight;
-    _titleField.frame = NSMakeRect(pad, y, width, kExpandedTitleHeight);
-
-    y -= kExpandedArtistHeight;
-    _artistField.frame = NSMakeRect(pad, y, width, kExpandedArtistHeight);
-
-    const NSSize transportSize = _transport.fittingSize;
-    y -= kExpandedPad + kExpandedTransportHeight;
-    _transport.frame = NSMakeRect((b.size.width - transportSize.width) / 2.0, y,
-                                  transportSize.width, kExpandedTransportHeight);
+    // Under the housing: the source picker, then the strip in the bottom row
+    // expandedHeight() has already reserved for it -- nothing here may reach
+    // into that row.
+    //
     // The popup is given a fixed generous width rather than its fitting size,
     // so the panel does not change shape every time the selected device's name
     // changes length.
     const CGFloat sourcesWidth = std::min<CGFloat>(b.size.width - 2 * pad, 240.0);
-    y -= kExpandedPad + kExpandedSourcesHeight;
+    const CGFloat y = b.size.height - _notchHeight - kExpandedPad - kExpandedSourcesHeight;
     _sources.frame = NSMakeRect((b.size.width - sourcesWidth) / 2.0, y, sourcesWidth,
                                 kExpandedSourcesHeight);
 }
@@ -501,8 +437,8 @@ void MacNotchPresenter::remove()
 qreal MacNotchPresenter::heightPt() const
 {
     // Only the tab is drawable; the rest of the window sits behind the housing.
-    // Only the strip's own row, not everything below the housing -- the title,
-    // artist and transport rows have already claimed theirs.
+    // Only the strip's own row, not everything below the housing -- the source
+    // row has already claimed its own.
     return m_impl->expanded ? kExpandedStripHeight : kTabHeight;
 }
 
@@ -563,7 +499,7 @@ void MacNotchPresenter::present(const QImage &image)
     m_impl->view.stripLayer.contentsScale = dpr;
     // Bottom-anchored: the strip lives in the tab, below the housing.
     // Collapsed the strip owns the tab; expanded it sits in the bottom row,
-    // clear of the transport above it.
+    // clear of the source picker above it.
     const CGFloat y = m_impl->expanded ? kExpandedPad : (kTabHeight - h) / 2.0;
     m_impl->view.stripLayer.frame = CGRectMake((bounds.size.width - w) / 2.0, y, w, h);
     m_impl->view.stripLayer.contents = (__bridge id)cg;
@@ -596,41 +532,6 @@ void MacNotchPresenter::setExpanded(bool expanded)
 void MacNotchPresenter::handleHover(bool inside)
 {
     setExpanded(inside);
-}
-
-void MacNotchPresenter::handleTransport(int command)
-{
-    Q_EMIT transportRequested(command);
-}
-
-void MacNotchPresenter::setNowPlaying(const NowPlayingInfo &info, const QString &fallbackAppName)
-{
-    if (!m_impl->view)
-        return;
-
-    // A track title when we have one, the application's name when we do not.
-    // The fallback is the honest answer for a browser: the audio process list
-    // knows Chrome is making the noise and nothing whatsoever about the tab.
-    if (info.valid) {
-        m_impl->view.titleField.stringValue = info.title.toNSString();
-        m_impl->view.artistField.stringValue =
-            (info.artist.isEmpty() ? info.appName : info.artist).toNSString();
-    } else if (!fallbackAppName.isEmpty()) {
-        m_impl->view.titleField.stringValue = fallbackAppName.toNSString();
-        m_impl->view.artistField.stringValue = @"";
-    } else {
-        m_impl->view.titleField.stringValue = @"";
-        m_impl->view.artistField.stringValue = @"";
-    }
-
-    // Transport only where there is something to control. Buttons that quietly
-    // do nothing are worse than no buttons.
-    for (NSView *view in m_impl->view.transport.views) {
-        if ([view isKindOfClass:[NSButton class]])
-            ((NSButton *)view).enabled = info.valid;
-    }
-
-    [m_impl->view layoutContent];
 }
 
 void MacNotchPresenter::setPreferredFps(int fps)

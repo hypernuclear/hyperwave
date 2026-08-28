@@ -231,7 +231,6 @@ App::App(Options options, QObject *parent)
     , m_options(std::move(options))
     , m_settings(this)
     , m_audio(std::make_unique<AudioController>())
-    , m_nowPlaying(std::make_unique<NowPlaying>())
 {
     m_dspThread.setObjectName(QStringLiteral("hyperwave.dsp"));
     // Whatever was tuned last time, before anything draws a frame.
@@ -300,17 +299,12 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
 
     if (isNotch) {
         m_notchSurface = s;
-        auto *notch = static_cast<PanelPresenter *>(p);
-        connect(notch, &PanelPresenter::transportRequested, this, [this](int command) {
-            m_nowPlaying->sendCommand(static_cast<TransportCommand>(command));
-        });
         // The panel needs its own route to the menu: it exists for displays
         // where the status item has been crowded off the bar entirely.
-        connect(notch, &BarPresenter::menuActionTriggered, this, &App::onMenuAction);
+        connect(p, &BarPresenter::menuActionTriggered, this, &App::onMenuAction);
         // The panel rebuilds the menu before showing it, same as the status
         // item. Without this the signal is emitted into nothing.
-        connect(notch, &BarPresenter::menuAboutToShow, this, &App::refreshMenu);
-        connect(notch, &BarPresenter::geometryChanged, this, &App::refreshNowPlaying);
+        connect(p, &BarPresenter::menuAboutToShow, this, &App::refreshMenu);
     }
     if (!isNotch) {
         // The status item carries the menu; the notch panel expands instead.
@@ -430,13 +424,6 @@ bool App::start()
 
         applyFrameRate();
         refreshMenu();
-        m_nowPlaying->setEnabled(m_settings.nowPlayingEnabled());
-        connect(m_nowPlaying.get(), &NowPlaying::infoChanged, this,
-                [this](const NowPlayingInfo &) {
-                    refreshNowPlaying();
-                    refreshMenu();
-                });
-        refreshNowPlaying();
     }
 
     if (m_options.windowed || m_options.hud) {
@@ -671,7 +658,6 @@ void App::onAudioBecameActive()
             surface->presenter->startClock();
     }
     setNotchTabVisible(true);
-    refreshNowPlaying();
 }
 void App::setNotchTabVisible(bool visible)
 {
@@ -745,38 +731,14 @@ MenuModel App::buildMenu() const
     if (!audible.isEmpty()) {
         MenuModel playing;
         for (const AudioProcess &process : audible) {
-            // Now it can honestly say "playing", because it was measured. A
-            // scriptable app that is paused still overrides this -- it knows
-            // better than a level meter does.
-            QString detail = QStringLiteral("playing");
-            if (m_settings.nowPlayingEnabled() && NowPlaying::isSupported(process.bundleId)
-                && m_nowPlaying->bundleId() == process.bundleId
-                && m_nowPlaying->info().valid && !m_nowPlaying->info().playing) {
-                detail = QStringLiteral("paused");
-            }
+            // It can honestly say "playing", because it was measured.
             playing.append(MenuItem::action(QString(), process.name)
                                .withIcon(process.bundleId)
-                               .withDetail(detail)
+                               .withDetail(QStringLiteral("playing"))
                                .withEnabled(false));
         }
         menu.append(MenuItem::submenu(QStringLiteral("Playing"), playing)
                         .withDetail(QString::number(audible.size())));
-    }
-    // --- now playing, where we can actually read it ---
-    const NowPlayingInfo &np = m_nowPlaying->info();
-    if (m_settings.nowPlayingEnabled() && np.valid) {
-        menu.append(MenuItem::separator());
-        menu.append(MenuItem::action(QString(), np.title)
-                        .withDetail(np.artist)
-                        .withIcon(np.bundleId)
-                        .withEnabled(false));
-        menu.append(MenuItem::action(QLatin1String(MenuAction::kTransportPrevious),
-                                     QStringLiteral("Previous")));
-        menu.append(MenuItem::action(QLatin1String(MenuAction::kTransportPlayPause),
-                                     np.playing ? QStringLiteral("Pause")
-                                                : QStringLiteral("Play")));
-        menu.append(
-            MenuItem::action(QLatin1String(MenuAction::kTransportNext), QStringLiteral("Next")));
     }
     menu.append(MenuItem::separator());
     MenuModel gradients;
@@ -822,9 +784,6 @@ MenuModel App::buildMenu() const
     menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleInput),
                                 QStringLiteral("Include microphone input"))
                     .withCheck(m_audio->source()->inputEnabled()));
-    menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleNowPlaying),
-                                 QStringLiteral("Track info and controls"))
-                    .withCheck(m_settings.nowPlayingEnabled()));
 #ifdef Q_OS_MACOS
     // Always offered, never conditional on an accusation.
     //
@@ -867,42 +826,6 @@ void App::refreshMenu()
     }
 }
 
-void App::refreshNowPlaying()
-{
-    // Which app to ask about.
-    //
-    // Deliberately not "whichever process reports IsRunningOutput": that
-    // property means a process holds an open output stream, not that it is
-    // making a sound, so it picks the 3D editor that has had an idle audio
-    // context open since launch. Asking only the apps we can actually read, in
-    // a fixed order, is less clever and more often right.
-    QString bundleId;
-    QString fallbackName;
-    for (const AudioProcess &process : m_audio->source()->audioProcesses()) {
-        if (!process.isNamed())
-            continue;
-        if (bundleId.isEmpty() && NowPlaying::isSupported(process.bundleId)) {
-            bundleId = process.bundleId;
-            fallbackName = process.name;
-        } else if (fallbackName.isEmpty() && process.playingOutput) {
-            // Nothing scriptable is running, so the panel falls back to the
-            // name of whatever has audio open. That is all we can honestly say.
-            fallbackName = process.name;
-        }
-    }
-    // Unconditional, and this is the point.
-    //
-    // This used to sit behind an early return when there was no notch panel, so
-    // on a Mac without one the whole feature was dead: NowPlaying was never
-    // pointed at an app, never polled, and the "Track info and controls" switch
-    // toggled a setting that nothing read. The panel is one consumer of this,
-    // not the reason for it -- the menu is the other.
-    m_nowPlaying->setBundleId(bundleId);
-    if (m_notchSurface) {
-        auto *notch = static_cast<PanelPresenter *>(m_notchSurface->presenter.get());
-        notch->setNowPlaying(m_nowPlaying->info(), fallbackName);
-    }
-}
 void App::onMenuAction(const QString &actionId)
 {
     const QLatin1String sourcePrefix(MenuAction::kSourcePrefix);
@@ -949,32 +872,10 @@ void App::onMenuAction(const QString &actionId)
         onAudioBecameActive();
         return;
     }
-    if (actionId == QLatin1String(MenuAction::kTransportPlayPause)) {
-        m_nowPlaying->sendCommand(TransportCommand::PlayPause);
-        return;
-    }
-    if (actionId == QLatin1String(MenuAction::kTransportNext)) {
-        m_nowPlaying->sendCommand(TransportCommand::Next);
-        return;
-    }
-    if (actionId == QLatin1String(MenuAction::kTransportPrevious)) {
-        m_nowPlaying->sendCommand(TransportCommand::Previous);
-        return;
-    }
     if (actionId == QLatin1String(MenuAction::kToggleAutoHide)) {
         m_settings.setNotchAutoHide(!m_settings.notchAutoHide());
         setNotchTabVisible(true);
         onAudioBecameActive();
-        return;
-    }
-    if (actionId == QLatin1String(MenuAction::kToggleNowPlaying)) {
-        const bool on = !m_settings.nowPlayingEnabled();
-        m_settings.setNowPlayingEnabled(on);
-        // Turning this on is what triggers the Automation prompt, and only
-        // then: the first run is otherwise a single clean permission question.
-        m_nowPlaying->setEnabled(on);
-        refreshNowPlaying();
-        refreshMenu();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kRequestPermission)) {

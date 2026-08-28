@@ -3,7 +3,6 @@
 #include <memory>
 
 #include "audio/AudioDevice.h"
-#include "app/NowPlaying.h"
 #include "platform/PanelPresenter.h"
 
 namespace hyperwave {
@@ -74,19 +73,12 @@ public:
     bool isExpanded() const;
     void setExpanded(bool expanded);
 
-    // What the expanded panel shows above the bars. An invalid info falls back
-    // to the app name alone, which is all the audio process list can offer for
-    // anything without a scripting dictionary.
-    void setNowPlaying(const NowPlayingInfo &info,
-                       const QString &fallbackAppName) override;
-
     // Reached from the Objective-C helper.
     void emitFrameDue();
     void emitGeometryChanged();
     void emitClicked();
     void emitMenuAction(const QString &actionId);
     void handleHover(bool inside);
-    void handleTransport(int command);
     void handleSourcePick(const QString &uid);
     void setDevices(const AudioDeviceList &devices, const QString &current) override;
     void showMenu();

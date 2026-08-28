@@ -71,11 +71,6 @@ public:
     // that produced it.
     QString sourceDeviceUid() const;
     void setSourceDeviceUid(const QString &uid);
-    // Track titles and transport controls need an Automation grant per
-    // controlled app, so they stay off until asked for. The app's whole first
-    // run is otherwise a single clean permission question.
-    bool nowPlayingEnabled() const;
-    void setNowPlayingEnabled(bool enabled);
     // Retract the notch tab when nothing is playing, so the notch looks stock
     // on a quiet machine. On by default: an always-present tab is clutter the
     // rest of the time.
@@ -88,7 +83,6 @@ Q_SIGNALS:
     void vizStyleChanged(const QString &id);
     void compactChanged(bool compact);
     void sourceDeviceUidChanged(const QString &uid);
-    void nowPlayingEnabledChanged(bool enabled);
     void notchAutoHideChanged(bool enabled);
 
 private:

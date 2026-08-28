@@ -11,7 +11,6 @@
 #include "app/AudioController.h"
 #include "app/DspWorker.h"
 #include "app/MenuModel.h"
-#include "app/NowPlaying.h"
 #include "app/Settings.h"
 #include "app/VisualiserControls.h"
 #include "dsp/FrameState.h"
@@ -66,7 +65,6 @@ public:
 private Q_SLOTS:
     void onMenuAction(const QString &actionId);
     void refreshMenu();
-    void refreshNowPlaying();
     void onPermissionChanged(int state);
     void onAudioBecameActive();
     void onAudioBecameSilent();
@@ -149,7 +147,6 @@ private:
     GpuPost m_post;
 
     std::unique_ptr<AudioController> m_audio;
-    std::unique_ptr<NowPlaying> m_nowPlaying;
     std::unique_ptr<DebugHud> m_hud;
     // The user-facing settings window. Lazily built, kept alive so it reopens
     // where it was left rather than being rebuilt each time.

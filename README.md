@@ -170,8 +170,7 @@ too crowded for more than 14.
 
 ![expanded](docs/notch-expanded.png)
 
-Hover and it drops down: bigger bars, what is playing, transport controls, and a
-dropdown for the audio source.
+Hover and it drops down: bigger bars and a dropdown for the audio source.
 
 **Right-click the panel for the menu.** That is not a convenience; it is the
 only way in on the display this panel exists for. If the status item has been
@@ -262,8 +261,7 @@ music playing and an editor idle, the editor's own tap reads −120 dB while the
 player's reads −5.9 dB, which is not a close call.
 
 The level decays over about two seconds rather than tracking the signal, so a
-gap between tracks does not make an app blink out of the list. A scriptable app
-that reports itself paused overrides the meter, because it knows better.
+gap between tracks does not make an app blink out of the list.
 Verified end to end, with `HYPERWAVE_METER_DEBUG=1`: silent machine with a 3D
 editor and a paused player running, nothing listed; YouTube playing in Chrome,
 `Google Chrome −21.3 dB`; tab stopped, the level decaying away through −33 and
@@ -271,21 +269,14 @@ editor and a paused player running, nothing listed; YouTube playing in Chrome,
 
 ## Track info
 
-Off by default, behind "Track info and controls", because switching it on is
-what triggers a second permission prompt. When on, the track, artist and
-transport appear in the menu **and** in the notch panel — the panel is one
-consumer of it, not the reason for it.
-
-That is not where this was meant to land. `MediaRemote` is the private framework
-every app used for this, and on macOS 26 it still loads and every symbol still
-resolves — but since 15.4 it is gated behind
-`com.apple.mediaremote.send-command`, an entitlement Apple does not issue to
-third parties. `MRMediaRemoteGetNowPlayingInfo` fires its callback with an empty
-dictionary while music is demonstrably playing.
-
-The fallback is AppleScript, which works but is per-application: Spotify and
-Music publish scripting dictionaries, browsers do not. Anything else shows its
-name and leaves the transport disabled rather than pretending.
+Removed. It existed once — track title, artist and transport controls in the
+menu and the notch panel — and the honest history is that the plumbing it
+needed was never good: `MediaRemote` has been entitlement-gated since macOS
+15.4, so the implementation was per-app AppleScript, which needed an
+Automation grant per controlled app and covered only apps with scripting
+dictionaries. A feature that costs a permission prompt and works for two apps
+was not carrying its weight, and it was cut everywhere rather than ported to
+Windows.
 
 ## Permission
 

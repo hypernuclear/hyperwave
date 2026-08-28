@@ -20,7 +20,6 @@
 #include <QContextMenuEvent>
 #include <QCoreApplication>
 #include <QCursor>
-#include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QWheelEvent>
@@ -169,14 +168,6 @@ public:
         update();
     }
 
-    void setNowPlayingText(const QString &text)
-    {
-        if (m_nowPlaying == text)
-            return;
-        m_nowPlaying = text;
-        update();
-    }
-
     // The box behind the bars, shaped by which edge the panel hangs from.
     enum class Panel { Free, TopNotch, BottomNotch };
 
@@ -199,7 +190,6 @@ protected:
 private:
     WinBarPresenter *m_owner = nullptr;
     QImage m_image;
-    QString m_nowPlaying;
     Panel m_panel = Panel::TopNotch;
     bool m_dragging = false;
     QPoint m_pressGlobal;
@@ -332,6 +322,7 @@ public:
         // menuAboutToShow first and pop up afterwards, so any rebuild the app
         // does in response has already finished before anything is shown.
         auto menu = std::make_unique<QMenu>();
+        m_aboutAction = nullptr;
         m_quitAction = nullptr;
         populate(menu.get(), model);
         insertWindowsItems(menu.get());
@@ -345,21 +336,6 @@ public:
         m_tabVisible = visible;
         if (m_window)
             m_window->setVisible(visible && !m_fullscreenAppActive);
-    }
-
-    void setNowPlaying(const NowPlayingInfo &info, const QString &fallbackAppName) override
-    {
-        const QString title = info.title.isEmpty() ? fallbackAppName : info.title;
-        const QString text = info.artist.isEmpty() || info.title.isEmpty()
-            ? title
-            : QStringLiteral("%1 - %2").arg(title, info.artist);
-
-        if (m_window)
-            m_window->setNowPlayingText(text);
-        if (m_tray) {
-            m_tray->setToolTip(text.isEmpty() ? QStringLiteral("hyperwave")
-                                              : QStringLiteral("hyperwave - %1").arg(text));
-        }
     }
 
     void setDevices(const AudioDeviceList &devices, const QString &current) override
@@ -468,8 +444,10 @@ private:
                 QObject::connect(action, &QAction::triggered, this,
                                  [this, id] { Q_EMIT menuActionTriggered(id); });
                 // Remembered so the platform items below can be inserted
-                // above it rather than dangling after it.
-                if (id == QLatin1String(MenuAction::kQuit))
+                // above them rather than dangling after Quit.
+                if (id == QLatin1String(MenuAction::kAbout))
+                    m_aboutAction = action;
+                else if (id == QLatin1String(MenuAction::kQuit))
                     m_quitAction = action;
                 break;
             }
@@ -523,9 +501,11 @@ private:
             rescale();
         });
 
-        if (m_quitAction) {
-            menu->insertSeparator(m_quitAction);
-            menu->insertMenu(m_quitAction, position);
+        // Above About, so the order reads Settings, Position, About, Quit --
+        // the two rows that change things together, the two that do not below
+        // them. Quit is the fallback anchor; nothing belongs below Quit.
+        if (QAction *anchor = m_aboutAction ? m_aboutAction : m_quitAction) {
+            menu->insertMenu(anchor, position);
         } else {
             menu->addSeparator();
             menu->addMenu(position);
@@ -669,6 +649,7 @@ private:
     std::unique_ptr<ThemeWatchFilter> m_filter;
     QTimer m_clock;
     QTimer m_fullscreenTimer;
+    QAction *m_aboutAction = nullptr;
     QAction *m_quitAction = nullptr;
 
     int m_widthPt = kDefaultWidthPt;
@@ -723,18 +704,6 @@ void StripWindow::paintEvent(QPaintEvent *)
         painter.drawImage(target, m_image);
     }
 
-    if (!m_nowPlaying.isEmpty() && width() > 420) {
-        // Only when there is genuinely room. A truncated track title next to
-        // the bars is worse than no title.
-        painter.setPen(QColor(255, 255, 255, 170));
-        QFont font = painter.font();
-        font.setPointSizeF(9.0);
-        painter.setFont(font);
-        const QRect textBox(width() / 2 + 8, 0, width() / 2 - 16, height());
-        painter.drawText(textBox, Qt::AlignVCenter | Qt::AlignRight,
-                         painter.fontMetrics().elidedText(m_nowPlaying, Qt::ElideRight,
-                                                          textBox.width()));
-    }
 }
 
 void StripWindow::mousePressEvent(QMouseEvent *event)

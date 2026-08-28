@@ -81,7 +81,6 @@ inline constexpr const char *kSourcePrefix = "source:";   // + bundle id, empty 
 inline constexpr const char *kGradientPrefix = "gradient:";
 inline constexpr const char *kVizPrefix = "viz:";
 inline constexpr const char *kToggleCompact = "toggle-compact";
-inline constexpr const char *kToggleNowPlaying = "toggle-now-playing";
 inline constexpr const char *kToggleInput = "toggle-input";
 inline constexpr const char *kToggleNotch = "toggle-notch";
 inline constexpr const char *kRequestPermission = "request-permission";
@@ -90,9 +89,6 @@ inline constexpr const char *kSettings = "settings";
 inline constexpr const char *kAbout = "about";
 inline constexpr const char *kQuit = "quit";
 inline constexpr const char *kToggleAutoHide = "toggle-auto-hide";
-inline constexpr const char *kTransportPlayPause = "transport-playpause";
-inline constexpr const char *kTransportNext = "transport-next";
-inline constexpr const char *kTransportPrevious = "transport-previous";
 } // namespace MenuAction
 
 } // namespace hyperwave
