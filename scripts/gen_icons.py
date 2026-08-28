@@ -45,14 +45,20 @@ SIZE = 1024
 # every other icon in the Dock and the Finder.
 INSET = 100
 
-# The signature gradient, the same two colours RenderStyle starts with. An app
-# whose icon is violet-to-cyan and whose default look is violet-to-cyan is one
-# product rather than two.
-TOP = (0x22, 0xD3, 0xEE)      # cyan
-BOTTOM = (0x7C, 0x3A, 0xED)   # violet
+# A near-black ground with just enough lift at the top to read as a gradient
+# rather than as a flat fill. Cool rather than neutral -- a true grey next to
+# the colour in the marks around it looks like a rendering fault.
+#
+# The mark carries the identity, so the ground's only job is contrast. A
+# saturated gradient fought it: a detailed white mark on violet-to-cyan loses
+# its interior lines by 32 px.
+TOP = (0x26, 0x2A, 0x31)      # cool dark grey
+BOTTOM = (0x0D, 0x0F, 0x12)   # near black
 
-# How much of the squircle's width the wave spans.
-MARK_SCALE = 0.66
+# How much of the squircle's width the mark spans. The artwork is round and
+# fills its own viewBox, so it can sit larger than a rectangular mark would
+# without crowding the corners.
+MARK_SCALE = 0.72
 
 
 def squircle_mask(size, radius_exponent=5.0):

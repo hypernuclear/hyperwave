@@ -816,6 +816,8 @@ MenuModel App::buildMenu() const
     menu.append(MenuItem::separator());
     menu.append(MenuItem::action(QLatin1String(MenuAction::kSettings),
                                 QStringLiteral("Settings…")));
+    menu.append(MenuItem::action(QLatin1String(MenuAction::kShowSplash),
+                                 QStringLiteral("Show Splash")));
     if (m_updater) {
         // Only when there is something behind it. A build with no updater
         // compiled in -- Linux, or any build without a signing key -- shows no
@@ -919,6 +921,10 @@ void App::onMenuAction(const QString &actionId)
     }
     if (actionId == QLatin1String(MenuAction::kSettings)) {
         showSettings();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kShowSplash)) {
+        Q_EMIT splashRequested();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kCheckForUpdates)) {

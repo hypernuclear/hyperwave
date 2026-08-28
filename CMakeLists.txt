@@ -313,6 +313,36 @@ qt_add_qml_module(hyperwave
     VERSION 1.0
     QML_FILES
         qml/Settings.qml
+        qml/Splash.qml
+        qml/HypernuclearWordmark.qml
+)
+
+# The splash's artwork, the mark it draws, and the face it sets them in.
+#
+# Bundled rather than loaded from disk: a splash that depends on files beside
+# the binary is one that shows a grey rectangle the first time somebody moves
+# the app. The font is bundled for the same reason -- a missing family falls
+# back to the system UI face silently, and the panel goes generic without
+# anything reporting it.
+qt_add_resources(hyperwave "hyperwave_icons"
+    PREFIX "/icons"
+    BASE "resources"
+    FILES
+        resources/splash.jpg
+        resources/Inter-SemiBold.ttf
+)
+
+# The mark, from assets/ where it is authored rather than from a copy.
+#
+# Its own call because qt_add_resources takes one BASE, and this file lives
+# beside the artwork rather than beside the generated icons. Registered on every
+# platform: the Windows tray glyph and the splash's lockup both draw it, and
+# registering it twice under the same alias is a build error rather than a
+# last-one-wins.
+qt_add_resources(hyperwave "hyperwave_mark"
+    PREFIX "/icons"
+    BASE "assets"
+    FILES assets/hyperwave.svg
 )
 
 if(APPLE)
@@ -392,13 +422,6 @@ if(WIN32)
     # user32  window and message plumbing for the panel
     # version FileDescription lookups, for the Playing list's app names
     target_link_libraries(hyperwave PRIVATE ole32 shell32 user32 version)
-
-    # The tray glyph, Windows only on purpose: the macOS status item IS the
-    # visualiser and has no use for a static icon.
-    qt_add_resources(hyperwave "hyperwave_tray"
-        PREFIX "/icons"
-        BASE "assets"
-        FILES assets/hyperwave.svg)
 endif()
 
 if(HYPERWAVE_BUILD_TESTS)

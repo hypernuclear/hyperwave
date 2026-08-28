@@ -70,6 +70,12 @@ private Q_SLOTS:
     void onAudioBecameActive();
     void onAudioBecameSilent();
 
+Q_SIGNALS:
+    // "Show Splash" was chosen. main() owns the splash rather than App: the
+    // component and its engine outlive any one window, and there is no reason
+    // for the audio and rendering layer to know about either.
+    void splashRequested();
+
 private:
     // One thing that shows bars. There are up to two: the status item, and on a
     // notched Mac the panel below the housing.
