@@ -17,8 +17,12 @@ Qt already has that parser.
 Regenerate after changing artwork; the output is checked in so a build needs
 neither this script nor Python.
 """
+import io
 import re
 import sys
+
+import cairosvg
+from PIL import Image
 
 TEMPLATE = '''// {doc}
 //
@@ -37,9 +41,15 @@ Item {{
     /// so the caller always decides.
     property color color: "#ffffff"
 
-    /// The artwork's own coordinate space, exposed so a caller can hold the
-    /// aspect ratio without hard-coding numbers that would go stale with the
-    /// next export.
+    /// The INK's aspect, not the document's, so a caller can hold the ratio
+    /// without hard-coding numbers that would go stale with the next export.
+    ///
+    /// This matters more than it sounds. An Illustrator export carries whatever
+    /// margin the artboard had -- this one had {padr:.0f} units of empty space
+    /// down the right of a {docw:.0f}-unit box -- and an item sized to the
+    /// document is therefore wider than the thing you can see. Anything
+    /// right-aligned to its edge then hangs off the visible mark by exactly
+    /// that margin, which is a misalignment nobody can find by reading the QML.
     readonly property real viewWidth: {w}
     readonly property real viewHeight: {h}
     implicitWidth: viewWidth
@@ -50,12 +60,16 @@ Item {{
         preferredRendererType: Shape.CurveRenderer
         antialiasing: true
         smooth: true
-        // Authored in the SVG's own coordinate space; scaled to whatever size
-        // the item was given rather than making every caller do the arithmetic.
-        transform: Scale {{
-            xScale: root.width / root.viewWidth
-            yScale: root.height / root.viewHeight
-        }}
+        // Shift the artboard's margin off, then scale the ink to fill the item.
+        // Listed in that order because Item.transform applies its list in
+        // order, and scaling first would scale the offset too.
+        transform: [
+            Translate {{ x: {tx}; y: {ty} }},
+            Scale {{
+                xScale: root.width / root.viewWidth
+                yScale: root.height / root.viewHeight
+            }}
+        ]
 {body}
     }}
 }}
@@ -72,25 +86,48 @@ SHAPE_PATH = '''        ShapePath {{
         }}'''
 
 
+def ink_box(src, doc_w, doc_h):
+    """The artwork's real bounds, in the document's own units.
+
+    Measured by rasterising and asking for the alpha bounding box rather than by
+    walking the path data: a curve leaves its control points, so a box drawn
+    round the coordinates is looser than the shape, and "looser" here is the bug
+    being fixed.
+    """
+    raster_w = 2000
+    png = cairosvg.svg2png(url=src, output_width=raster_w)
+    img = Image.open(io.BytesIO(png))
+    bbox = img.getbbox()
+    if not bbox:
+        sys.exit(f"{src}: rasterises to nothing")
+    scale = doc_w / img.width
+    x0, y0, x1, y1 = (v * scale for v in bbox)
+    return x0, y0, x1 - x0, y1 - y0
+
+
 def generate(svg, src, doc):
     box = re.search(r'viewBox="([\d.\-\s]+)"', svg)
     if not box:
         sys.exit(f"{src}: no viewBox, so there is no coordinate space to scale from")
-    _, _, w, h = box.group(1).split()
+    _, _, doc_w, doc_h = (float(v) for v in box.group(1).split())
 
     paths = re.findall(r'<path[^>]*\sd="([^"]+)"', svg)
     if not paths:
         sys.exit(f"{src}: no <path> elements")
 
+    x, y, w, h = ink_box(src, doc_w, doc_h)
     body = "\n".join(
         SHAPE_PATH.format(d=" ".join(d.split())) for d in paths)
-    return TEMPLATE.format(doc=doc, src=src, w=w, h=h, body=body), len(paths)
+    qml = TEMPLATE.format(doc=doc, src=src, w=f"{w:.4g}", h=f"{h:.4g}",
+                          tx=f"{-x:.4g}", ty=f"{-y:.4g}",
+                          padr=doc_w - (x + w), docw=doc_w, body=body)
+    return qml, len(paths), (x, y, w, h)
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 5:
         sys.exit(__doc__)
     src, out, _component, doc = sys.argv[1:5]
-    qml, n = generate(open(src).read(), src, doc)
+    qml, n, (x, y, w, h) = generate(open(src).read(), src, doc)
     open(out, "w").write(qml)
-    print(f"{out}: {n} paths")
+    print(f"{out}: {n} paths, ink {w:.4g}x{h:.4g} at {x:.4g},{y:.4g}")

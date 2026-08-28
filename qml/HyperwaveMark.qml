@@ -15,11 +15,17 @@ Item {
     /// so the caller always decides.
     property color color: "#ffffff"
 
-    /// The artwork's own coordinate space, exposed so a caller can hold the
-    /// aspect ratio without hard-coding numbers that would go stale with the
-    /// next export.
-    readonly property real viewWidth: 1000
-    readonly property real viewHeight: 1000
+    /// The INK's aspect, not the document's, so a caller can hold the ratio
+    /// without hard-coding numbers that would go stale with the next export.
+    ///
+    /// This matters more than it sounds. An Illustrator export carries whatever
+    /// margin the artboard had -- this one had 6 units of empty space
+    /// down the right of a 1000-unit box -- and an item sized to the
+    /// document is therefore wider than the thing you can see. Anything
+    /// right-aligned to its edge then hangs off the visible mark by exactly
+    /// that margin, which is a misalignment nobody can find by reading the QML.
+    readonly property real viewWidth: 986
+    readonly property real viewHeight: 965
     implicitWidth: viewWidth
     implicitHeight: viewHeight
 
@@ -28,12 +34,16 @@ Item {
         preferredRendererType: Shape.CurveRenderer
         antialiasing: true
         smooth: true
-        // Authored in the SVG's own coordinate space; scaled to whatever size
-        // the item was given rather than making every caller do the arithmetic.
-        transform: Scale {
-            xScale: root.width / root.viewWidth
-            yScale: root.height / root.viewHeight
-        }
+        // Shift the artboard's margin off, then scale the ink to fill the item.
+        // Listed in that order because Item.transform applies its list in
+        // order, and scaling first would scale the offset too.
+        transform: [
+            Translate { x: -7.5; y: -17 },
+            Scale {
+                xScale: root.width / root.viewWidth
+                yScale: root.height / root.viewHeight
+            }
+        ]
         ShapePath {
             fillColor: root.color
             strokeColor: "transparent"

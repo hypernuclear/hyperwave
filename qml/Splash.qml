@@ -91,7 +91,15 @@ Window {
         // corner rather than into it.
         Item {
             id: panel
-            width: parent.width * 0.40
+            // Sized to what is in it, plus even padding. A fraction of the
+            // window was a guess that had to be re-guessed every time the
+            // lockup changed, and the leftover always landed on the left --
+            // which is the margin that looked wrong.
+            //
+            // No binding loop: the children size themselves from the panel's
+            // HEIGHT, which is fixed here, so the width can follow them.
+            readonly property real pad: height * 0.26
+            width: lockup.width + pad * 2
             height: parent.height * 0.155
             anchors.right: parent.right
             anchors.rightMargin: parent.width * 0.00484
@@ -116,9 +124,9 @@ Window {
                 id: lockup
                 spacing: panel.height * 0.12
                 anchors.right: parent.right
-                anchors.rightMargin: panel.width * 0.085
+                anchors.rightMargin: panel.pad
                 anchors.top: parent.top
-                anchors.topMargin: panel.height * 0.155
+                anchors.topMargin: panel.height * 0.14
 
                 // Both marks are Shapes whose colour is a property, so they
                 // are simply asked for the ink. The Image version needed
