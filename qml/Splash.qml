@@ -146,7 +146,7 @@ Window {
                     // own aspect. Driving it from the width instead decides a
                     // height nobody checked: this logotype is nearly four times
                     // wider than it is tall.
-                    height: panel.height * 0.52
+                    height: panel.height * 0.494
                     width: height * (viewWidth / viewHeight)
                     anchors.verticalCenter: parent.verticalCenter
                 }
