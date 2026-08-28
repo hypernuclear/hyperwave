@@ -4,6 +4,36 @@
 
 #include "app/App.h"
 
+#ifdef Q_OS_WIN
+#include <cstdio>
+#include <windows.h>
+
+namespace {
+
+// Give a GUI-subsystem binary somewhere to print.
+//
+// WIN32_EXECUTABLE builds a binary the loader starts with no console attached,
+// so every qInfo() and every line of --verify-audio output goes nowhere. That
+// matters most for exactly the flag you would reach for first on a new
+// platform: "it printed nothing" and "it captured nothing" look identical.
+//
+// Attaching the parent's console makes output appear in the shell that
+// launched it, and does nothing at all when there is no such console -- a
+// double-clicked app stays windowless rather than flashing one up.
+void attachParentConsole()
+{
+    if (!AttachConsole(ATTACH_PARENT_PROCESS))
+        return;
+
+    FILE *stream = nullptr;
+    freopen_s(&stream, "CONOUT$", "w", stdout);
+    freopen_s(&stream, "CONOUT$", "w", stderr);
+    freopen_s(&stream, "CONIN$", "r", stdin);
+}
+
+} // namespace
+#endif
+
 using namespace hyperwave;
 
 int main(int argc, char **argv)
@@ -11,6 +41,10 @@ int main(int argc, char **argv)
     // QApplication rather than QGuiApplication: the settings window and the
     // debug HUD are Widgets. The menu bar item itself is native AppKit and
     // wants nothing from Qt at all.
+#ifdef Q_OS_WIN
+    attachParentConsole();
+#endif
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("hyperwave"));
     app.setOrganizationName(QStringLiteral("Hypernuclear"));

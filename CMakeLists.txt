@@ -278,6 +278,11 @@ endif()
 
 if(WIN32)
     set_target_properties(hyperwave PROPERTIES WIN32_EXECUTABLE TRUE)
+
+    # ole32   COM, and the PROPVARIANT helpers the device names come back in
+    # shell32 SHAppBarMessage, which is the appbar
+    # user32  window and message plumbing for the strip
+    target_link_libraries(hyperwave PRIVATE ole32 shell32 user32)
 endif()
 
 if(HYPERWAVE_BUILD_TESTS)

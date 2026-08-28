@@ -265,7 +265,41 @@ come and go with it. Subscribe to `PA_SUBSCRIPTION_MASK_SERVER`, reconnect, bump
 No display link here either, but `QScreen::refreshRate` is enough to pick a
 sensible timer interval.
 
+## What exists now
+
+Written, and compiled by nothing yet -- there was no Windows machine in the loop
+when it was written, so the CI job is its first real test. Expect the first run
+to be red and treat what it says as the starting point.
+
+- **`WasapiSource.cpp`** -- real loopback capture. Activates the render endpoint,
+  initialises with `AUDCLNT_STREAMFLAGS_LOOPBACK`, polls `IAudioCaptureClient`
+  on its own thread and pushes mono float into the shared `MonoRing`. Handles
+  float32 and 16-bit PCM mix formats and refuses anything else rather than
+  misreading it. Enumerates output endpoints for the source picker, follows the
+  default endpoint by polling it twice a second, and runs a second stream on the
+  capture endpoint for microphone input.
+
+  The one thing with no macOS equivalent is handled here rather than upstream: a
+  loopback stream delivers *nothing at all* while the endpoint is idle instead
+  of delivering silence, so idle is turned back into zeros in the capture loop.
+  Everything above -- the silence detector, the idle throttle, the permission
+  probe -- then needs no Windows-specific case.
+
+- **`WinBarPresenter.cpp`** -- the strip, the appbar and the tray icon. Implements
+  `PanelPresenter`, so it can carry the track and the source picker later
+  without another pass through the interface. Starts undocked; docking is a tray
+  menu item, and both the strip's right-click and the tray's emit
+  `menuAboutToShow` before popping the menu so what opens is current.
+
+- **`main.cpp`** -- attaches the parent console on Windows, so `--verify-audio`
+  has somewhere to print.
+
+Not done: per-app metering, so the `Playing` list will be empty; transport
+buttons on the strip, so `transportRequested` never fires there yet; and
+`DwmGetCompositionTimingInfo`, so the clock is a plain timer.
+
 ## The order to build it in
+
 
 1. **WASAPI loopback into `MonoRing`.** Everything else is invisible until
    samples arrive, and `--verify-audio` already proves it end to end without a

@@ -117,16 +117,15 @@ jobs:
           fi
           ctest --output-on-failure
 
-  # Windows compiles, and that is all it does so far.
+  # Windows: WASAPI loopback and the appbar presenter, compiled here first.
   #
-  # The backend here is stubs, so this job proves the tree still configures and
-  # builds with MSVC and nothing more. It exists now rather than later because
-  # the moment somebody writes real WASAPI or appbar code into those stubs, the
-  # alternative is a few hundred lines of Win32 that has never met a compiler.
+  # This job is the only machine in the loop with the Windows SDK. The backend
+  # was written without one, so its first honest test is this job -- treat a red
+  # tick here as information rather than as a surprise.
   #
-  # continue-on-error while that is true: a red tick on an unimplemented
-  # platform should not block a macOS change. Take it off the day the Windows
-  # backend does something.
+  # continue-on-error stays until one green run proves the code compiles and
+  # links. After that, take it off: from that point a red tick is a regression
+  # somebody introduced, which is the whole reason for having the job.
   windows:
     runs-on: windows-2022
     continue-on-error: true
