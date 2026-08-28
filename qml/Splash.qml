@@ -91,35 +91,20 @@ Window {
         // corner rather than into it.
         Item {
             id: panel
-            width: parent.width * 0.34
+            width: parent.width * 0.40
             height: parent.height * 0.155
             anchors.right: parent.right
             anchors.rightMargin: parent.width * 0.00484
             anchors.top: parent.top
             anchors.topMargin: parent.height * 0.057
 
-            /// How far the head of the left edge sits in from its foot. Held
-            /// against the panel's own height so the lean stays the same angle
-            /// whatever the panel is scaled to.
-            readonly property real slant: height * 0.35616
-
-            // Three square edges and one leaning in from the left. Drawn as a
-            // Shape because there is no way to ask a Rectangle for a
-            // non-rectangular corner.
-            Shape {
+            // A plain rectangle. The slanted edge was carried over from
+            // hyperbin, where it runs along the diagonal of that product's own
+            // mark; there is no diagonal here for it to agree with, so it read
+            // as decoration for its own sake.
+            Rectangle {
                 anchors.fill: parent
-                preferredRendererType: Shape.CurveRenderer
-                antialiasing: true
-                ShapePath {
-                    fillColor: root.brandBlue
-                    strokeColor: "transparent"
-                    startX: panel.slant
-                    startY: 0
-                    PathLine { x: panel.width; y: 0 }
-                    PathLine { x: panel.width; y: panel.height }
-                    PathLine { x: 0; y: panel.height }
-                    PathLine { x: panel.slant; y: 0 }
-                }
+                color: root.brandBlue
             }
 
             // The mark and the name on one line, then the version under it.
@@ -142,7 +127,7 @@ Window {
                 // black multiplied by white is still black.
                 HyperwaveMark {
                     color: root.brandInk
-                    height: panel.height * 0.52
+                    height: panel.height * 0.58
                     width: height
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -153,7 +138,7 @@ Window {
                     // own aspect. Driving it from the width instead decides a
                     // height nobody checked: this logotype is nearly four times
                     // wider than it is tall.
-                    height: panel.height * 0.40
+                    height: panel.height * 0.52
                     width: height * (viewWidth / viewHeight)
                     anchors.verticalCenter: parent.verticalCenter
                 }
@@ -171,9 +156,13 @@ Window {
                 font.family: inter.name
                 font.weight: Font.DemiBold
                 font.pixelSize: panel.height * 0.155
+                // Right-aligned to the logotype's own edge -- it is the
+                // last item in the row, so lockup.right is its right -- and
+                // tucked close under it rather than floating in the space
+                // below.
                 anchors.right: lockup.right
                 anchors.top: lockup.bottom
-                anchors.topMargin: panel.height * 0.06
+                anchors.topMargin: panel.height * 0.01
             }
         }
 
