@@ -11,10 +11,16 @@ name: ci
 # Open-source Qt is what is fetched, and that has consequences for what may be
 # distributed from these artifacts. See THIRD-PARTY-NOTICES.md.
 
+# Not on pull_request. The release workflow already builds every PR -- same
+# Release configuration, same platforms -- and it goes further, running the
+# packaging scripts that only a tag would otherwise exercise. Two workflows
+# both named `build` were running on every PR and compiling the same tree
+# twice for the same answer.
+#
+# Kept on push, so a merge to main still gets checked, and on dispatch, so it
+# can be run by hand without opening a PR.
 on:
   push:
-    branches: [main]
-  pull_request:
     branches: [main]
   workflow_dispatch:
 
