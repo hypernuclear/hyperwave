@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and committed as a VS Code configuration, crashed before drawing a frame.
 
 ### Added
+- Usage analytics, on by default and switchable off in the menu. Nothing about
+  what the app hears ever leaves the machine -- no audio, no track titles, no
+  application or device names -- and a build without an app key compiled in has
+  no backend at all. See "What it sends" in the README.
 - A release pipeline. A `v*` tag builds macOS arm64, macOS x64 and Windows x64,
   signs and notarizes the Mac bundles, packages a DMG and an Inno installer,
   signs both feeds with one ed25519 key, and publishes to R2. Sparkle on macOS
