@@ -1,18 +1,26 @@
 name: release
 
-# Two things happen here, and only one of them on most runs.
+# Tags, and nothing else automatic.
 #
-# A pull request gets built and tested on every platform, and stops there. A
-# `v*` tag gets the same build, then signed, notarized, packaged, signed again
-# for the appcast, and published to R2.
+# A `v*` tag is built on every platform, signed, notarized, packaged, signed
+# again for the appcast, and published to R2. There is exactly one real release
+# build per version -- the tag's.
 #
-# There is exactly one real release build per version -- the tag's. A PR build is
-# a check that the tree compiles, not a candidate artifact.
+# Deliberately NOT on pull_request. It was, briefly, because that is what the
+# workflow this is modelled on does; the result was every PR showing a check
+# called "release / build", which reads like a branch is publishing something.
+# Nothing was being published -- the publish job and every signing step are
+# gated on refs/tags/v -- but a status check has to say what it is at a glance,
+# and that one did not.
+#
+# ci.yml builds and tests pull requests instead. What that leaves unexercised
+# until a tag is the packaging: package-macos.sh, the DMG, windeployqt and the
+# Inno installer. workflow_dispatch is here so that can be dry-run on demand
+# rather than only ever running for real.
 on:
   push:
     tags: ["v*"]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
@@ -26,14 +34,6 @@ env:
 
 jobs:
   build:
-    # Skip `release/v*` pull requests. They carry no application code -- a
-    # version bump and a CHANGELOG entry -- so building them tests nothing the
-    # feature PRs did not already test, and the tag build immediately afterwards
-    # is the real release build. Skipping here is what keeps it to one full build
-    # per release instead of two.
-    if: |
-      github.event_name != 'pull_request' ||
-      !startsWith(github.head_ref, 'release/v')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

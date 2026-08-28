@@ -129,9 +129,8 @@ latest/win/appcast.xml
 ## Cutting a release
 
 1. Bump `project(hyperwave VERSION x.y.z)` in `CMakeLists.txt` on a
-   `release/vx.y.z` branch, with a CHANGELOG entry. That branch is skipped by
-   the build job on purpose -- it carries no application code, and the tag build
-   right after it is the real one.
+   `release/vx.y.z` branch, with a CHANGELOG entry. It gets `ci`'s build like
+   any other pull request; the tag build right after it is the real one.
 2. Merge it.
 3. Tag and push: `git tag vx.y.z && git push origin vx.y.z`.
 4. Watch the run. The publish job uploads artifacts first and the feeds last: a
@@ -140,7 +139,14 @@ latest/win/appcast.xml
 
 ## Testing without cutting a release
 
-`scripts/package-macos.sh` runs by hand and is the whole macOS path except
+The release workflow accepts `workflow_dispatch`, so the whole pipeline can be
+dry-run from the Actions tab without creating a tag. Everything gated on
+`refs/tags/v` -- signing, notarization, the appcast, the upload -- stays off, so
+what it actually exercises is the build and the packaging. That matters because
+pull requests are built by `ci`, which does not package: without a dispatch run,
+`package-macos.sh` and the Inno installer are first exercised by the tag itself.
+
+`scripts/package-macos.sh` also runs by hand and is the whole macOS path except
 notarization:
 
 ```
