@@ -215,7 +215,12 @@ set(WINSPARKLE_VERSION "0.9.1" CACHE STRING "WinSparkle release to fetch (Window
 # anyway, so hiding it in a secret buys nothing and costs reviewability -- as a
 # secret it becomes an invisible input that can silently disagree with the
 # private half. In the tree it is diffable.
-set(HYPERWAVE_EDDSA_PUBKEY "" CACHE STRING "ed25519 public key for appcast verification")
+# The public half of hyperwave's update signing key. Public on purpose: it
+# ships inside every binary anyway, so hiding it in a secret would buy nothing
+# and cost reviewability. The private half is the SPARKLE_EDDSA_PRIVATE_KEY
+# repository secret and exists nowhere in this tree.
+set(HYPERWAVE_EDDSA_PUBKEY "LuJvrTpbkny/NaRDij8N77KA8aCUjCJkKK5M/dnElCA="
+    CACHE STRING "ed25519 public key for appcast verification")
 
 set(HYPERWAVE_APPCAST_URL "https://hyperwave-builds.hypernuclear.com/latest/mac/appcast.xml"
     CACHE STRING "Sparkle appcast feed URL (macOS)")
@@ -280,6 +285,8 @@ if(HYPERWAVE_AUTO_UPDATE)
     if(APPLE)
         # The framework is embedded and signed by scripts/package-macos.sh.
         # @loader_path/../Frameworks is where it ends up inside the bundle.
+        # -F has to reach the COMPILER as well as the linker. Only linking
+        target_compile_options(hyperwave PRIVATE "-F${SPARKLE_FRAMEWORK_DIR}")
         target_link_libraries(hyperwave PRIVATE "-F${SPARKLE_FRAMEWORK_DIR}" "-framework Sparkle")
         target_link_options(hyperwave PRIVATE
             "-Wl,-rpath,@loader_path/../Frameworks"
@@ -338,6 +345,7 @@ if(APPLE)
         src/platform/MacNotchPresenter.mm
         src/platform/MacMenuBuilder.mm
         src/app/ShellMac.mm
+        src/update/SparkleUpdater.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 
     # Sign every build with a STABLE identity.
