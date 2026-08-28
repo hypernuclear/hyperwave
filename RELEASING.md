@@ -154,13 +154,15 @@ DMG of the wrong thing.
 
 ## What is not done
 
-- **No icon.** hyperwave has no `.icns` and no `.ico`, so the DMG, the
-  installer and the executable all carry system defaults. The Inno script
-  deliberately does not name a `SetupIconFile`, because pointing at a file that
-  does not exist fails the compile.
-- **No MSIX.** The Store package needs a full set of tile assets, which needs
-  the icon above. The EXE is what WinSparkle downloads to apply an update, so it
-  is the one that had to exist first.
+- **No MSIX.** The Store package needs a full set of tile assets at fixed
+  scales. `scripts/gen_icons.py` produces the master they would come from, so
+  this is a matter of adding the sizes and an `AppxManifest.xml` rather than of
+  missing artwork. The EXE is what WinSparkle downloads to apply an update, so
+  it is the one that had to exist first.
+- **The icon is generated, not designed.** `scripts/gen_icons.py` builds it from
+  `assets/hyperwave.svg` on the signature gradient. Drop a 1024px
+  `resources/app_icon_master.png` in place and re-run to replace it with real
+  artwork; nothing downstream needs to change.
 - **No DMG background art.** `packaging/macos/dmg-background.tiff` is optional
   in the script; without it create-dmg uses a plain window.
 - **Windows is unproven.** The backend had never been run on Windows when this

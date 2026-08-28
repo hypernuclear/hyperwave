@@ -198,6 +198,7 @@ qt_add_executable(hyperwave
     $<$<PLATFORM_ID:Darwin>:src/platform/MacNotchPresenter.mm>
     $<$<PLATFORM_ID:Windows>:src/platform/WasapiSource.cpp>
     $<$<PLATFORM_ID:Windows>:src/platform/WinBarPresenter.cpp>
+    $<$<PLATFORM_ID:Windows>:packaging/windows/hyperwave.rc>
     $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/PulseSource.cpp>
     $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/LinuxBarPresenter.cpp>
 )
@@ -315,8 +316,22 @@ qt_add_qml_module(hyperwave
 )
 
 if(APPLE)
+    # Naming the icon in the plist is only half of it: the file also has to be
+    # copied into Contents/Resources, and CMake will not infer one from the
+    # other. Miss the copy and the plist points at nothing, which shows up as
+    # the generic application icon with no error anywhere.
+    set(HYPERWAVE_ICNS ${CMAKE_SOURCE_DIR}/resources/hyperwave.icns)
+    if(EXISTS ${HYPERWAVE_ICNS})
+        target_sources(hyperwave PRIVATE ${HYPERWAVE_ICNS})
+        set_source_files_properties(${HYPERWAVE_ICNS}
+            PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    else()
+        message(STATUS "No resources/hyperwave.icns; run scripts/gen_icons.py")
+    endif()
+
     set_target_properties(hyperwave PROPERTIES
         MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_ICON_FILE hyperwave.icns
         MACOSX_BUNDLE_GUI_IDENTIFIER com.hypernuclear.hyperwave
         MACOSX_BUNDLE_BUNDLE_NAME hyperwave
         MACOSX_BUNDLE_BUNDLE_VERSION ${APP_VERSION_BUILD}

@@ -28,6 +28,7 @@ DefaultGroupName=hyperwave
 OutputBaseFilename=hyperwave-setup-{#AppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
+SetupIconFile=..\..\resources\hyperwave.ico
 UninstallDisplayIcon={app}\hyperwave.exe
 ArchitecturesAllowed=x64compatible arm64
 ArchitecturesInstallIn64BitMode=x64compatible arm64
@@ -38,10 +39,6 @@ WizardStyle=modern
 ; per-session thing, so nothing here wants elevation.
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
-
-; SetupIconFile is deliberately absent until there is an icon to point at --
-; see RELEASING.md. Naming a file that does not exist fails the compile, and a
-; wrong icon is worse than the Inno default.
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
