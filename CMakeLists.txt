@@ -283,6 +283,13 @@ if(WIN32)
     # shell32 SHAppBarMessage, which is the appbar
     # user32  window and message plumbing for the strip
     target_link_libraries(hyperwave PRIVATE ole32 shell32 user32)
+
+    # The tray glyph, Windows only on purpose: the macOS status item IS the
+    # visualiser and has no use for a static icon.
+    qt_add_resources(hyperwave "hyperwave_tray"
+        PREFIX "/icons"
+        BASE "assets"
+        FILES assets/hyperwave.svg)
 endif()
 
 if(HYPERWAVE_BUILD_TESTS)
