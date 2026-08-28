@@ -167,6 +167,15 @@ void RingRenderer::render(const FrameState &state, const RenderStyle &style, qre
         {1.0, QPointF(0.0, 0.0), QColor(255, 255, 255)},
     };
 
+    // No rainbow here, deliberately.
+    //
+    // This look's identity IS colour separation -- five offset copies in cyan,
+    // magenta and yellow under a white rim -- so a hue ramp around the rim
+    // competes with the exact signal the layers exist to carry, and the bloom
+    // then blows the rim to white anyway. Tried, rendered, and reverted: the
+    // result reads as confetti rather than as a mis-registered print. The ring
+    // takes the rainbow's endpoint colours for its disc and leaves the rest
+    // alone.
     p.setBrush(Qt::NoBrush);
     for (const Layer &layer : layers) {
         outline(layer.amplitude, 0.0, layer.shift);

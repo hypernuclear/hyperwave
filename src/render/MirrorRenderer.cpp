@@ -1,5 +1,7 @@
 #include "render/MirrorRenderer.h"
 
+#include "render/Palette.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -57,9 +59,14 @@ void MirrorRenderer::render(const FrameState &state, const RenderStyle &style, q
     const auto stiffness = static_cast<float>(m.stiffness);
     const auto damping = static_cast<float>(m.damping);
 
+    // Already left to right, so the rainbow only has to replace the stops.
     QLinearGradient gradient(0.0, 0.0, static_cast<qreal>(w), 0.0);
-    gradient.setColorAt(0.0, style.gradientBottom);
-    gradient.setColorAt(1.0, style.gradientTop);
+    if (style.rainbow) {
+        Palette::addRainbowStops(gradient);
+    } else {
+        gradient.setColorAt(0.0, style.gradientBottom);
+        gradient.setColorAt(1.0, style.gradientTop);
+    }
     p.setBrush(gradient);
 
     for (int i = 0; i < count; ++i) {

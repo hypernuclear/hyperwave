@@ -355,11 +355,27 @@ void StrandRenderer::render(const FrameState &state, const RenderStyle &style, q
         block[16] = style.gradientBottom.redF();
         block[17] = style.gradientBottom.greenF();
         block[18] = style.gradientBottom.blueF();
-        block[19] = 1.0f;
+        // colorA's alpha is the rainbow flag. Both colour alphas were dead
+        // weight -- written as 1.0, never read -- and the block is exactly full
+        // at 32 floats, so this carries the flag without growing it.
+        block[19] = style.rainbow ? 1.0f : 0.0f;
         block[20] = style.gradientTop.redF();
         block[21] = style.gradientTop.greenF();
         block[22] = style.gradientTop.blueF();
-        block[23] = 1.0f;
+        // colorB's alpha is the depth half-extent the rainbow normalises by;
+        // see the comment in strands.vert. The tube's depth comes entirely from
+        // its cross-section, which the projection scales by `fill` and the
+        // clip-space correction halves. The turbulence term is what the noise
+        // adds to the radius on average -- an estimate, and it only has to be
+        // close: too small clips the extremes to flat red and violet, too large
+        // leaves the ends of the ramp unused. Measured against the tube at rest
+        // this is the knob that decides how much of the ramp a quiet passage
+        // shows -- 0.02 spends the whole rainbow across the depth of the tube,
+        // and raising it towards 0.1 pulls the quiet stretches back to green
+        // with the spectrum only opening up on the loud, deep parts.
+        const float rainbowExtent =
+            0.5f * static_cast<float>(s.fill) * (static_cast<float>(s.radius) + 0.02f);
+        block[23] = std::max(rainbowExtent, 1e-4f);
         block[24] = aspect;
         block[25] = static_cast<float>(seconds * s.spinRate);
         block[26] = static_cast<float>(s.radius);

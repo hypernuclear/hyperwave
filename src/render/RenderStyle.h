@@ -47,6 +47,15 @@ struct RenderStyle
     QColor gradientBottom;
     QColor peakColor;
 
+    // The rainbow preset is a ramp rather than a pair, and every look maps it
+    // to a different axis: across the strip for the bar-shaped ones, and along
+    // depth for the ones with a third dimension, where near is the start of the
+    // ramp and it recedes towards the far end. That axis is the renderer's
+    // business, so this is a flag rather than a set of colours -- the two
+    // gradient colours stay populated with the ramp's endpoints so anything
+    // that only understands a pair still gets something sensible.
+    bool rainbow = false;
+
     // Legibility insurance on a translucent menu bar. macOS 26 composites the
     // bar over the wallpaper, so a saturated gradient that sings over a dark
     // desktop can vanish over a bright one. A tight dark halo under each bar

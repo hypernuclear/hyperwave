@@ -48,6 +48,7 @@ private:
     QLinearGradient m_gradient;
     QColor m_cachedTop, m_cachedBottom;
     qreal m_cachedHeight = -1.0;
+    bool m_cachedRainbow = false;
 
     // Bar geometry, kept across frames so the shadow and fill passes are drawing
     // exactly the same shapes, and so a small vector is not reallocated sixty

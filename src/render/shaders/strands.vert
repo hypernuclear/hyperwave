@@ -37,6 +37,24 @@ layout(location = 0) out vec4 vColor;
 
 const float PI = 3.14159265;
 
+// Stops at violet rather than wrapping, and sits below full saturation.
+// Both numbers match Palette::rainbowAt on the CPU side; if one moves, move the
+// other, or the same preset renders as two different ramps depending on which
+// look is on screen.
+const float kRainbowSpan = 300.0 / 360.0;
+
+vec3 hue2rgb(float h)
+{
+    vec3 p = abs(fract(h + vec3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
+    return clamp(p - 1.0, 0.0, 1.0);
+}
+
+// HSV with s = 0.85, v = 1.0, written out: v * (1 - s) + v * s * hue.
+vec3 rainbow(float t)
+{
+    return 0.15 + 0.85 * hue2rgb(clamp(t, 0.0, 1.0) * kRainbowSpan);
+}
+
 // Simplex noise, Ian McEwan / Ashima Arts, MIT. See THIRD-PARTY-NOTICES.md.
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -165,7 +183,31 @@ void main()
     // Colour runs along the strand, so the sweep follows frequency rather than
     // depth, and the loud end is also the bright one.
     float t = position.x * 0.5 + 0.5;
-    vec3 rgb = mix(u.colorA.rgb, u.colorB.rgb, t);
+    vec3 rgb;
+    if (u.colorA.a > 0.5) {
+        // Except under the rainbow, where the axis is depth instead: the part
+        // of the tube nearest the viewer is the start of the ramp and it fans
+        // away through the spectrum. Colour then belongs to where a point is in
+        // space rather than to which frequency it carries, so the tube keeps
+        // its colours while it spins through them.
+        //
+        // The projection is orthographic, so w is 1 and this z is the depth in
+        // the clip space QRhi corrected into, where 0.5 is the centre of the
+        // tube. It is NOT normalised: position.z is zero and all the depth
+        // comes from the tube's own cross-section, so the whole shape occupies
+        // about a fifth of the range. Taken raw, the ramp never leaves its
+        // middle and the tube renders entirely green.
+        //
+        // colorB's alpha carries the half-extent to divide by, so the ramp
+        // spans the tube rather than the clip volume. Points past the ends
+        // clamp, which is wanted: the very front is red and the very back is
+        // violet instead of both fading into the middle of the ramp.
+        float halfExtent = max(u.colorB.a, 1e-4);
+        float depth = (currentProjected.z / currentProjected.w - 0.5) / (2.0 * halfExtent);
+        rgb = rainbow(clamp(depth + 0.5, 0.0, 1.0));
+    } else {
+        rgb = mix(u.colorA.rgb, u.colorB.rgb, t);
+    }
     float a = u.opacity * mix(0.35, 1.0, frequencies) * pinch;
     vColor = vec4(rgb * a, a);   // premultiplied, to match ARGB32_Premultiplied
 }

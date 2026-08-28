@@ -1,5 +1,7 @@
 #include "render/LineRenderer.h"
 
+#include "render/Palette.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -79,7 +81,11 @@ void LineRenderer::render(const FrameState &state, const RenderStyle &style, qre
         const qreal centre = (top + bottom) * 0.5;
         const qreal half = (bottom - top) * 0.5 * shrink;
 
-        QColor colour = style.gradientBottom;
+        // Position across the strip, so a stroke keeps its hue as it flashes
+        // rather than changing colour with its own level.
+        QColor colour = style.rainbow
+            ? Palette::rainbowAt(count > 1 ? static_cast<qreal>(i) / (count - 1) : 0.0)
+            : style.gradientBottom;
         // Towards white as a stroke burns, which is what gives the bloom
         // something achromatic to spread and makes the hot ones read as light
         // rather than as a saturated colour.

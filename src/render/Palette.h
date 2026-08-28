@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QGradient>
 #include <QString>
 #include <QVector>
 
@@ -22,6 +23,8 @@ struct GradientPreset
     // Monochrome presets take their colour from the host instead of from the
     // table, so they can follow a light or dark menu bar.
     bool followsSystem = false;
+    // Ramp presets are not a top-and-bottom pair; see RenderStyle::rainbow.
+    bool isRainbow = false;
 };
 
 class Palette
@@ -34,6 +37,14 @@ public:
     // Fills the colour fields of `style` from a preset. `foreground` is only
     // consulted by presets that follow the system.
     static void applyTo(RenderStyle &style, const QString &presetId, const QColor &foreground);
+
+    // The rainbow ramp, as one function so every renderer agrees on it.
+    // `t` runs 0 (red) to 1 (violet) and is clamped.
+    static QColor rainbowAt(qreal t);
+
+    // The same ramp as gradient stops, for the renderers that can hand the
+    // whole sweep to one brush instead of colouring piece by piece.
+    static void addRainbowStops(QGradient &gradient);
 };
 
 } // namespace hyperwave

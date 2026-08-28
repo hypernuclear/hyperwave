@@ -101,7 +101,14 @@ int main(int argc, char **argv)
                        "a visualiser at a size where its detail is visible. Applied as device "
                        "pixel ratio, so every measurement scales with it."),
         QStringLiteral("factor"));
+    const QCommandLineOption gradientOption(
+        QStringLiteral("gradient"),
+        QStringLiteral("Which colour preset to draw with, by id: \"signature\", \"ember\", "
+                       "\"lagoon\", \"rainbow\" or \"mono\". Overrides the setting for "
+                       "this run only, which is what makes --shot usable for comparing them."),
+        QStringLiteral("id"));
     parser.addOption(vizOption);
+    parser.addOption(gradientOption);
     parser.addOption(previewScaleOption);
     parser.process(app);
 
@@ -113,6 +120,7 @@ int main(int argc, char **argv)
     options.sourceBundleId = parser.value(sourceOption);
     options.fakeNotch = parser.isSet(fakeNotchOption);
     options.vizStyle = parser.value(vizOption);
+    options.gradientId = parser.value(gradientOption);
     if (parser.isSet(previewScaleOption)) {
         bool ok = false;
         const double scale = parser.value(previewScaleOption).toDouble(&ok);

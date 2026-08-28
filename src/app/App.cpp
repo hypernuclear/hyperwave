@@ -539,7 +539,11 @@ void App::rebuildStyle(Surface &surface)
     // The menu bar's own foreground colour, for the presets that follow the
     // system rather than carrying their own palette.
     const QColor foreground = QGuiApplication::palette().color(QPalette::WindowText);
-    Palette::applyTo(surface.style, m_settings.gradientId(), foreground);
+    // The command line wins for this run, without touching the stored setting:
+    // comparing presets should not silently rewrite which one the user picked.
+    const QString gradientId = m_options.gradientId.isEmpty() ? m_settings.gradientId()
+                                                              : m_options.gradientId;
+    Palette::applyTo(surface.style, gradientId, foreground);
 
     surface.style.idleOpacity = dsp::kIdlePresence;
 

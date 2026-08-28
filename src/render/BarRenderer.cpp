@@ -4,6 +4,8 @@
 #include <cmath>
 
 #include <QPainter>
+
+#include "render/Palette.h"
 #include <QPainterPath>
 
 namespace hyperwave {
@@ -30,10 +32,21 @@ void BarRenderer::rebuildCache(const RenderStyle &style, qreal stripHeightPt)
     // noise. Anchoring the ramp to the strip means a short bar shows only the
     // violet end and a tall one runs the full ramp, so colour encodes height
     // and the twenty-eight bars resolve into a single object.
-    m_gradient = QLinearGradient(QPointF(0.0, top), QPointF(0.0, bottom));
-    m_gradient.setColorAt(0.0, style.gradientTop);
-    m_gradient.setColorAt(1.0, style.gradientBottom);
+    if (style.rainbow) {
+        // The one case where the ramp does NOT run with height. A rainbow
+        // encodes position rather than loudness, so it runs left to right
+        // across the strip and each bar keeps one hue -- which is what makes
+        // the row read as a spectrum, with the same bar always the same colour
+        // instead of every bar changing hue as it moves.
+        m_gradient = QLinearGradient(QPointF(0.0, 0.0), QPointF(style.stripWidthPt(), 0.0));
+        Palette::addRainbowStops(m_gradient);
+    } else {
+        m_gradient = QLinearGradient(QPointF(0.0, top), QPointF(0.0, bottom));
+        m_gradient.setColorAt(0.0, style.gradientTop);
+        m_gradient.setColorAt(1.0, style.gradientBottom);
+    }
 
+    m_cachedRainbow = style.rainbow;
     m_cachedTop = style.gradientTop;
     m_cachedBottom = style.gradientBottom;
     m_cachedHeight = stripHeightPt;
@@ -46,7 +59,7 @@ void BarRenderer::render(const FrameState &state, const RenderStyle &style,
         return;
 
     if (m_cachedHeight != stripHeightPt || m_cachedTop != style.gradientTop
-        || m_cachedBottom != style.gradientBottom) {
+        || m_cachedBottom != style.gradientBottom || m_cachedRainbow != style.rainbow) {
         rebuildCache(style, stripHeightPt);
     }
 
@@ -119,9 +132,16 @@ void BarRenderer::render(const FrameState &state, const RenderStyle &style,
         p.drawRoundedRect(bar, r, r);
 
     // Peak dots last, on top, in the accent colour rather than the gradient so
-    // they stay legible against the bar they are sitting above.
+    // they stay legible against the bar they are sitting above. Under the
+    // rainbow a single accent cannot do that -- white reads as an error over
+    // yellow and vanishes over nothing else -- so each dot takes its own bar's
+    // hue, lifted towards white.
     p.setBrush(style.peakColor);
     for (int k = 0; k < bands; ++k) {
+        if (style.rainbow) {
+            const qreal u = bands > 1 ? static_cast<qreal>(k) / (bands - 1) : 0.0;
+            p.setBrush(Palette::rainbowAt(u).lighter(155));
+        }
         const qreal x = style.insetLeftPt + k * (w + style.barGapPt);
         const qreal barH = std::max(style.minBarPt,
                                     static_cast<qreal>(state.bars[k]) * usable);

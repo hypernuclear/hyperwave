@@ -1,5 +1,7 @@
 #include "render/RidgeRenderer.h"
 
+#include "render/Palette.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -170,6 +172,14 @@ void RidgeRenderer::render(const FrameState &state, const RenderStyle &style, qr
                                              * r.depth);
         p.setOpacity(opacity * fadeAt(age));
         pen.setWidthF(std::max(0.5, r.lineWidthPt * dpr * scale));
+        if (style.rainbow) {
+            // Depth IS the ramp here: the nearest ridge is the start of the
+            // rainbow and each row behind it steps further along, so the
+            // terrain recedes through the spectrum. One flat colour per row,
+            // because a row is all at one depth.
+            pen.setColor(Palette::rainbowAt(
+                drawn > 1 ? static_cast<qreal>(age) / (drawn - 1) : 0.0));
+        }
         p.setPen(pen);
         p.drawPolyline(m_points.data(), samples);
     }
@@ -185,15 +195,34 @@ void RidgeRenderer::render(const FrameState &state, const RenderStyle &style, qr
         for (int i = 0; i < samples; i += r.columnStride) {
             for (int age = 0; age < drawn; ++age)
                 m_points[static_cast<std::size_t>(age)] = project(age, i);
+            if (style.rainbow) {
+                // A column runs from the nearest row to the furthest, so it
+                // crosses the entire ramp and cannot be one colour. The
+                // gradient is built along its own screen path rather than
+                // straight down the image: the terrain is sheared and the
+                // ridges have height, so "far" is not simply "higher up".
+                QLinearGradient along(m_points.front(), m_points.back());
+                Palette::addRainbowStops(along);
+                pen.setBrush(along);
+                p.setPen(pen);
+            }
             p.drawPolyline(m_points.data(), drawn);
         }
     }
     // The colour, in one pass. SourceIn keeps what has been drawn as a mask and
     // replaces its colour with the gradient, so the sweep still runs along the
     // ridges without any line having had to know about it.
-    p.setOpacity(1.0);
-    p.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    p.fillRect(0, 0, w, h, m_gradient);
+    //
+    // Skipped entirely under the rainbow, where the lines have already been
+    // coloured individually. This trick cannot do that job: it can only paint a
+    // gradient across the image, and the rainbow's axis is depth, which is not
+    // an axis of the image -- a near ridge and a far one overlap in x and y and
+    // must still come out different colours.
+    if (!style.rainbow) {
+        p.setOpacity(1.0);
+        p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        p.fillRect(0, 0, w, h, m_gradient);
+    }
 }
 
 } // namespace hyperwave

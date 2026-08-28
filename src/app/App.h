@@ -46,6 +46,7 @@ public:
         QString shotPath;         // grab one frame and exit
         QString sourceBundleId;   // listen to one app; "list" prints and exits
         QString vizStyle;         // "bars", "ridge" or "strands"; empty = the setting
+        QString gradientId;       // palette preset id; empty = the setting
         qreal previewScale = 1.0; // magnifies the windowed/shot canvas
     };
 
