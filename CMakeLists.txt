@@ -180,6 +180,7 @@ qt_add_executable(hyperwave
     $<$<PLATFORM_ID:Darwin>:src/app/ShellMac.mm>
     $<$<NOT:$<PLATFORM_ID:Darwin>>:src/app/ShellStub.cpp>
     src/platform/BarPresenter.h
+    src/platform/PanelPresenter.h
     # Per-platform files are selected here rather than in if() blocks so the
     # source list stays readable as one thing.
     $<$<PLATFORM_ID:Darwin>:src/platform/CoreAudioTapSource.h>

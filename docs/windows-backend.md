@@ -270,6 +270,15 @@ sensible timer interval.
 1. **WASAPI loopback into `MonoRing`.** Everything else is invisible until
    samples arrive, and `--verify-audio` already proves it end to end without a
    single pixel being drawn.
+
+   One catch, and it lands on exactly this step: `CMakeLists.txt` sets
+   `WIN32_EXECUTABLE TRUE`, which builds a GUI-subsystem binary, and a
+   GUI-subsystem binary on Windows has **no stdout attached** -- so
+   `--verify-audio` runs and prints into nothing. Qt makes it worse by routing
+   `--help` to a message box rather than the terminal. Fix it before relying on
+   the flag: `AttachConsole(ATTACH_PARENT_PROCESS)` with a `freopen` of the
+   standard streams when any console-ish option is set, or drop
+   `WIN32_EXECUTABLE` for a debug configuration and accept the console window.
 2. **A plain frameless window** implementing `BarPresenter`. Not the shipping
    surface -- the point is to get pixels on screen and confirm the shared
    renderer, the glow and the D3D11 path all work before putting shell

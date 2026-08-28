@@ -15,6 +15,7 @@
 #include "app/Shell.h"
 #include "render/Palette.h"
 
+#include "platform/PanelPresenter.h"
 #ifdef Q_OS_MACOS
 #include "platform/MacNotchPresenter.h"
 #endif
@@ -299,8 +300,8 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
 
     if (isNotch) {
         m_notchSurface = s;
-        auto *notch = static_cast<MacNotchPresenter *>(p);
-        connect(notch, &MacNotchPresenter::transportRequested, this, [this](int command) {
+        auto *notch = static_cast<PanelPresenter *>(p);
+        connect(notch, &PanelPresenter::transportRequested, this, [this](int command) {
             m_nowPlaying->sendCommand(static_cast<TransportCommand>(command));
         });
         // The panel needs its own route to the menu: it exists for displays
@@ -672,7 +673,7 @@ void App::setNotchTabVisible(bool visible)
 {
     if (!m_notchSurface)
         return;
-    auto *notch = static_cast<MacNotchPresenter *>(m_notchSurface->presenter.get());
+    auto *notch = static_cast<PanelPresenter *>(m_notchSurface->presenter.get());
     notch->setTabVisible(visible || !m_settings.notchAutoHide());
     Q_UNUSED(visible);
 }
@@ -850,7 +851,7 @@ void App::refreshMenu()
             surface->presenter->setMenu(menu);
     }
     if (m_notchSurface) {
-        auto *notch = static_cast<MacNotchPresenter *>(m_notchSurface->presenter.get());
+        auto *notch = static_cast<PanelPresenter *>(m_notchSurface->presenter.get());
         notch->setDevices(m_audio->source()->audioDevices(),
                           m_audio->source()->sourceDeviceUid());
     }
@@ -888,7 +889,7 @@ void App::refreshNowPlaying()
     // not the reason for it -- the menu is the other.
     m_nowPlaying->setBundleId(bundleId);
     if (m_notchSurface) {
-        auto *notch = static_cast<MacNotchPresenter *>(m_notchSurface->presenter.get());
+        auto *notch = static_cast<PanelPresenter *>(m_notchSurface->presenter.get());
         notch->setNowPlaying(m_nowPlaying->info(), fallbackName);
     }
 }

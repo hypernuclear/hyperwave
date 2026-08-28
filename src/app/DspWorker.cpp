@@ -10,6 +10,11 @@ namespace hyperwave {
 
 namespace {
 
+// MSVC does not define M_PI from <cmath> without _USE_MATH_DEFINES, and this
+// file is compiled on every platform. Spelled out to match dsp/Fft.cpp and
+// dsp/Window.cpp, which already carry their own kPi for the same reason.
+constexpr double kTwoPi = 2.0 * 3.14159265358979323846;
+
 // After this much continuous silence the analysis drops to a slow poll. It
 // still has to run to notice audio coming back, but it does not have to pay
 // for an FFT to do that.
@@ -121,9 +126,9 @@ void DspWorker::tick()
                 const double freq = 80.0 * std::pow(2.0, k);
                 const double breathe = 0.5 + 0.5 * std::sin(t * (0.7 + 0.31 * k) + k);
                 const double amp = (k == 0 ? 0.35 + 0.5 * beat : 0.28) * breathe;
-                m_fakePhase[k] += 2.0 * M_PI * freq * dt;
-                if (m_fakePhase[k] > 2.0 * M_PI)
-                    m_fakePhase[k] -= 2.0 * M_PI;
+                m_fakePhase[k] += kTwoPi * freq * dt;
+                if (m_fakePhase[k] > kTwoPi)
+                    m_fakePhase[k] -= kTwoPi;
                 sample += std::sin(m_fakePhase[k]) * amp;
             }
             // Plus broadband noise, which matters more than it sounds like it

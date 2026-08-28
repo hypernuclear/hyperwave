@@ -4,7 +4,7 @@
 
 #include "audio/AudioDevice.h"
 #include "app/NowPlaying.h"
-#include "platform/BarPresenter.h"
+#include "platform/PanelPresenter.h"
 
 namespace hyperwave {
 
@@ -24,7 +24,7 @@ namespace hyperwave {
 //   Collapsed  a black tab hanging below the notch with the strip inside it,
 //              shaped so it reads as part of the housing rather than a window.
 //   Expanded   drops down on hover into a larger panel.
-class MacNotchPresenter : public BarPresenter
+class MacNotchPresenter : public PanelPresenter
 {
     Q_OBJECT
 
@@ -64,7 +64,7 @@ public:
     // hoverable so the panel is still reachable -- otherwise, on a display
     // crowded enough to hide the status item, there would be no way to open
     // anything at all.
-    void setTabVisible(bool visible);
+    void setTabVisible(bool visible) override;
     bool isTabVisible() const;
 
     // How wide the strip may be inside the tab, in points. The notch decides
@@ -77,7 +77,8 @@ public:
     // What the expanded panel shows above the bars. An invalid info falls back
     // to the app name alone, which is all the audio process list can offer for
     // anything without a scripting dictionary.
-    void setNowPlaying(const NowPlayingInfo &info, const QString &fallbackAppName);
+    void setNowPlaying(const NowPlayingInfo &info,
+                       const QString &fallbackAppName) override;
 
     // Reached from the Objective-C helper.
     void emitFrameDue();
@@ -87,11 +88,8 @@ public:
     void handleHover(bool inside);
     void handleTransport(int command);
     void handleSourcePick(const QString &uid);
-    void setDevices(const AudioDeviceList &devices, const QString &current);
+    void setDevices(const AudioDeviceList &devices, const QString &current) override;
     void showMenu();
-
-Q_SIGNALS:
-    void transportRequested(int command);
 
 private:
     void applyFrame();

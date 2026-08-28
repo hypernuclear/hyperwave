@@ -404,7 +404,7 @@ void MacNotchPresenter::setFakeNotch(bool enabled)
 }
 
 MacNotchPresenter::MacNotchPresenter(QObject *parent)
-    : BarPresenter(parent)
+    : PanelPresenter(parent)
     , m_impl(std::make_unique<Impl>())
 {
     m_impl->colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
