@@ -106,6 +106,43 @@ looks for to confirm the app is running. Draw it once.
 the status-item image and a template image is a monochrome mask, so the gradient
 would arrive as a silhouette. Windows has no such behaviour.
 
+### Two ways in, one menu
+
+The tray menu stays, and the appbar gets a right-click menu as well. Both show
+the same `MenuModel`, which is not a compromise between two designs but the
+arrangement macOS already ships: the status item and the notch panel are two
+surfaces onto one menu today, and `App::refreshMenu()` pushes to every
+registered surface, so an appbar is a third consumer of a mechanism that exists.
+
+The tray cannot be dropped in favour of the appbar, for the reason the plan
+above creates: **first run does not dock.** At launch there is no appbar, so if
+the appbar were the only way in there would be nothing to click to ask for one.
+Undocking has the same shape in reverse -- making it one click is only safe if
+there is still a way back afterwards. Add the failure paths, where `ABM_NEW` is
+refused because another appbar owns that edge, or explorer restarts and drops
+the registration, and the tray is what stops the app becoming unreachable while
+still running. It is also simply where a Windows user looks to quit something
+that has no window.
+
+Nor should the appbar be menuless. Right-click on a docked strip is what the
+taskbar itself does, so it is the more idiomatic gesture of the two here, and
+reaching for a different surface to change the look of the thing you are
+pointing at is a detour.
+
+So they are not redundant, they differ in what they are *for*:
+
+- **The tray owns lifecycle** -- dock and undock, which edge, quit, and being
+  the evidence that the app is running at all.
+- **The appbar owns what it is showing** -- the look, the source, the track.
+
+Both carry the whole menu; the split is only about which one a hand reaches for.
+
+One addition beyond parity with macOS: **a gear at the strip's inner end,
+revealed on hover.** Right-click is undiscoverable, and unfamiliarity is this
+surface's whole risk -- a user who has never seen an appbar has no reason to
+suspect it has a menu. A few pixels of affordance is cheap next to that. The
+notch panel has the same gap and would benefit from the same fix.
+
 ### What the appbar means for the looks
 
 An appbar is a strip, so all six looks work in it unchanged, which is the
@@ -237,14 +274,17 @@ sensible timer interval.
    surface -- the point is to get pixels on screen and confirm the shared
    renderer, the glow and the D3D11 path all work before putting shell
    integration on top of them. Debug it here, not inside an appbar.
-3. **The appbar.** `ABM_NEW`, then `ABM_QUERYPOS` followed by `ABM_SETPOS` on
+3. **The static tray icon and menu.** Before the appbar, not after it: the tray
+   is what offers docking in the first place, and first run does not dock. It is
+   also the way back from an undock and the way out when `ABM_NEW` is refused,
+   so building the appbar first means building a surface with no way to ask for
+   it and no way to leave it.
+4. **The appbar.** `ABM_NEW`, then `ABM_QUERYPOS` followed by `ABM_SETPOS` on
    every `ABN_POSCHANGED`, then `ABN_FULLSCREENAPP`. Undocking has to work from
    the first commit: `ABM_REMOVE` before the window is destroyed is not
    optional, because an appbar that fails to unregister leaves its reserved
    strip behind after the process is gone, and the only way back is a reboot or
    another appbar claiming the same edge. Test the crash path deliberately.
-4. **The static tray icon and menu**, which is what makes the app findable and
-   quittable.
 5. **Per-app metering**, which is cheap here and makes the `Playing` list real.
 
 Microphone input, per-app capture, the desktop widget and the taskbar overlay

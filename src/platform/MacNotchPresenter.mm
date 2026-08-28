@@ -679,7 +679,18 @@ void MacNotchPresenter::setMenu(const MenuModel &model)
 
 void MacNotchPresenter::showMenu()
 {
-    if (!m_impl->menu || !m_impl->view)
+    if (!m_impl->view)
+        return;
+    // Ask for a fresh menu first, and only then look at what we have.
+    //
+    // This surface never did, which made its menu a snapshot of whenever the
+    // status item's menu last opened -- stale check marks, a "Playing" list
+    // from minutes ago, output devices that had since been unplugged. Worse on
+    // exactly the display this panel exists for: if the status item has been
+    // crowded under the housing then its menu never opens, nothing ever asks
+    // for a rebuild, and the panel's menu stays as old as the launch.
+    Q_EMIT menuAboutToShow();
+    if (!m_impl->menu)
         return;
 
     // Below the panel rather than at the pointer, so it reads as belonging to

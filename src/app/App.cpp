@@ -306,6 +306,9 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
         // The panel needs its own route to the menu: it exists for displays
         // where the status item has been crowded off the bar entirely.
         connect(notch, &BarPresenter::menuActionTriggered, this, &App::onMenuAction);
+        // The panel rebuilds the menu before showing it, same as the status
+        // item. Without this the signal is emitted into nothing.
+        connect(notch, &BarPresenter::menuAboutToShow, this, &App::refreshMenu);
         connect(notch, &BarPresenter::geometryChanged, this, &App::refreshNowPlaying);
     }
     if (!isNotch) {
