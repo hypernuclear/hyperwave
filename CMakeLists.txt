@@ -202,6 +202,70 @@ qt_add_executable(hyperwave
     $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/LinuxBarPresenter.cpp>
 )
 
+# --- auto-update -----------------------------------------------------------
+#
+# Sparkle on macOS, WinSparkle on Windows, nothing anywhere else. Both read the
+# same appcast and verify the same EdDSA signature, so one feed generator in the
+# release workflow serves both.
+option(HYPERWAVE_AUTO_UPDATE "Include the auto-updater (Sparkle / WinSparkle)" ON)
+set(SPARKLE_VERSION "2.9.0" CACHE STRING "Sparkle release to fetch (macOS)")
+set(WINSPARKLE_VERSION "0.9.1" CACHE STRING "WinSparkle release to fetch (Windows)")
+
+# The PUBLIC half of the update signing key. It ships inside every binary
+# anyway, so hiding it in a secret buys nothing and costs reviewability -- as a
+# secret it becomes an invisible input that can silently disagree with the
+# private half. In the tree it is diffable.
+set(HYPERWAVE_EDDSA_PUBKEY "" CACHE STRING "ed25519 public key for appcast verification")
+
+set(HYPERWAVE_APPCAST_URL "https://hyperwave-builds.hypernuclear.com/latest/mac/appcast.xml"
+    CACHE STRING "Sparkle appcast feed URL (macOS)")
+set(HYPERWAVE_APPCAST_URL_WIN "https://hyperwave-builds.hypernuclear.com/latest/win/appcast.xml"
+    CACHE STRING "WinSparkle appcast feed URL")
+
+# No key, no updater. Deliberately not an error: a contributor cloning this
+# should get a working build without being handed a signing key, and a local
+# build has nothing to update to anyway. It IS an error on a tag -- the release
+# workflow passes the key, and refuses to publish a feed whose enclosures came
+# out unsigned.
+if(HYPERWAVE_AUTO_UPDATE AND NOT HYPERWAVE_EDDSA_PUBKEY)
+    message(STATUS
+        "No HYPERWAVE_EDDSA_PUBKEY, so the auto-updater is off for this build. "
+        "An updater that cannot verify a signature is worse than no updater. "
+        "See RELEASING.md for how to generate the pair.")
+    set(HYPERWAVE_AUTO_UPDATE OFF)
+endif()
+
+if(HYPERWAVE_AUTO_UPDATE)
+    string(LENGTH "${HYPERWAVE_EDDSA_PUBKEY}" _hw_key_len)
+    if(NOT _hw_key_len EQUAL 44)
+        message(FATAL_ERROR
+            "HYPERWAVE_EDDSA_PUBKEY is ${_hw_key_len} characters; a base64 "
+            "ed25519 public key is 44. This is checked because a truncated key "
+            "fails at update time on a user's machine, not here.")
+    endif()
+
+    include(FetchContent)
+    if(APPLE)
+        FetchContent_Declare(sparkle
+            URL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz")
+        FetchContent_MakeAvailable(sparkle)
+        set(SPARKLE_FRAMEWORK_DIR "${sparkle_SOURCE_DIR}")
+        set(HYPERWAVE_UPDATE_SOURCES src/update/SparkleUpdater.h src/update/SparkleUpdater.mm)
+    elseif(WIN32)
+        FetchContent_Declare(winsparkle
+            URL "https://github.com/vslavik/winsparkle/releases/download/v${WINSPARKLE_VERSION}/WinSparkle-${WINSPARKLE_VERSION}.zip")
+        FetchContent_MakeAvailable(winsparkle)
+        set(WINSPARKLE_DIR "${winsparkle_SOURCE_DIR}")
+        set(HYPERWAVE_UPDATE_SOURCES src/update/WinSparkleUpdater.h src/update/WinSparkleUpdater.cpp)
+    else()
+        set(HYPERWAVE_UPDATE_SOURCES src/update/NoUpdater.cpp)
+    endif()
+else()
+    set(HYPERWAVE_UPDATE_SOURCES src/update/NoUpdater.cpp)
+endif()
+
+target_sources(hyperwave PRIVATE src/update/AppUpdater.h ${HYPERWAVE_UPDATE_SOURCES})
+
 target_include_directories(hyperwave PRIVATE src)
 target_link_libraries(hyperwave PRIVATE
     hyperwave_core
@@ -210,6 +274,31 @@ target_link_libraries(hyperwave PRIVATE
 target_compile_definitions(hyperwave PRIVATE
     HYPERWAVE_VERSION="${APP_VERSION_DISPLAY}"
     HYPERWAVE_VERSION_BUILD="${APP_VERSION_BUILD}")
+
+if(HYPERWAVE_AUTO_UPDATE)
+    target_compile_definitions(hyperwave PRIVATE HYPERWAVE_AUTO_UPDATE=1)
+    if(APPLE)
+        # The framework is embedded and signed by scripts/package-macos.sh.
+        # @loader_path/../Frameworks is where it ends up inside the bundle.
+        target_link_libraries(hyperwave PRIVATE "-F${SPARKLE_FRAMEWORK_DIR}" "-framework Sparkle")
+        target_link_options(hyperwave PRIVATE
+            "-Wl,-rpath,@loader_path/../Frameworks"
+            "-Wl,-rpath,${SPARKLE_FRAMEWORK_DIR}")
+    elseif(WIN32)
+        target_include_directories(hyperwave PRIVATE "${WINSPARKLE_DIR}/include")
+        target_link_libraries(hyperwave PRIVATE "${WINSPARKLE_DIR}/x64/Release/WinSparkle.lib")
+        target_compile_definitions(hyperwave PRIVATE
+            HYPERWAVE_APPCAST_URL="${HYPERWAVE_APPCAST_URL_WIN}"
+            HYPERWAVE_EDDSA_PUBKEY="${HYPERWAVE_EDDSA_PUBKEY}")
+        # WinSparkle ships as a DLL; put it beside the exe so a run from the
+        # build tree behaves like the installed one.
+        add_custom_command(TARGET hyperwave POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${WINSPARKLE_DIR}/x64/Release/WinSparkle.dll"
+                    "$<TARGET_FILE_DIR:hyperwave>"
+            VERBATIM)
+    endif()
+endif()
 
 qt_add_qml_module(hyperwave
     URI hyperwave

@@ -319,6 +319,16 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
 
 bool App::start()
 {
+    // Null on every platform without an updater, and on any build made without
+    // a signing key. The menu asks before it offers the entry.
+    m_updater = AppUpdater::create(this);
+    if (m_updater) {
+        // The entry greys itself out while a check is in flight, so the menu
+        // has to be rebuilt when that changes rather than only when the audio
+        // does.
+        connect(m_updater, &AppUpdater::canCheckForUpdatesChanged, this,
+                [this](bool) { refreshMenu(); });
+    }
     if (m_options.sourceBundleId == QLatin1String("list")) {
         // Print what the audio system will admit to and exit. Cheaper than
         // guessing bundle ids, and it doubles as a check that the process probe
@@ -806,6 +816,14 @@ MenuModel App::buildMenu() const
     menu.append(MenuItem::separator());
     menu.append(MenuItem::action(QLatin1String(MenuAction::kSettings),
                                 QStringLiteral("Settings…")));
+    if (m_updater) {
+        // Only when there is something behind it. A build with no updater
+        // compiled in -- Linux, or any build without a signing key -- shows no
+        // entry at all rather than a greyed-out one that can never be used.
+        menu.append(MenuItem::action(QLatin1String(MenuAction::kCheckForUpdates),
+                                     QStringLiteral("Check for Updates..."))
+                        .withEnabled(m_updater->canCheckForUpdates()));
+    }
     menu.append(
         MenuItem::action(QLatin1String(MenuAction::kAbout), QStringLiteral("About hyperwave")));
     menu.append(
@@ -901,6 +919,11 @@ void App::onMenuAction(const QString &actionId)
     }
     if (actionId == QLatin1String(MenuAction::kSettings)) {
         showSettings();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kCheckForUpdates)) {
+        if (m_updater)
+            m_updater->checkForUpdates();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kAbout)) {

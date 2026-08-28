@@ -12,6 +12,7 @@
 #include "app/DspWorker.h"
 #include "app/MenuModel.h"
 #include "app/Settings.h"
+#include "update/AppUpdater.h"
 #include "app/VisualiserControls.h"
 #include "dsp/FrameState.h"
 #include "platform/BarPresenter.h"
@@ -128,6 +129,9 @@ private:
 
     Options m_options;
     Settings m_settings;
+    // Null where the platform has no updater, or where the build was made
+    // without a signing key. Every use is guarded rather than assumed.
+    AppUpdater *m_updater = nullptr;
 
     // Live tuning, owned here rather than rebuilt from defaults every time.
     // rebuildStyle() starts from a fresh RenderStyle on every geometry change,
