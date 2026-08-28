@@ -315,6 +315,8 @@ qt_add_qml_module(hyperwave
         qml/Settings.qml
         qml/Splash.qml
         qml/HypernuclearWordmark.qml
+        qml/HyperwaveMark.qml
+        qml/HyperwaveLogotype.qml
 )
 
 # The splash's artwork, the mark it draws, and the face it sets them in.
@@ -335,10 +337,10 @@ qt_add_resources(hyperwave "hyperwave_icons"
 # The mark, from assets/ where it is authored rather than from a copy.
 #
 # Its own call because qt_add_resources takes one BASE, and this file lives
-# beside the artwork rather than beside the generated icons. Registered on every
-# platform: the Windows tray glyph and the splash's lockup both draw it, and
-# registering it twice under the same alias is a build error rather than a
-# last-one-wins.
+# beside the artwork rather than beside the generated icons. Read at runtime by
+# the Windows tray glyph, which renders it through QSvgRenderer at whatever size
+# the shell asks for. The splash draws the same mark from qml/HyperwaveMark.qml
+# instead, because a Shape takes a colour and a rasterised SVG does not.
 qt_add_resources(hyperwave "hyperwave_mark"
     PREFIX "/icons"
     BASE "assets"

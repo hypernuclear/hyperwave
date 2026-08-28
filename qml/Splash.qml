@@ -129,43 +129,32 @@ Window {
             // The gap that has to hold is the one to the straight edge.
             Row {
                 id: lockup
-                spacing: panel.height * 0.10
+                spacing: panel.height * 0.12
                 anchors.right: parent.right
                 anchors.rightMargin: panel.width * 0.085
                 anchors.top: parent.top
-                anchors.topMargin: panel.height * 0.20
+                anchors.topMargin: panel.height * 0.155
 
-                Image {
-                    source: "qrc:/icons/hyperwave.svg"
-                    height: panel.height * 0.34
+                // Both marks are Shapes whose colour is a property, so they
+                // are simply asked for the ink. The Image version needed
+                // MultiEffect to fight the artwork's baked-in black, and
+                // MultiEffect cannot lighten: colorization multiplies, and
+                // black multiplied by white is still black.
+                HyperwaveMark {
+                    color: root.brandInk
+                    height: panel.height * 0.52
                     width: height
-                    // The SVG is rasterised once at the size it is drawn,
-                    // rather than at its natural size and then scaled down,
-                    // which is what makes the interior lines survive.
-                    sourceSize.width: width * 4
-                    sourceSize.height: height * 4
-                    smooth: true
                     anchors.verticalCenter: parent.verticalCenter
-                    // The artwork's own fill is black, which on this blue reads
-                    // as a second, heavier element beside the words rather than
-                    // as part of the same lockup. Colorized to the same ink.
-                    layer.enabled: true
-                    layer.effect: MultiEffect {
-                        // brightness, not colorization. Colorization multiplies
-                        // the source by the target colour, and black multiplied
-                        // by white is still black -- it cannot lighten anything.
-                        // brightness at 1.0 drives the fill to white while the
-                        // alpha, which is what carries the shape, is untouched.
-                        brightness: 1.0
-                    }
                 }
 
-                Text {
-                    text: "hyperwave"
+                HyperwaveLogotype {
                     color: root.brandInk
-                    font.family: inter.name
-                    font.weight: Font.DemiBold
-                    font.pixelSize: panel.height * 0.32
+                    // Sized by HEIGHT, with the width following the artwork's
+                    // own aspect. Driving it from the width instead decides a
+                    // height nobody checked: this logotype is nearly four times
+                    // wider than it is tall.
+                    height: panel.height * 0.40
+                    width: height * (viewWidth / viewHeight)
                     anchors.verticalCenter: parent.verticalCenter
                 }
             }
@@ -175,14 +164,16 @@ Window {
             // version number is one place to forget.
             Text {
                 text: "v" + Qt.application.version
+                // Plain white at full opacity. Dimming it was meant to rank it
+                // below the name; at this size it just looked like it had not
+                // finished loading.
                 color: root.brandInk
-                opacity: 0.85
                 font.family: inter.name
                 font.weight: Font.DemiBold
-                font.pixelSize: panel.height * 0.21653
+                font.pixelSize: panel.height * 0.155
                 anchors.right: lockup.right
                 anchors.top: lockup.bottom
-                anchors.topMargin: panel.height * 0.02
+                anchors.topMargin: panel.height * 0.06
             }
         }
 
