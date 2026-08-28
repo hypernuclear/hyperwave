@@ -19,7 +19,7 @@ option(HYPERWAVE_BUILD_TESTS "Build the headless test suite" ON)
 
 # --- versions ---------------------------------------------------------------
 #
-# Two numbers, same scheme as hyperbin and hypershot:
+# Two numbers:
 #   PROJECT_VERSION   marketing version, what people read -> CFBundleShortVersionString
 #   APP_VERSION_BUILD monotonic commit count              -> CFBundleVersion
 #
@@ -50,7 +50,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- locating Qt ------------------------------------------------------------
 #
-# Lifted from hyperbin. The empty-string check is load-bearing: an editor that
+# The empty-string check is load-bearing: an editor that
 # expands an unset $env{QT_ROOT} hands us "" rather than nothing, and a
 # defined-but-empty CMAKE_PREFIX_PATH silently defeats the search below.
 if(NOT CMAKE_PREFIX_PATH)

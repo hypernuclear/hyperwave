@@ -360,8 +360,8 @@ Two wrinkles are baked in rather than left to be rediscovered. `qtsvg` is
 deliberately *not* in the module list — in Qt 6 it is part of the base install,
 and naming it fails with an error that reads as though it were missing.
 aqtinstall is pinned to a commit rather than the PyPI release, because 3.3.0
-cannot parse Qt 6.11's repository layout; the pin matches hyperbin's and
-hypershot's so all three move together.
+cannot parse Qt 6.11's repository layout, so the action is pinned to a commit
+that can.
 
 The suite is headless, so it runs on a runner with no audio device and no
 display. It cannot cover capture, the status item or the notch panel — those
