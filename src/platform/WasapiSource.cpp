@@ -17,6 +17,8 @@
 #include <initguid.h>
 
 #include <audioclient.h>
+#include <audiopolicy.h>
+#include <endpointvolume.h>
 #include <mmdeviceapi.h>
 
 // WAVE_FORMAT_EXTENSIBLE and friends come from mmreg.h; the
@@ -29,6 +31,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -38,6 +41,8 @@
 #include <vector>
 
 #include <QDebug>
+#include <QFileInfo>
+#include <QHash>
 #include <QString>
 
 #include "audio/Downmix.h"
@@ -152,6 +157,63 @@ SampleKind classify(const WAVEFORMATEX *wf)
     if (tag == WAVE_FORMAT_PCM && wf->wBitsPerSample == 16)
         return SampleKind::Int16;
     return SampleKind::Unsupported;
+}
+
+// The image path of a process, for its name and its identity. Limited
+// information access is enough here and works across integrity levels, where
+// PROCESS_QUERY_INFORMATION would be refused for elevated processes.
+QString processImagePath(DWORD pid)
+{
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process)
+        return {};
+    wchar_t buffer[MAX_PATH];
+    DWORD size = MAX_PATH;
+    QString path;
+    if (QueryFullProcessImageNameW(process, 0, buffer, &size))
+        path = QString::fromWCharArray(buffer, size);
+    CloseHandle(process);
+    return path;
+}
+
+// "Spotify", not "spotify.exe". The FileDescription in the version resource
+// is the name a person knows the app by -- it is what Task Manager shows --
+// and the executable's basename is the fallback for the many helpers that
+// ship without one.
+QString friendlyAppName(const QString &imagePath)
+{
+    const auto *widePath = reinterpret_cast<LPCWSTR>(imagePath.utf16());
+    DWORD ignored = 0;
+    const DWORD size = GetFileVersionInfoSizeW(widePath, &ignored);
+    if (size > 0) {
+        std::vector<BYTE> data(size);
+        if (GetFileVersionInfoW(widePath, 0, size, data.data())) {
+            struct LangCodePage
+            {
+                WORD language;
+                WORD codePage;
+            };
+            LangCodePage *translations = nullptr;
+            UINT bytes = 0;
+            if (VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation",
+                               reinterpret_cast<void **>(&translations), &bytes)
+                && translations && bytes >= sizeof(LangCodePage)) {
+                wchar_t query[64];
+                swprintf(query, 64, L"\\StringFileInfo\\%04x%04x\\FileDescription",
+                         translations[0].language, translations[0].codePage);
+                LPWSTR description = nullptr;
+                UINT length = 0;
+                if (VerQueryValueW(data.data(), query,
+                                   reinterpret_cast<void **>(&description), &length)
+                    && description && length > 1) {
+                    const QString name = QString::fromWCharArray(description).trimmed();
+                    if (!name.isEmpty())
+                        return name;
+                }
+            }
+        }
+    }
+    return QFileInfo(imagePath).completeBaseName();
 }
 
 // One endpoint, captured on its own thread, into one ring.
@@ -625,6 +687,113 @@ public:
         if (weInitialised)
             CoUninitialize();
         return devices;
+    }
+
+    AudioProcessList audioProcesses() const override
+    {
+        // The docs called this the easy half of Windows and they were right:
+        // one session manager on the default render endpoint enumerates every
+        // app's audio session with its PID, and each session carries its own
+        // peak meter. No taps, no aggregate, no permission, no forty-slot
+        // budget -- the week the macOS side took is an enumeration loop here.
+        // Runs on the menu's thread, on demand, same as audioDevices().
+        AudioProcessList out;
+        const bool weInitialised = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
+
+        do {
+            ComPtr<IMMDeviceEnumerator> enumerator;
+            if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                        __uuidof(IMMDeviceEnumerator), enumerator.putVoid()))
+                || !enumerator)
+                break;
+            ComPtr<IMMDevice> device;
+            if (FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, device.put()))
+                || !device)
+                break;
+            ComPtr<IAudioSessionManager2> manager;
+            if (FAILED(device->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr,
+                                        manager.putVoid()))
+                || !manager)
+                break;
+            ComPtr<IAudioSessionEnumerator> sessions;
+            if (FAILED(manager->GetSessionEnumerator(sessions.put())) || !sessions)
+                break;
+
+            int count = 0;
+            sessions->GetCount(&count);
+            const DWORD ourPid = GetCurrentProcessId();
+
+            // Peaks at or below the floor of hearing do not count as playing.
+            // The same lesson the macOS side learned the slow way applies: a
+            // session being ACTIVE only means the app holds a stream open,
+            // and a 3D editor does that for hours in silence.
+            constexpr float kAudibleDb = -60.0f;
+
+            QHash<QString, int> rowByPath;
+
+            for (int i = 0; i < count; ++i) {
+                ComPtr<IAudioSessionControl> control;
+                if (FAILED(sessions->GetSession(i, control.put())) || !control)
+                    continue;
+
+                ComPtr<IAudioSessionControl2> control2;
+                if (FAILED(control->QueryInterface(__uuidof(IAudioSessionControl2),
+                                                   control2.putVoid()))
+                    || !control2)
+                    continue;
+                if (control2->IsSystemSoundsSession() == S_OK)
+                    continue;
+                DWORD pid = 0;
+                if (FAILED(control2->GetProcessId(&pid)) || pid == 0 || pid == ourPid)
+                    continue;
+
+                AudioSessionState state = AudioSessionStateInactive;
+                control->GetState(&state);
+                const bool active = state == AudioSessionStateActive;
+
+                float peak = 0.0f;
+                ComPtr<IAudioMeterInformation> meter;
+                if (SUCCEEDED(control->QueryInterface(__uuidof(IAudioMeterInformation),
+                                                      meter.putVoid()))
+                    && meter)
+                    meter->GetPeakValue(&peak);
+
+                const QString path = processImagePath(pid);
+                if (path.isEmpty())
+                    continue;
+
+                const float levelDb = peak > 1e-6f
+                    ? std::max(-120.0f, 20.0f * std::log10(peak))
+                    : -120.0f;
+
+                // A browser is several sessions from several processes. One
+                // row per executable, carrying the loudest session's level,
+                // is the answer a person expects -- the same grouping the
+                // macOS side does by bundle id.
+                const auto existing = rowByPath.constFind(path);
+                if (existing != rowByPath.constEnd()) {
+                    AudioProcess &row = out[existing.value()];
+                    row.levelDb = std::max(row.levelDb, levelDb);
+                    row.playingOutput = row.playingOutput || active;
+                    row.audible = row.audible || (active && levelDb > kAudibleDb);
+                    continue;
+                }
+
+                AudioProcess process;
+                process.pid = pid;
+                process.bundleId = path; // the stable identity Windows offers
+                process.name = friendlyAppName(path);
+                process.playingOutput = active;
+                process.levelDb = levelDb;
+                process.audible = active && levelDb > kAudibleDb;
+                rowByPath.insert(path, out.size());
+                out.push_back(process);
+            }
+        } while (false);
+
+        if (weInitialised)
+            CoUninitialize();
+        return out;
     }
 
     bool setSourceDeviceUid(const QString &uid) override

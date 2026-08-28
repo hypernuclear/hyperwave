@@ -825,15 +825,21 @@ MenuModel App::buildMenu() const
     menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleNowPlaying),
                                  QStringLiteral("Track info and controls"))
                     .withCheck(m_settings.nowPlayingEnabled()));
+#ifdef Q_OS_MACOS
     // Always offered, never conditional on an accusation.
     //
     // This used to appear only when the app had concluded it was being denied,
     // which was worse than useless: the conclusion was unreliable, so it turned
     // up on a working install and stayed hidden on the one occasion someone
     // would want it. One permanent row costs nothing and is always correct.
+    //
+    // macOS only, and that is a different kind of conditional: WASAPI loopback
+    // has no permission to grant, so on Windows this row would open nothing
+    // and quietly imply a gate that does not exist.
     menu.append(MenuItem::separator());
     menu.append(MenuItem::action(QLatin1String(MenuAction::kRequestPermission),
                                  QStringLiteral("System Audio Access…")));
+#endif
     if (m_audio->needsRestartToRecover()) {
         menu.append(MenuItem::action(QLatin1String(MenuAction::kRestart),
                                      QStringLiteral("Restart hyperwave")));

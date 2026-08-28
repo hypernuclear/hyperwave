@@ -13,6 +13,22 @@ already works.
 
 ## Windows: where the visualiser lives
 
+> **Superseded (2026-08-28), by use.** The appbar and a taskbar-riding strip
+> were both built and both removed after a day of actually living with them.
+> The appbar crashed in ordinary use, and its failure mode is uniquely bad: a
+> process that dies without `ABM_REMOVE` leaves its reserved strip behind
+> until a reboot. The taskbar rider was a permanent z-order fight with a XAML
+> shell that repaints on its own schedule. What replaced them was not on the
+> original list of four: a **floating notch panel** -- the macOS notch
+> panel's shape as a topmost window. A dark outlined box hanging flush from
+> the screen edge, square shoulders against the edge, rounded corners away
+> from it, over any maximised title bar. Draggable anywhere, snapping flush
+> to the top or bottom edge; the wheel resizes it; position and size persist.
+> What the appbar provided for free -- hiding over fullscreen games -- is a
+> two-second `SHQueryUserNotificationState` poll. The sections below record
+> the original reasoning and are kept because they explain what was tried and
+> why it lost.
+
 macOS gives this app a reserved strip that no window ever covers. Windows has
 no such thing on offer to a third party, so the question is which of the
 imperfect substitutes to build first. Four were considered.

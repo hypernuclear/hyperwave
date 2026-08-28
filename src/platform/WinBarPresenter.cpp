@@ -12,7 +12,6 @@
 #include <shellapi.h>
 
 #include <algorithm>
-#include <cstring>
 #include <memory>
 
 #include <QAbstractNativeEventFilter>
@@ -24,6 +23,7 @@
 #include <QFontMetrics>
 #include <QMouseEvent>
 #include <QPaintEvent>
+#include <QWheelEvent>
 #include <QWindow>
 #include <QGuiApplication>
 #include <QIcon>
@@ -40,79 +40,67 @@
 #include <QTimer>
 #include <QWidget>
 
-// Windows display: a docked application desktop toolbar, plus a static tray
-// icon as the anchor.
+// Windows display: a floating notch panel, plus a static tray icon as the
+// anchor.
 //
-// The appbar reserves screen space the way the taskbar does, so maximised
-// windows start below it. That is the real cost and it is also the whole point:
-// it is the only surface that is guaranteed visible, where a floating strip
-// loses to anything topmost and a desktop widget loses to the first maximised
-// window. ABN_FULLSCREENAPP handles games for free. Deskbands -- the thing that
-// genuinely lived inside the taskbar -- were removed in Windows 11, and Widgets
-// are Adaptive Cards with a refresh budget in minutes that cannot animate.
+// The panel is the macOS notch panel's shape as a topmost window: a dark
+// outlined box hanging flush from the screen edge, square shoulders against
+// the edge, rounded corners away from it, sitting over any maximised title
+// bar. Draggable anywhere; near the top or bottom edge it snaps flush and
+// takes that edge's shape. The mouse wheel over it resizes it.
 //
-// First run does NOT dock. An appbar is an unfamiliar convention and "this app
-// permanently took 24 pixels of your screen" is a bad thing to discover rather
-// than to choose, so the strip starts floating and the tray menu offers the
-// edge. That is also why the tray icon exists at all: it is what offers
-// docking, what undocks again, and what remains when ABM_NEW is refused because
-// another appbar already owns that edge.
+// An appbar (SHAppBarMessage) and a strip riding the taskbar were both built
+// first and both removed after use. The appbar reserved space the way the
+// taskbar does -- guaranteed visibility, ABN_FULLSCREENAPP for free -- but it
+// crashed in ordinary use, and an appbar's failure mode is uniquely bad: a
+// process that dies without ABM_REMOVE leaves its reserved strip behind until
+// a reboot. The taskbar rider was a z-order fight with a shell that repaints
+// on its own schedule. The panel has neither failure mode, and what the
+// appbar provided for free -- hiding over fullscreen games -- is a cheap
+// SHQueryUserNotificationState poll. docs/windows-backend.md records the
+// full reversal.
 //
-// The tray icon does not animate. At 16-24 px none of the six looks reads, and
-// Shell_NotifyIcon is a cross-process call into explorer.exe. Drawn once.
-//
-// See docs/windows-backend.md.
+// The tray icon does not animate. At 16-24 px none of the six looks reads,
+// and Shell_NotifyIcon is a cross-process call into explorer.exe. Drawn once
+// per theme.
 
 namespace hyperwave {
 
 namespace {
 
-// Our appbar's callback message. Any WM_USER-relative value works; the shell
-// only ever sends it back to the window that registered it.
-constexpr UINT kAppBarCallback = WM_USER + 0x51;
-
 constexpr int kDefaultHeightPt = 24;
 constexpr int kDefaultWidthPt = 260;
 
-// Where the placement choice is remembered. The same store Settings uses; the
-// "win/" group keeps platform keys apart from the shared ones.
-constexpr const char *kPositionKey = "win/position";
-// The first cut of this file stored a docked flag and an edge before the
-// taskbar mode existed. Read once, for migration; never written again.
-constexpr const char *kDockedKey = "win/docked";
-constexpr const char *kDockEdgeKey = "win/dockEdge";
-
-// The strip's placement, as stored. Small ints rather than an enum class so
-// QSettings round-trips them without ceremony.
-enum PositionId : int {
-    kPositionFloating = 0,
-    kPositionTaskbar = 1,
-    kPositionDockTop = 2,
-    kPositionDockBottom = 3,
-};
-
-// Following the taskbar is a poll, and these are its two speeds: fast while
-// its rectangle is in motion -- the auto-hide slide -- and slow once it has
-// settled, so tracking an animation does not cost sixty wakeups a second
-// forever after.
-constexpr int kTaskbarPollSlowMs = 250;
-constexpr int kTaskbarPollFastMs = 16;
-
 // The floating panel: a notch for a machine that does not have one. The bars
-// sit inside an outlined dark box that hangs flush from the screen edge --
-// square shoulders against the edge, rounded corners away from it, the same
-// shape the macOS notch panel draws. Draggable anywhere; within kSnapPx of the
-// top or bottom edge it snaps flush and takes that edge's shape.
+// sit inside an outlined dark box; kPanelPad* is the box around them.
+// Within kSnapPx of the top or bottom edge the panel snaps flush and takes
+// that edge's shape.
 constexpr int kPanelPadH = 12;
 constexpr int kPanelPadV = 4;
 constexpr int kSnapPx = 40;
 constexpr qreal kPanelRadius = 10.0;
-// Where the panel was left, in logical coordinates. The snap state is not
-// stored because the y coordinate already encodes it: a y at the screen edge
-// re-snaps on restore, and a y beyond a smaller replacement screen clamps to
-// its edge and snaps there instead of stranding the panel off-screen.
+
+// The wheel resizes the panel between these bounds, an eighth per notch. The
+// scale rides in devicePixelRatio(), so the renderer keeps its 24 pt world
+// and simply produces more pixels -- crisp at any size, never upscaled.
+constexpr qreal kMinScale = 0.75;
+constexpr qreal kMaxScale = 2.5;
+constexpr qreal kScaleStep = 0.125;
+
+// How often to ask the shell whether a fullscreen app owns the display. The
+// appbar used to be told (ABN_FULLSCREENAPP); a poll is the price of not
+// being an appbar, and two seconds of latency on "a game started" is fine
+// for a decoration.
+constexpr int kFullscreenPollMs = 2000;
+
+// Where the panel was left, in logical coordinates, plus its scale. The
+// snap state is not stored because the y coordinate already encodes it: a y
+// at the screen edge re-snaps on restore, and a y beyond a smaller
+// replacement screen clamps to its edge and snaps there instead of
+// stranding the panel off-screen.
 constexpr const char *kFloatXKey = "win/floatX";
 constexpr const char *kFloatYKey = "win/floatY";
+constexpr const char *kFloatScaleKey = "win/floatScale";
 
 // Whether the taskbar -- and therefore the tray -- is currently light. This is
 // SystemUsesLightTheme, not AppsUseLightTheme: Windows lets the two differ,
@@ -156,12 +144,11 @@ QIcon tintedTrayIcon(bool lightTaskbar)
 
 class WinBarPresenter;
 
-// The strip itself.
+// The panel itself.
 //
 // Frameless, topmost, and never focus-stealing. Qt::Tool keeps it off the
-// taskbar; WA_TranslucentBackground lets the rendered image carry its own
-// alpha, which is what makes the undocked strip read as a decoration rather
-// than as a window someone forgot to close.
+// taskbar; WA_TranslucentBackground lets the box carry its own alpha and
+// rounded corners.
 class StripWindow : public QWidget
 {
 public:
@@ -190,10 +177,8 @@ public:
         update();
     }
 
-    // What to draw behind the bars. None in the docked and taskbar modes,
-    // where the strip is a transparent overlay on someone else's bar; a box
-    // in the floating mode, shaped by which edge it hangs from.
-    enum class Panel { None, Free, TopNotch, BottomNotch };
+    // The box behind the bars, shaped by which edge the panel hangs from.
+    enum class Panel { Free, TopNotch, BottomNotch };
 
     void setPanel(Panel panel)
     {
@@ -208,26 +193,26 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
     WinBarPresenter *m_owner = nullptr;
     QImage m_image;
     QString m_nowPlaying;
-    Panel m_panel = Panel::None;
+    Panel m_panel = Panel::TopNotch;
     bool m_dragging = false;
     QPoint m_pressGlobal;
     QPoint m_pressWindowPos;
 };
 
-// Routes the shell's appbar notifications back to the presenter.
-//
-// Qt gives us no hook for a window message it does not understand, so this sits
-// in the application's native event filter and matches on our own hwnd.
-class AppBarFilter : public QAbstractNativeEventFilter
+// Watches WM_SETTINGCHANGE so the tray glyph can follow a light/dark theme
+// flip without a restart. Qt gives us no hook for a window message it does
+// not understand, so this sits in the application's native event filter.
+class ThemeWatchFilter : public QAbstractNativeEventFilter
 {
 public:
-    explicit AppBarFilter(WinBarPresenter *owner) : m_owner(owner) {}
+    explicit ThemeWatchFilter(WinBarPresenter *owner) : m_owner(owner) {}
     bool nativeEventFilter(const QByteArray &type, void *message, qintptr *result) override;
 
 private:
@@ -241,11 +226,6 @@ public:
 
     ~WinBarPresenter() override
     {
-        // Not optional, and not merely tidy: an appbar that fails to
-        // unregister leaves its reserved strip behind after the process is
-        // gone, and the only way back is a reboot or another appbar claiming
-        // the same edge.
-        undock();
         if (m_filter) {
             if (QCoreApplication *app = QCoreApplication::instance())
                 app->removeNativeEventFilter(m_filter.get());
@@ -260,32 +240,24 @@ public:
         if (m_window)
             return true;
 
+        QSettings store(QStringLiteral("Hypernuclear"), QStringLiteral("hyperwave"));
+        m_scale = std::clamp(store.value(QLatin1String(kFloatScaleKey), 1.0).toDouble(),
+                             kMinScale, kMaxScale);
+
         m_window = std::make_unique<StripWindow>(this);
         restoreFloating();
         m_window->show();
 
-        m_filter = std::make_unique<AppBarFilter>(this);
+        m_filter = std::make_unique<ThemeWatchFilter>(this);
         if (QCoreApplication *app = QCoreApplication::instance())
             app->installNativeEventFilter(m_filter.get());
 
         installTray();
 
-        m_taskbarTimer.setTimerType(Qt::CoarseTimer);
-        QObject::connect(&m_taskbarTimer, &QTimer::timeout, this, [this] { followTaskbar(); });
-
-        // A placement chosen last session is restored. The never-dock-silently
-        // rule is about the first launch, not about forgetting the user's
-        // answer on every launch after it.
-        const QSettings store(QStringLiteral("Hypernuclear"), QStringLiteral("hyperwave"));
-        int position = store.value(QLatin1String(kPositionKey), -1).toInt();
-        if (position < kPositionFloating || position > kPositionDockBottom) {
-            const bool legacyDocked = store.value(QLatin1String(kDockedKey), false).toBool();
-            const uint legacyEdge = store.value(QLatin1String(kDockEdgeKey), ABE_TOP).toUInt();
-            position = !legacyDocked ? kPositionFloating
-                : legacyEdge == ABE_BOTTOM ? kPositionDockBottom
-                                           : kPositionDockTop;
-        }
-        applyPosition(position);
+        m_fullscreenTimer.setTimerType(Qt::CoarseTimer);
+        QObject::connect(&m_fullscreenTimer, &QTimer::timeout, this,
+                         [this] { pollFullscreen(); });
+        m_fullscreenTimer.start(kFullscreenPollMs);
 
         m_clock.setTimerType(Qt::PreciseTimer);
         QObject::connect(&m_clock, &QTimer::timeout, this, [this] { Q_EMIT frameDue(); });
@@ -295,7 +267,7 @@ public:
     void remove() override
     {
         stopClock();
-        undock();
+        m_fullscreenTimer.stop();
         m_tray.reset();
         m_window.reset();
     }
@@ -304,11 +276,11 @@ public:
 
     qreal devicePixelRatio() const override
     {
-        if (m_window && m_window->windowHandle())
-            return m_window->windowHandle()->devicePixelRatio();
-        if (auto *screen = QGuiApplication::primaryScreen())
-            return screen->devicePixelRatio();
-        return 1.0;
+        // The user's chosen panel scale rides in here. The renderer keeps its
+        // 24 pt world and produces proportionally more pixels; the paint lays
+        // them out at scale, so a doubled panel is drawn at double
+        // resolution rather than upscaled.
+        return windowDpr() * m_scale;
     }
 
     void setWidthPt(qreal widthPt) override
@@ -316,21 +288,10 @@ public:
         m_widthPt = std::max<int>(24, static_cast<int>(widthPt));
         if (!m_window)
             return;
-        if (m_docked) {
-            applyDockedGeometry();
-        } else if (m_onTaskbar) {
-            // Anchored by its right edge, so a width change moves the left
-            // edge rather than growing rightward into the tray. Forgetting
-            // the cached rect forces the follow to reposition.
-            m_window->resize(m_widthPt, kDefaultHeightPt);
-            m_lastTaskbarRect = {};
-            followTaskbar();
-        } else {
-            // Keep the panel's centre where it was; a look with a different
-            // width should breathe around its middle, not lurch sideways.
-            const QPoint center = m_window->geometry().center();
-            placeFloating(center.x() - floatingSize().width() / 2, m_window->y(), false);
-        }
+        // Keep the panel's centre where it was; a look with a different
+        // width should breathe around its middle, not lurch sideways.
+        const QPoint center = m_window->geometry().center();
+        placeFloating(center.x() - floatingSize().width() / 2, m_window->y(), false);
     }
 
     void present(const QImage &image) override
@@ -341,11 +302,7 @@ public:
 
     bool isVisibleOnScreen() const override
     {
-        // Riding an auto-hidden taskbar, the strip is parked off the edge of
-        // the screen along with it; rendering frames into a window the screen
-        // cannot show is pure heat.
-        return m_window && m_window->isVisible() && !m_fullscreenAppActive
-               && (!m_onTaskbar || m_taskbarStripVisible);
+        return m_window && m_window->isVisible() && !m_fullscreenAppActive;
     }
 
     void setPreferredFps(int fps) override
@@ -375,8 +332,9 @@ public:
         // menuAboutToShow first and pop up afterwards, so any rebuild the app
         // does in response has already finished before anything is shown.
         auto menu = std::make_unique<QMenu>();
+        m_quitAction = nullptr;
         populate(menu.get(), model);
-        appendWindowsItems(menu.get());
+        insertWindowsItems(menu.get());
         m_menu = std::move(menu);
     }
 
@@ -385,15 +343,8 @@ public:
     void setTabVisible(bool visible) override
     {
         m_tabVisible = visible;
-        if (!m_window)
-            return;
-        // Docked, the strip stays put: retracting it would hand its reserved
-        // space back and shove every maximised window up by 24 px every time
-        // the music paused.
-        if (m_docked)
-            m_window->show();
-        else
-            m_window->setVisible(visible);
+        if (m_window)
+            m_window->setVisible(visible && !m_fullscreenAppActive);
     }
 
     void setNowPlaying(const NowPlayingInfo &info, const QString &fallbackAppName) override
@@ -413,44 +364,14 @@ public:
 
     void setDevices(const AudioDeviceList &devices, const QString &current) override
     {
-        // The strip has no picker of its own yet; the tray menu's Source
-        // submenu is built by the app from the same list. Kept so the appbar
-        // can grow one without another round through the interface.
+        // The panel has no picker of its own yet; the menu's Source submenu is
+        // built by the app from the same list. Kept so the panel can grow one
+        // without another round through the interface.
         m_devices = devices;
         m_currentDevice = current;
     }
 
-    // --- appbar -----------------------------------------------------------
-
-    // Called from the native event filter.
-    void onAppBarNotification(WPARAM notification)
-    {
-        switch (notification) {
-        case ABN_POSCHANGED:
-        case ABN_WINDOWARRANGE:
-            // The taskbar moved, another appbar appeared, or the resolution
-            // changed. Re-ask for our space rather than assuming we still have
-            // the rectangle we were given.
-            if (m_docked)
-                applyDockedGeometry();
-            break;
-        case ABN_FULLSCREENAPP:
-            // A game or a fullscreen video went up or came down. This arriving
-            // for free is one of the reasons the appbar won: every other
-            // surface means hand-rolling this detection.
-            m_fullscreenAppActive = !m_fullscreenAppActive;
-            if (m_window)
-                m_window->setVisible(!m_fullscreenAppActive && (m_docked || m_tabVisible));
-            break;
-        default:
-            break;
-        }
-    }
-
-    HWND hwnd() const
-    {
-        return m_window ? reinterpret_cast<HWND>(m_window->winId()) : nullptr;
-    }
+    // --- called back from the window and the filter ------------------------
 
     void showMenuAtCursor()
     {
@@ -466,6 +387,35 @@ public:
 
     void emitClicked() { Q_EMIT clicked(); }
 
+    // The end of a drag: snap to whatever edge the panel landed near, and
+    // remember where it was left.
+    void onStripDragged()
+    {
+        if (m_window)
+            placeFloating(m_window->x(), m_window->y(), true);
+    }
+
+    // The wheel over the panel. Deltas accumulate so a free-spinning wheel
+    // and a trackpad both land on the same eighth-steps.
+    void onStripWheel(int angleDelta)
+    {
+        m_wheelAccum += angleDelta;
+        const int steps = m_wheelAccum / 120;
+        if (steps == 0)
+            return;
+        m_wheelAccum -= steps * 120;
+
+        const qreal next = std::clamp(m_scale + steps * kScaleStep, kMinScale, kMaxScale);
+        if (next == m_scale)
+            return;
+        m_scale = next;
+
+        QSettings store(QStringLiteral("Hypernuclear"), QStringLiteral("hyperwave"));
+        store.setValue(QLatin1String(kFloatScaleKey), m_scale);
+
+        rescale();
+    }
+
     // Called from the native event filter on WM_SETTINGCHANGE. That message
     // arrives in bursts, so re-read the registry and only touch the icon on an
     // actual flip -- every setIcon is an IPC round trip into explorer.
@@ -478,6 +428,15 @@ public:
             return;
         m_trayIsLight = light;
         m_tray->setIcon(tintedTrayIcon(light));
+    }
+
+    qreal windowDpr() const
+    {
+        if (m_window && m_window->windowHandle())
+            return m_window->windowHandle()->devicePixelRatio();
+        if (auto *screen = QGuiApplication::primaryScreen())
+            return screen->devicePixelRatio();
+        return 1.0;
     }
 
 private:
@@ -508,196 +467,69 @@ private:
                 const QString id = item.actionId;
                 QObject::connect(action, &QAction::triggered, this,
                                  [this, id] { Q_EMIT menuActionTriggered(id); });
+                // Remembered so the platform items below can be inserted
+                // above it rather than dangling after it.
+                if (id == QLatin1String(MenuAction::kQuit))
+                    m_quitAction = action;
                 break;
             }
             }
         }
     }
 
-    // Placement is this platform's business, not the app's, so these items are
-    // added here rather than in the shared MenuModel.
-    void appendWindowsItems(QMenu *menu)
+    // Placement is this platform's business, not the app's, so these items
+    // are added here rather than in the shared MenuModel -- and above Quit,
+    // because nothing belongs below Quit.
+    void insertWindowsItems(QMenu *menu)
     {
-        menu->addSeparator();
+        auto *position = new QMenu(tr("Position"), menu);
 
-        QMenu *position = menu->addMenu(tr("Position"));
-        struct Choice
+        struct Align
         {
-            int id;
             const char *label;
+            qreal fraction;
         };
-        static const Choice kChoices[] = {
-            {kPositionFloating, "Floating panel"},
-            {kPositionTaskbar, "On the taskbar"},
-            {kPositionDockTop, "Own bar, top of screen"},
-            {kPositionDockBottom, "Own bar, bottom of screen"},
+        static const Align kAligns[] = {
+            {"Align left", 0.0},
+            {"Align center", 0.5},
+            {"Align right", 1.0},
         };
-        const int current = currentPositionId();
-        for (const Choice &choice : kChoices) {
-            QAction *action = position->addAction(tr(choice.label));
-            action->setCheckable(true);
-            action->setChecked(current == choice.id);
-            const int id = choice.id;
-            QObject::connect(action, &QAction::triggered, this, [this, id] {
-                applyPosition(id);
-                rememberPosition();
+        // Dragging is the primary way to move the panel; these exist for
+        // anyone who wants the canonical spots without steadying a hand.
+        for (const Align &align : kAligns) {
+            QAction *action = position->addAction(tr(align.label));
+            const qreal fraction = align.fraction;
+            QObject::connect(action, &QAction::triggered, this, [this, fraction] {
+                if (!m_window)
+                    return;
+                QScreen *screen = m_window->screen();
+                if (!screen)
+                    return;
+                const QRect geo = screen->geometry();
+                const int span = geo.width() - floatingSize().width() - 2 * kPanelPadH;
+                placeFloating(geo.left() + kPanelPadH + qRound(span * fraction),
+                              m_window->y(), true);
             });
         }
 
-        // Dragging is the primary way to move the panel; these exist for
-        // anyone who wants the canonical spots without steadying a hand.
-        if (current == kPositionFloating && m_window) {
-            position->addSeparator();
-            struct Align
-            {
-                const char *label;
-                qreal fraction;
-            };
-            static const Align kAligns[] = {
-                {"Align left", 0.0},
-                {"Align center", 0.5},
-                {"Align right", 1.0},
-            };
-            for (const Align &align : kAligns) {
-                QAction *action = position->addAction(tr(align.label));
-                const qreal fraction = align.fraction;
-                QObject::connect(action, &QAction::triggered, this, [this, fraction] {
-                    QScreen *screen = m_window->screen();
-                    if (!screen)
-                        return;
-                    const QRect geo = screen->geometry();
-                    const int span = geo.width() - floatingSize().width() - 2 * kPanelPadH;
-                    placeFloating(geo.left() + kPanelPadH + qRound(span * fraction),
-                                  m_window->y(), true);
-                });
-            }
+        position->addSeparator();
+        QAction *reset = position->addAction(tr("Reset size"));
+        QObject::connect(reset, &QAction::triggered, this, [this] {
+            if (m_scale == 1.0)
+                return;
+            m_scale = 1.0;
+            QSettings store(QStringLiteral("Hypernuclear"), QStringLiteral("hyperwave"));
+            store.setValue(QLatin1String(kFloatScaleKey), m_scale);
+            rescale();
+        });
+
+        if (m_quitAction) {
+            menu->insertSeparator(m_quitAction);
+            menu->insertMenu(m_quitAction, position);
+        } else {
+            menu->addSeparator();
+            menu->addMenu(position);
         }
-    }
-
-    int currentPositionId() const
-    {
-        if (m_docked)
-            return m_edge == ABE_BOTTOM ? kPositionDockBottom : kPositionDockTop;
-        return m_onTaskbar ? kPositionTaskbar : kPositionFloating;
-    }
-
-    void applyPosition(int position)
-    {
-        // Leave whatever mode is active first, so the modes never overlap.
-        if (m_onTaskbar) {
-            m_onTaskbar = false;
-            m_taskbarTimer.stop();
-        }
-        if (m_docked && position != kPositionDockTop && position != kPositionDockBottom)
-            undock();
-
-        switch (position) {
-        case kPositionTaskbar:
-            // No box on someone else's bar: there the strip is a transparent
-            // overlay, not a panel of its own.
-            if (m_window)
-                m_window->setPanel(StripWindow::Panel::None);
-            m_onTaskbar = true;
-            m_taskbarHwnd = nullptr;
-            m_lastTaskbarRect = {};
-            followTaskbar();
-            m_taskbarTimer.start(kTaskbarPollSlowMs);
-            break;
-        case kPositionDockTop:
-            if (m_window)
-                m_window->setPanel(StripWindow::Panel::None);
-            dockTo(ABE_TOP);
-            break;
-        case kPositionDockBottom:
-            if (m_window)
-                m_window->setPanel(StripWindow::Panel::None);
-            dockTo(ABE_BOTTOM);
-            break;
-        default:
-            restoreFloating();
-            break;
-        }
-    }
-
-    // The end of a drag: snap to whatever edge the panel landed near, and
-    // remember where it was left.
-    void onStripDragged()
-    {
-        if (m_docked || m_onTaskbar || !m_window)
-            return;
-        placeFloating(m_window->x(), m_window->y(), true);
-    }
-
-    // Written only from the menu handler, never from teardown, and it records
-    // what actually happened rather than what was asked for: a refused
-    // ABM_NEW leaves the strip floating, and remembering the refusal as a
-    // choice to dock would re-fight that fight on every launch.
-    void rememberPosition()
-    {
-        QSettings store(QStringLiteral("Hypernuclear"), QStringLiteral("hyperwave"));
-        store.setValue(QLatin1String(kPositionKey), currentPositionId());
-    }
-
-    // Sit on the taskbar itself. There is no supported way to live INSIDE the
-    // Windows 11 taskbar -- deskbands, the thing that genuinely did, were
-    // removed -- so the strip overlays the taskbar's own window and follows
-    // it: re-anchored whenever the bar moves or resizes, sliding off the
-    // screen edge with it when auto-hide slides it away. Polling rather than
-    // hooks for the same reason device changes are polled: the shell repaints
-    // and rearranges on its own schedule, and a quarter second of lag on "the
-    // taskbar moved" costs nothing next to what a hook into explorer costs.
-    void followTaskbar()
-    {
-        if (!m_onTaskbar || !m_window)
-            return;
-        if (!m_taskbarHwnd || !IsWindow(m_taskbarHwnd))
-            m_taskbarHwnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (!m_taskbarHwnd)
-            return; // explorer is restarting; the next poll finds the new one
-
-        RECT taskbar = {};
-        if (!GetWindowRect(m_taskbarHwnd, &taskbar))
-            return;
-
-        const bool moved = std::memcmp(&taskbar, &m_lastTaskbarRect, sizeof(RECT)) != 0;
-        m_lastTaskbarRect = taskbar;
-        const int wantedInterval = moved ? kTaskbarPollFastMs : kTaskbarPollSlowMs;
-        if (m_taskbarTimer.interval() != wantedInterval)
-            m_taskbarTimer.setInterval(wantedInterval);
-        if (!moved)
-            return;
-
-        const qreal dpr = std::max<qreal>(1.0, devicePixelRatio());
-
-        // Right-aligned, just inboard of the notification area -- where a
-        // deskband would have sat, and the mirror of where the macOS status
-        // item lives. The tray is a child window that can be measured; if the
-        // shell ever renames it, fall back to a guess wide enough for the
-        // clock and a handful of icons.
-        LONG trayLeft = taskbar.right - static_cast<LONG>(qRound(220 * dpr));
-        if (HWND notify = FindWindowExW(m_taskbarHwnd, nullptr, L"TrayNotifyWnd", nullptr)) {
-            RECT notifyRect = {};
-            if (GetWindowRect(notify, &notifyRect) && notifyRect.left > taskbar.left)
-                trayLeft = notifyRect.left;
-        }
-
-        const LONG stripWidth = static_cast<LONG>(qRound(m_widthPt * dpr));
-        const LONG stripHeight = static_cast<LONG>(qRound(kDefaultHeightPt * dpr));
-        const LONG x = trayLeft - stripWidth - static_cast<LONG>(qRound(8 * dpr));
-        const LONG y = taskbar.top + ((taskbar.bottom - taskbar.top) - stripHeight) / 2;
-
-        // The shell speaks physical pixels and Qt speaks logical ones, same
-        // as the appbar path.
-        m_window->setGeometry(qRound(x / dpr), qRound(y / dpr), m_widthPt, kDefaultHeightPt);
-
-        QScreen *screen = QGuiApplication::primaryScreen();
-        m_taskbarStripVisible = screen && m_window->geometry().intersects(screen->geometry());
-
-        // The taskbar is topmost too, and whenever it reappears it lands on
-        // top of the topmost pile. Re-assert, or the strip rides BEHIND the
-        // bar it is sitting on.
-        SetWindowPos(hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     void installTray()
@@ -716,8 +548,7 @@ private:
         //
         // Left-click opens the same menu as right-click. This app has no main
         // window for a left-click to summon, and a tray icon that does nothing
-        // when clicked reads as broken -- it is also how someone finds the
-        // dock option in the first place.
+        // when clicked reads as broken.
         QObject::connect(m_tray.get(), &QSystemTrayIcon::activated, this,
                          [this](QSystemTrayIcon::ActivationReason reason) {
                              if (reason == QSystemTrayIcon::Context
@@ -731,17 +562,20 @@ private:
 
     // The floating panel's outer size: the bars plus the box around them.
     // heightPt() still reports the bars' own height -- the padding belongs to
-    // the box, not to the image the renderer is asked for.
+    // the box, not to the image the renderer is asked for, and the scale
+    // multiplies the content but not the box's breathing room.
     QSize floatingSize() const
     {
-        return QSize(m_widthPt + 2 * kPanelPadH, kDefaultHeightPt + 2 * kPanelPadV);
+        return QSize(qRound(m_widthPt * m_scale) + 2 * kPanelPadH,
+                     qRound(kDefaultHeightPt * m_scale) + 2 * kPanelPadV);
     }
 
-    // Put the floating panel at (x, y): clamp into the screen, snap flush to
-    // the top or bottom edge when within kSnapPx of it, and take the shape of
-    // wherever it ended up -- square shoulders against the edge it hangs from,
-    // rounded corners everywhere else. The screen is the one under the panel,
-    // so a drag to another monitor sticks rather than being yanked home.
+    // Put the panel at (x, y): clamp into the screen, snap flush to the top
+    // or bottom edge when within kSnapPx of it, and take the shape of
+    // wherever it ended up -- square shoulders against the edge it hangs
+    // from, rounded corners everywhere else. The screen is the one under the
+    // panel, so a drag to another monitor sticks rather than being yanked
+    // home.
     void placeFloating(int x, int y, bool remember)
     {
         if (!m_window)
@@ -798,115 +632,52 @@ private:
         placeFloating(x, y, false);
     }
 
-    void dockTo(UINT edge)
+    // A scale change moves every measurement at once: the window grows around
+    // its centre, and the app is told the geometry changed so it re-renders
+    // at the new pixel density rather than letting the paint stretch stale
+    // pixels.
+    void rescale()
     {
-        m_edge = edge;
         if (!m_window)
             return;
-
-        if (!m_docked) {
-            APPBARDATA abd = {};
-            abd.cbSize = sizeof(abd);
-            abd.hWnd = hwnd();
-            abd.uCallbackMessage = kAppBarCallback;
-            if (!SHAppBarMessage(ABM_NEW, &abd)) {
-                // Refused, most likely because another appbar already owns the
-                // edge. The tray icon is why this is recoverable rather than
-                // fatal: the app is still reachable, still running, and still
-                // has a floating strip.
-                return;
-            }
-            m_docked = true;
-        }
-        applyDockedGeometry();
-        m_window->show();
-    }
-
-    void undock()
-    {
-        if (!m_docked)
-            return;
-        APPBARDATA abd = {};
-        abd.cbSize = sizeof(abd);
-        abd.hWnd = hwnd();
-        SHAppBarMessage(ABM_REMOVE, &abd);
-        m_docked = false;
-        restoreFloating();
-    }
-
-    // Ask the shell where we may sit, accept its answer, then move there.
-    //
-    // The QUERYPOS/SETPOS pair is not ceremony: the shell adjusts the proposed
-    // rectangle around the taskbar and any other appbar, and a window placed at
-    // the un-adjusted rectangle overlaps whatever it did not know about.
-    void applyDockedGeometry()
-    {
-        if (!m_window || !m_docked)
-            return;
-        QScreen *screen = QGuiApplication::primaryScreen();
-        if (!screen)
-            return;
-
-        // The shell speaks physical pixels and Qt speaks logical ones. At 100%
-        // they are the same number, which is exactly why getting this wrong is
-        // invisible until it reaches a scaled display -- and most Windows
-        // laptops ship scaled. Convert going in, and convert coming back.
-        const qreal dpr = std::max<qreal>(1.0, devicePixelRatio());
-        const QRect logical = screen->geometry();
-        const auto toPhysical = [dpr](int v) { return static_cast<LONG>(qRound(v * dpr)); };
-        const auto thickness = static_cast<LONG>(qRound(kDefaultHeightPt * dpr));
-
-        APPBARDATA abd = {};
-        abd.cbSize = sizeof(abd);
-        abd.hWnd = hwnd();
-        abd.uEdge = m_edge;
-        abd.rc.left = toPhysical(logical.left());
-        abd.rc.right = toPhysical(logical.left() + logical.width());
-        if (m_edge == ABE_TOP) {
-            abd.rc.top = toPhysical(logical.top());
-            abd.rc.bottom = abd.rc.top + thickness;
-        } else {
-            abd.rc.bottom = toPhysical(logical.top() + logical.height());
-            abd.rc.top = abd.rc.bottom - thickness;
-        }
-
-        SHAppBarMessage(ABM_QUERYPOS, &abd);
-
-        // QUERYPOS moves the edge we asked about to dodge the taskbar and any
-        // other appbar. Restore our thickness against what it gave back, or the
-        // bar loses a few pixels every time a notification arrives.
-        if (m_edge == ABE_TOP)
-            abd.rc.bottom = abd.rc.top + thickness;
-        else
-            abd.rc.top = abd.rc.bottom - thickness;
-
-        SHAppBarMessage(ABM_SETPOS, &abd);
-
-        m_window->setGeometry(qRound(abd.rc.left / dpr), qRound(abd.rc.top / dpr),
-                              qRound((abd.rc.right - abd.rc.left) / dpr),
-                              qRound((abd.rc.bottom - abd.rc.top) / dpr));
-        m_widthPt = m_window->width();
+        const QPoint center = m_window->geometry().center();
+        placeFloating(center.x() - floatingSize().width() / 2, m_window->y(), true);
         Q_EMIT geometryChanged();
+    }
+
+    // The job ABN_FULLSCREENAPP used to do, now that there is no appbar to be
+    // told: hide while a game or a presentation owns the screen, come back
+    // afterwards. QUNS_BUSY is F11-style fullscreen; the other two are
+    // exclusive D3D and presentation mode.
+    void pollFullscreen()
+    {
+        QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
+        if (FAILED(SHQueryUserNotificationState(&state)))
+            return;
+        const bool fullscreen = state == QUNS_RUNNING_D3D_FULL_SCREEN
+            || state == QUNS_PRESENTATION_MODE || state == QUNS_BUSY;
+        if (fullscreen == m_fullscreenAppActive)
+            return;
+        m_fullscreenAppActive = fullscreen;
+        if (m_window)
+            m_window->setVisible(!fullscreen && m_tabVisible);
     }
 
     std::unique_ptr<StripWindow> m_window;
     std::unique_ptr<QSystemTrayIcon> m_tray;
     std::unique_ptr<QMenu> m_menu;
-    std::unique_ptr<AppBarFilter> m_filter;
+    std::unique_ptr<ThemeWatchFilter> m_filter;
     QTimer m_clock;
-    QTimer m_taskbarTimer;
+    QTimer m_fullscreenTimer;
+    QAction *m_quitAction = nullptr;
 
     int m_widthPt = kDefaultWidthPt;
     int m_fps = 60;
-    bool m_docked = false;
-    bool m_onTaskbar = false;
-    bool m_taskbarStripVisible = true;
+    int m_wheelAccum = 0;
+    qreal m_scale = 1.0;
     bool m_tabVisible = true;
     bool m_fullscreenAppActive = false;
     bool m_trayIsLight = false;
-    UINT m_edge = ABE_TOP;
-    HWND m_taskbarHwnd = nullptr;
-    RECT m_lastTaskbarRect = {};
 
     AudioDeviceList m_devices;
     QString m_currentDevice;
@@ -921,35 +692,30 @@ void StripWindow::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
-    if (m_panel != Panel::None) {
-        // The box: our own black behind the bars, a hairline of light around
-        // it, and rounded corners only on the sides facing away from the
-        // screen edge -- the shape the macOS notch panel draws. The trick for
-        // the square shoulders is to push the edge-facing side of the
-        // rounded rect out of the window, where its rounding and its stroke
-        // are clipped away, leaving flat sides running into the edge.
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        QRectF box = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        if (m_panel == Panel::TopNotch)
-            box.adjust(0, -(kPanelRadius + 1.0), 0, 0);
-        else if (m_panel == Panel::BottomNotch)
-            box.adjust(0, 0, 0, kPanelRadius + 1.0);
-        QPainterPath path;
-        path.addRoundedRect(box, kPanelRadius, kPanelRadius);
-        painter.fillPath(path, QColor(10, 10, 12, 216));
-        painter.setPen(QPen(QColor(255, 255, 255, 40), 1.0));
-        painter.drawPath(path);
-    }
+    // The box: our own black behind the bars, a hairline of light around it,
+    // and rounded corners only on the sides facing away from the screen edge
+    // -- the shape the macOS notch panel draws. The trick for the square
+    // shoulders is to push the edge-facing side of the rounded rect out of
+    // the window, where its rounding and its stroke are clipped away, leaving
+    // flat sides running into the edge.
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QRectF box = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    if (m_panel == Panel::TopNotch)
+        box.adjust(0, -(kPanelRadius + 1.0), 0, 0);
+    else if (m_panel == Panel::BottomNotch)
+        box.adjust(0, 0, 0, kPanelRadius + 1.0);
+    QPainterPath path;
+    path.addRoundedRect(box, kPanelRadius, kPanelRadius);
+    painter.fillPath(path, QColor(10, 10, 12, 216));
+    painter.setPen(QPen(QColor(255, 255, 255, 40), 1.0));
+    painter.drawPath(path);
 
     if (!m_image.isNull()) {
-        // At the image's own logical size, centred -- never stretched to the
-        // window. Floating, the window is sized to the image, so this is the
-        // same blit it always was. Docked, the window spans the whole screen
-        // edge, because that is what a reserved band is; stretching 260
-        // points of bars across a 2560-pixel monitor was the first thing
-        // docking got wrong. Centred in a transparent band is also the shape
-        // of the thing being emulated: a menu bar the strip sits inside.
-        const qreal dpr = std::max<qreal>(1.0, m_owner ? m_owner->devicePixelRatio() : 1.0);
+        // At the image's own logical size, centred. The image's pixel count
+        // carries the panel scale (it rides in devicePixelRatio()), so
+        // dividing by the window's plain DPR yields the scaled-up logical
+        // size, rendered at full density rather than stretched.
+        const qreal dpr = std::max<qreal>(1.0, devicePixelRatioF());
         const QSizeF logical = QSizeF(m_image.size()) / dpr;
         const QRectF target(QPointF((width() - logical.width()) / 2.0,
                                     (height() - logical.height()) / 2.0),
@@ -983,9 +749,7 @@ void StripWindow::mousePressEvent(QMouseEvent *event)
 
 void StripWindow::mouseMoveEvent(QMouseEvent *event)
 {
-    // Only the floating panel is draggable; docked and taskbar-riding strips
-    // are anchored to something and a drag would fight it.
-    if (!(event->buttons() & Qt::LeftButton) || m_panel == Panel::None)
+    if (!(event->buttons() & Qt::LeftButton))
         return;
     const QPoint delta = event->globalPosition().toPoint() - m_pressGlobal;
     if (!m_dragging && delta.manhattanLength() < QApplication::startDragDistance())
@@ -1010,26 +774,30 @@ void StripWindow::mouseReleaseEvent(QMouseEvent *event)
     QWidget::mouseReleaseEvent(event);
 }
 
+void StripWindow::wheelEvent(QWheelEvent *event)
+{
+    if (m_owner) {
+        m_owner->onStripWheel(event->angleDelta().y());
+        event->accept();
+        return;
+    }
+    QWidget::wheelEvent(event);
+}
+
 void StripWindow::contextMenuEvent(QContextMenuEvent *event)
 {
-    // Right-click on a docked strip is what the taskbar itself does, so it is
-    // the idiomatic gesture here -- more so than on macOS.
     if (m_owner)
         m_owner->showMenuAtCursor();
     event->accept();
 }
 
-bool AppBarFilter::nativeEventFilter(const QByteArray &type, void *message, qintptr *result)
+bool ThemeWatchFilter::nativeEventFilter(const QByteArray &type, void *message, qintptr *result)
 {
     Q_UNUSED(result);
     if (type != QByteArrayLiteral("windows_generic_MSG") || !m_owner)
         return false;
 
     auto *msg = static_cast<MSG *>(message);
-    if (msg->message == kAppBarCallback && msg->hwnd == m_owner->hwnd()) {
-        m_owner->onAppBarNotification(msg->wParam);
-        return false; // observed, not consumed
-    }
     if (msg->message == WM_SETTINGCHANGE) {
         // lParam names what changed; a light/dark flip broadcasts
         // "ImmersiveColorSet" to every top-level window, ours included. The
@@ -1037,7 +805,6 @@ bool AppBarFilter::nativeEventFilter(const QByteArray &type, void *message, qint
         const auto *area = reinterpret_cast<const wchar_t *>(msg->lParam);
         if (area && lstrcmpiW(area, L"ImmersiveColorSet") == 0)
             m_owner->onThemeMaybeChanged();
-        return false;
     }
     return false;
 }
