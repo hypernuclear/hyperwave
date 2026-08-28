@@ -95,6 +95,25 @@ It is the same widget the debug HUD embeds. Keeping it one widget is what stops
 a parameter existing for development and being unreachable by anyone outside
 this repository.
 
+**Colour** is a separate choice from the look, in `Appearance`, or `--gradient
+<id>` for one run. Four fixed ramps -- `signature` (violet to cyan, the
+default), `ember`, `lagoon` and `rainbow` -- plus `mono`, which takes the menu
+bar's own foreground colour so it follows light and dark and never fights the
+wallpaper.
+
+`rainbow` is the one that is not simply a pair of colours, and each look maps it
+to whichever axis it has. The bar-shaped ones run it left to right, so a bar
+keeps its hue instead of changing colour as it moves. **Terrain and strands run
+it along depth**: the nearest ridge, and the near surface of the tube, are the
+start of the ramp, and it recedes through the spectrum away from you. The ring
+is left alone deliberately -- that look's identity is already colour
+separation, five offset copies in cyan, magenta and yellow, and a hue ramp
+through them reads as confetti rather than as a mis-registered print.
+
+The ramp stops at violet rather than closing the hue wheel back to red. A closed
+wheel has no visible beginning or end, which is exactly the information the depth
+looks are using it to carry.
+
 ## Glow
 
 ![lines](docs/lines.png)
@@ -170,7 +189,9 @@ too crowded for more than 14.
 
 ![expanded](docs/notch-expanded.png)
 
-Hover and it drops down: bigger bars and a dropdown for the audio source.
+Hover and it drops down: bigger bars and a dropdown for the audio source. The
+screenshot is the panel alone -- on a notched Mac the strip above the picker
+sits behind the camera housing itself.
 
 **Right-click the panel for the menu.** That is not a convenience; it is the
 only way in on the display this panel exists for. If the status item has been
@@ -267,17 +288,6 @@ editor and a paused player running, nothing listed; YouTube playing in Chrome,
 `Google Chrome −21.3 dB`; tab stopped, the level decaying away through −33 and
 −42 to nothing.
 
-## Track info
-
-Removed. It existed once — track title, artist and transport controls in the
-menu and the notch panel — and the honest history is that the plumbing it
-needed was never good: `MediaRemote` has been entitlement-gated since macOS
-15.4, so the implementation was per-app AppleScript, which needed an
-Automation grant per controlled app and covered only apps with scripting
-dictionaries. A feature that costs a permission prompt and works for two apps
-was not carrying its weight, and it was cut everywhere rather than ported to
-Windows.
-
 ## Permission
 
 The system-audio grant is **required and silently enforced**. Without it
@@ -310,9 +320,12 @@ open build/hyperwave.app
 - macOS 14.2 or later (process taps landed in 14.2)
 - Qt 6.11+ — the online installer, at `~/Qt/6.11.x/macos`
 
-Windows and Linux compile but do not yet capture or display anything; see
-[docs/windows-backend.md](docs/windows-backend.md) for what is decided and what
-is left.
+**Windows has a backend but no odometer reading yet.** WASAPI loopback capture,
+a docked application desktop toolbar and a tray icon are all written; none of it
+had been run on Windows at the time of writing, and CI is what compiles it. Treat
+it as unproven rather than as working. Linux is still stubs.
+[docs/windows-backend.md](docs/windows-backend.md) has the decisions, the build
+order and the traps.
 
 ## Build
 
@@ -347,8 +360,8 @@ Two wrinkles are baked in rather than left to be rediscovered. `qtsvg` is
 deliberately *not* in the module list — in Qt 6 it is part of the base install,
 and naming it fails with an error that reads as though it were missing.
 aqtinstall is pinned to a commit rather than the PyPI release, because 3.3.0
-cannot parse Qt 6.11's repository layout; the pin matches hyperbin's and
-hypershot's so all three move together.
+cannot parse Qt 6.11's repository layout, so the action is pinned to a commit
+that can.
 
 The suite is headless, so it runs on a runner with no audio device and no
 display. It cannot cover capture, the status item or the notch panel — those
@@ -391,6 +404,7 @@ task for checking the other side of that.
 | `--hud` | Diagnostics window: OSStatus, callback count, RMS, AGC, sample rate, overruns |
 | `--shot <path>` | Render one settled frame to a PNG and exit |
 | `--source <uid>` | Listen to one output device by UID. `--source list` prints them |
+| `--gradient <id>` | Which colour ramp: `signature`, `ember`, `lagoon`, `rainbow` or `mono`. Overrides the saved preference for one run, without rewriting it, which is what makes `--shot` usable for comparing them |
 | `--viz <style>` | Which visualiser to draw: `bars` (default), `mirror`, `lines`, `ring`, `strands` or `ridge`. Overrides the saved preference for one run |
 | `--preview-scale <n>` | Magnify the windowed and `--shot` canvas, for looking at a visualiser at a size where its detail is visible. Applied as device pixel ratio, so every measurement scales with it |
 | `HYPERWAVE_STRANDS=n` | How many strands in the bundle. Very nearly free: 32 and 1024 measure the same |
@@ -405,15 +419,20 @@ src/
   dsp/        FFT, band mapping, ballistics, config     -- no platform code
   audio/      lock-free ring, downmix, source interface -- no platform code
   render/     the one renderer, QPainter -> QImage      -- no platform code
-  platform/   CoreAudio tap, NSStatusItem, notch panel, stubs for Windows/Linux
+  platform/   CoreAudio tap, NSStatusItem, notch panel; WASAPI + appbar; Linux stubs
   app/        wiring: controller, DSP thread, settings, menu model, HUD
 tests/        headless, links only the shared core
 ```
 
 `dsp/`, `audio/` and `render/` contain no `#ifdef Q_OS_*` and are not permitted
-to. The Windows tray icon and the macOS status item are meant to show pixels
-from the *same* renderer; the moment the platforms run different DSP you get to
-chase "the bars look different on Windows" for a day.
+to. The Windows appbar and the macOS status item are meant to show pixels from
+the *same* renderer; the moment the platforms run different DSP you get to chase
+"the bars look different on Windows" for a day.
+
+`platform/` holds that seam in three interfaces: `AudioSource` for capture,
+`BarPresenter` for a surface that draws a QImage and nothing else, and
+`PanelPresenter` for the richer surfaces -- the notch panel, the appbar -- that
+also retract when idle and carry their own source picker.
 
 ## Three things that are load-bearing
 
@@ -421,8 +440,13 @@ chase "the bars look different on Windows" for a day.
 `setTemplate:` on the status-item image, and a template image is a monochrome
 mask — the gradient would arrive as a flat silhouette. hyperwave uses a native
 `NSStatusItem` hosting a layer-backed view, and never assigns `button.image`.
-`QSystemTrayIcon` remains the right answer on Windows and Linux, where nothing
-flattens the icon.
+`QSystemTrayIcon` is still the right answer on Windows and Linux, where nothing
+flattens the icon -- but on Windows it draws a **static** mark rather than the
+visualiser. At the 16-24 px the shell asks for, twenty-eight bands is eight bars
+of three pixels, and `Shell_NotifyIcon` is a cross-process call into
+`explorer.exe`: animating it means an IPC round trip fifteen times a second,
+forever, to draw something illegible. The moving picture belongs on the appbar,
+which has room for it.
 
 **The IOProc zeroes its output buffer unconditionally.** If the tap-only
 aggregate ever fails and we fall back to including the default output device as

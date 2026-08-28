@@ -19,7 +19,7 @@ option(HYPERWAVE_BUILD_TESTS "Build the headless test suite" ON)
 
 # --- versions ---------------------------------------------------------------
 #
-# Two numbers, same scheme as hyperbin and hypershot:
+# Two numbers:
 #   PROJECT_VERSION   marketing version, what people read -> CFBundleShortVersionString
 #   APP_VERSION_BUILD monotonic commit count              -> CFBundleVersion
 #
@@ -50,7 +50,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- locating Qt ------------------------------------------------------------
 #
-# Lifted from hyperbin. The empty-string check is load-bearing: an editor that
+# The empty-string check is load-bearing: an editor that
 # expands an unset $env{QT_ROOT} hands us "" rather than nothing, and a
 # defined-but-empty CMAKE_PREFIX_PATH silently defeats the search below.
 if(NOT CMAKE_PREFIX_PATH)
@@ -198,9 +198,79 @@ qt_add_executable(hyperwave
     $<$<PLATFORM_ID:Darwin>:src/platform/MacNotchPresenter.mm>
     $<$<PLATFORM_ID:Windows>:src/platform/WasapiSource.cpp>
     $<$<PLATFORM_ID:Windows>:src/platform/WinBarPresenter.cpp>
+    $<$<PLATFORM_ID:Windows>:packaging/windows/hyperwave.rc>
     $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/PulseSource.cpp>
     $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/LinuxBarPresenter.cpp>
 )
+
+# --- auto-update -----------------------------------------------------------
+#
+# Sparkle on macOS, WinSparkle on Windows, nothing anywhere else. Both read the
+# same appcast and verify the same EdDSA signature, so one feed generator in the
+# release workflow serves both.
+option(HYPERWAVE_AUTO_UPDATE "Include the auto-updater (Sparkle / WinSparkle)" ON)
+set(SPARKLE_VERSION "2.9.0" CACHE STRING "Sparkle release to fetch (macOS)")
+set(WINSPARKLE_VERSION "0.9.1" CACHE STRING "WinSparkle release to fetch (Windows)")
+
+# The PUBLIC half of the update signing key. It ships inside every binary
+# anyway, so hiding it in a secret buys nothing and costs reviewability -- as a
+# secret it becomes an invisible input that can silently disagree with the
+# private half. In the tree it is diffable.
+# The public half of hyperwave's update signing key. Public on purpose: it
+# ships inside every binary anyway, so hiding it in a secret would buy nothing
+# and cost reviewability. The private half is the SPARKLE_EDDSA_PRIVATE_KEY
+# repository secret and exists nowhere in this tree.
+set(HYPERWAVE_EDDSA_PUBKEY "LuJvrTpbkny/NaRDij8N77KA8aCUjCJkKK5M/dnElCA="
+    CACHE STRING "ed25519 public key for appcast verification")
+
+set(HYPERWAVE_APPCAST_URL "https://hyperwave-builds.hypernuclear.com/latest/mac/appcast.xml"
+    CACHE STRING "Sparkle appcast feed URL (macOS)")
+set(HYPERWAVE_APPCAST_URL_WIN "https://hyperwave-builds.hypernuclear.com/latest/win/appcast.xml"
+    CACHE STRING "WinSparkle appcast feed URL")
+
+# No key, no updater. Deliberately not an error: a contributor cloning this
+# should get a working build without being handed a signing key, and a local
+# build has nothing to update to anyway. It IS an error on a tag -- the release
+# workflow passes the key, and refuses to publish a feed whose enclosures came
+# out unsigned.
+if(HYPERWAVE_AUTO_UPDATE AND NOT HYPERWAVE_EDDSA_PUBKEY)
+    message(STATUS
+        "No HYPERWAVE_EDDSA_PUBKEY, so the auto-updater is off for this build. "
+        "An updater that cannot verify a signature is worse than no updater. "
+        "See RELEASING.md for how to generate the pair.")
+    set(HYPERWAVE_AUTO_UPDATE OFF)
+endif()
+
+if(HYPERWAVE_AUTO_UPDATE)
+    string(LENGTH "${HYPERWAVE_EDDSA_PUBKEY}" _hw_key_len)
+    if(NOT _hw_key_len EQUAL 44)
+        message(FATAL_ERROR
+            "HYPERWAVE_EDDSA_PUBKEY is ${_hw_key_len} characters; a base64 "
+            "ed25519 public key is 44. This is checked because a truncated key "
+            "fails at update time on a user's machine, not here.")
+    endif()
+
+    include(FetchContent)
+    if(APPLE)
+        FetchContent_Declare(sparkle
+            URL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz")
+        FetchContent_MakeAvailable(sparkle)
+        set(SPARKLE_FRAMEWORK_DIR "${sparkle_SOURCE_DIR}")
+        set(HYPERWAVE_UPDATE_SOURCES src/update/SparkleUpdater.h src/update/SparkleUpdater.mm)
+    elseif(WIN32)
+        FetchContent_Declare(winsparkle
+            URL "https://github.com/vslavik/winsparkle/releases/download/v${WINSPARKLE_VERSION}/WinSparkle-${WINSPARKLE_VERSION}.zip")
+        FetchContent_MakeAvailable(winsparkle)
+        set(WINSPARKLE_DIR "${winsparkle_SOURCE_DIR}")
+        set(HYPERWAVE_UPDATE_SOURCES src/update/WinSparkleUpdater.h src/update/WinSparkleUpdater.cpp)
+    else()
+        set(HYPERWAVE_UPDATE_SOURCES src/update/NoUpdater.cpp)
+    endif()
+else()
+    set(HYPERWAVE_UPDATE_SOURCES src/update/NoUpdater.cpp)
+endif()
+
+target_sources(hyperwave PRIVATE src/update/AppUpdater.h ${HYPERWAVE_UPDATE_SOURCES})
 
 target_include_directories(hyperwave PRIVATE src)
 target_link_libraries(hyperwave PRIVATE
@@ -211,16 +281,89 @@ target_compile_definitions(hyperwave PRIVATE
     HYPERWAVE_VERSION="${APP_VERSION_DISPLAY}"
     HYPERWAVE_VERSION_BUILD="${APP_VERSION_BUILD}")
 
+if(HYPERWAVE_AUTO_UPDATE)
+    target_compile_definitions(hyperwave PRIVATE HYPERWAVE_AUTO_UPDATE=1)
+    if(APPLE)
+        # The framework is embedded and signed by scripts/package-macos.sh.
+        # @loader_path/../Frameworks is where it ends up inside the bundle.
+        # -F has to reach the COMPILER as well as the linker. Only linking
+        target_compile_options(hyperwave PRIVATE "-F${SPARKLE_FRAMEWORK_DIR}")
+        target_link_libraries(hyperwave PRIVATE "-F${SPARKLE_FRAMEWORK_DIR}" "-framework Sparkle")
+        target_link_options(hyperwave PRIVATE
+            "-Wl,-rpath,@loader_path/../Frameworks"
+            "-Wl,-rpath,${SPARKLE_FRAMEWORK_DIR}")
+    elseif(WIN32)
+        target_include_directories(hyperwave PRIVATE "${WINSPARKLE_DIR}/include")
+        target_link_libraries(hyperwave PRIVATE "${WINSPARKLE_DIR}/x64/Release/WinSparkle.lib")
+        target_compile_definitions(hyperwave PRIVATE
+            HYPERWAVE_APPCAST_URL="${HYPERWAVE_APPCAST_URL_WIN}"
+            HYPERWAVE_EDDSA_PUBKEY="${HYPERWAVE_EDDSA_PUBKEY}")
+        # WinSparkle ships as a DLL; put it beside the exe so a run from the
+        # build tree behaves like the installed one.
+        add_custom_command(TARGET hyperwave POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${WINSPARKLE_DIR}/x64/Release/WinSparkle.dll"
+                    "$<TARGET_FILE_DIR:hyperwave>"
+            VERBATIM)
+    endif()
+endif()
+
 qt_add_qml_module(hyperwave
     URI hyperwave
     VERSION 1.0
     QML_FILES
         qml/Settings.qml
+        qml/Splash.qml
+        qml/HypernuclearWordmark.qml
+        qml/HyperwaveMark.qml
+        qml/HyperwaveLogotype.qml
+)
+
+# The splash's artwork, the mark it draws, and the face it sets them in.
+#
+# Bundled rather than loaded from disk: a splash that depends on files beside
+# the binary is one that shows a grey rectangle the first time somebody moves
+# the app. The font is bundled for the same reason -- a missing family falls
+# back to the system UI face silently, and the panel goes generic without
+# anything reporting it.
+qt_add_resources(hyperwave "hyperwave_icons"
+    PREFIX "/icons"
+    BASE "resources"
+    FILES
+        resources/splash.jpg
+        resources/Inter-SemiBold.ttf
+)
+
+# The mark, from assets/ where it is authored rather than from a copy.
+#
+# Its own call because qt_add_resources takes one BASE, and this file lives
+# beside the artwork rather than beside the generated icons. Read at runtime by
+# the Windows tray glyph, which renders it through QSvgRenderer at whatever size
+# the shell asks for. The splash draws the same mark from qml/HyperwaveMark.qml
+# instead, because a Shape takes a colour and a rasterised SVG does not.
+qt_add_resources(hyperwave "hyperwave_mark"
+    PREFIX "/icons"
+    BASE "assets"
+    FILES assets/hyperwave.svg
 )
 
 if(APPLE)
+    # Naming the icon in the plist is only half of it: the file also has to be
+    # copied into Contents/Resources, and CMake will not infer one from the
+    # other. Miss the copy and the plist points at nothing, which shows up as
+    # the generic application icon with no error anywhere.
+    set(HYPERWAVE_ICNS ${CMAKE_SOURCE_DIR}/resources/hyperwave.icns)
+    if(EXISTS ${HYPERWAVE_ICNS})
+        target_sources(hyperwave PRIVATE ${HYPERWAVE_ICNS})
+        set_source_files_properties(${HYPERWAVE_ICNS}
+            PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    else()
+        message(STATUS "No resources/hyperwave.icns; run scripts/gen_icons.py")
+    endif()
+
     set_target_properties(hyperwave PROPERTIES
         MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_ICON_FILE hyperwave.icns
         MACOSX_BUNDLE_GUI_IDENTIFIER com.hypernuclear.hyperwave
         MACOSX_BUNDLE_BUNDLE_NAME hyperwave
         MACOSX_BUNDLE_BUNDLE_VERSION ${APP_VERSION_BUILD}
@@ -249,6 +392,7 @@ if(APPLE)
         src/platform/MacNotchPresenter.mm
         src/platform/MacMenuBuilder.mm
         src/app/ShellMac.mm
+        src/update/SparkleUpdater.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 
     # Sign every build with a STABLE identity.
@@ -280,13 +424,6 @@ if(WIN32)
     # user32  window and message plumbing for the panel
     # version FileDescription lookups, for the Playing list's app names
     target_link_libraries(hyperwave PRIVATE ole32 shell32 user32 version)
-
-    # The tray glyph, Windows only on purpose: the macOS status item IS the
-    # visualiser and has no use for a static icon.
-    qt_add_resources(hyperwave "hyperwave_tray"
-        PREFIX "/icons"
-        BASE "assets"
-        FILES assets/hyperwave.svg)
 endif()
 
 if(HYPERWAVE_BUILD_TESTS)

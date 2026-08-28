@@ -75,7 +75,7 @@ jobs:
           # default, and the newest on PyPI -- cannot parse; it fails with
           # "Failed to locate XML data for Qt version". Fixed on aqt master but
           # not yet released, so install from a pinned SHA. Drop this once aqt
-          # v3.4+ ships. Kept identical to hyperbin's and hypershot's pin so all
+          # v3.4+ ships. Pinned to a commit that can parse the new layout, so all
           # three products move together.
           aqtsource: "git+https://github.com/miurahr/aqtinstall.git@75ea7944aeac985e226df0a882cd5b3470e51a97"
           cache: true

@@ -1,8 +1,16 @@
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QGuiApplication>
+#include <QPointer>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQuickWindow>
+#include <QScreen>
 #include <QStringList>
+#include <QTimer>
 
 #include "app/App.h"
+#include "app/Shell.h"
 
 #ifdef Q_OS_WIN
 #include <cstdio>
@@ -132,6 +140,78 @@ int main(int argc, char **argv)
     App hyperwaveApp(options);
     if (!hyperwaveApp.start())
         return 1;
+
+    // The brand moment, once at launch.
+    //
+    // Skipped for the modes that are not a launch at all: --shot and
+    // --verify-audio print a thing and exit, and a splash there would either
+    // race the exit or be the only thing the run produced. --windowed keeps it,
+    // since that IS someone starting the app.
+    //
+    // The component outlives the window deliberately: the window closes itself
+    // after its dwell, and "Show Splash" builds a new one from the same
+    // component rather than keeping a hidden window alive for the life of the
+    // process.
+    QQmlEngine splashEngine;
+    QQmlComponent splashComponent(&splashEngine,
+                                  QUrl(QStringLiteral("qrc:/qt/qml/hyperwave/qml/Splash.qml")));
+    QPointer<QQuickWindow> splashWindow;
+
+    auto showSplash = [&](int dwellMs) {
+        if (!splashWindow)
+            splashWindow = qobject_cast<QQuickWindow *>(splashComponent.create());
+        if (!splashWindow) {
+            qWarning("hyperwave: splash failed to load: %s",
+                     qPrintable(splashComponent.errorString()));
+            return;
+        }
+        // dwellMs of 0 means "stay until clicked" -- see qml/Splash.qml. The
+        // automatic version is the introduction nobody asked for; the manual
+        // one is for someone who went looking, and taking it away from them on
+        // a timer would be rude.
+        splashWindow->setProperty("dwellMs", dwellMs);
+        // Centred by hand: a frameless splash has no window manager placement
+        // to inherit, so it would otherwise land wherever the platform felt
+        // like putting it. Recomputed each time, because the display it should
+        // appear on may have changed since.
+        if (QScreen *sc = QGuiApplication::primaryScreen()) {
+            const QRect a = sc->availableGeometry();
+            splashWindow->setPosition(
+                a.center() - QPoint(splashWindow->width() / 2, splashWindow->height() / 2));
+        }
+        QMetaObject::invokeMethod(splashWindow, "appear");
+
+        // A way to see the splash without photographing the screen.
+        //
+        // screencapture cannot do it: the window is transparent and composited
+        // on the GPU, and capturing it by window id returns a blank rectangle.
+        // grabWindow() asks the scene graph directly, which is the only thing
+        // that produces the real pixels -- and it works headless, so it is also
+        // how CI could check the panel still fits after a text change.
+        if (qEnvironmentVariableIsSet("HYPERWAVE_SPLASH_SHOT")) {
+            const QString path = qEnvironmentVariable("HYPERWAVE_SPLASH_SHOT");
+            // After a beat, so the artwork has decoded and the fade has
+            // finished; grabbing immediately catches an empty frame.
+            QTimer::singleShot(900, splashWindow, [splashWindow, path] {
+                if (!splashWindow)
+                    return;
+                const QImage shot = splashWindow->grabWindow();
+                if (shot.save(path))
+                    qInfo("hyperwave: wrote %s (%dx%d px)", qPrintable(path), shot.width(),
+                          shot.height());
+                else
+                    qWarning("hyperwave: could not write %s", qPrintable(path));
+                qApp->quit();
+            });
+        }
+        // An accessory app is not in the activation order, so a window it opens
+        // lands behind whatever the user was looking at.
+        activateApp();
+    };
+
+    if (options.shotPath.isEmpty() && !options.verifyAudio)
+        showSplash(4000);
+    QObject::connect(&hyperwaveApp, &App::splashRequested, &app, [&] { showSplash(0); });
 
     return QApplication::exec();
 }

@@ -150,7 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it is GPLv3-only and would change what may be shipped.
 - A `Visualiser` interface, so a look is a class rather than a branch, and every
   surface holds one instead of a concrete renderer.
-- MIT licence, matching hyperbin, and `THIRD-PARTY-NOTICES.md` covering what a
+- MIT licence, and `THIRD-PARTY-NOTICES.md` covering what a
   build actually links. Every Qt module's terms were read out of the
   `SPDX-License-Identifier` in its own installed headers rather than from the
   documentation: everything hyperwave uses offers LGPLv3, and Qt Quick 3D —

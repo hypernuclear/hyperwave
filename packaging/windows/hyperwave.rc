@@ -1,0 +1,10 @@
+// The executable's own icon, as seen in Explorer, the taskbar and Alt-Tab.
+//
+// Separate from the notification-area icon, which WinBarPresenter draws at
+// runtime, and separate again from the installer's, which the Inno script names
+// directly. All three come from the same artwork; only this one has to travel
+// inside the binary.
+//
+// The numeric id matters: Explorer shows the icon with the LOWEST id, so this
+// stays 1 and nothing else in this file may claim a smaller one.
+1 ICON "..\\..\\resources\\hyperwave.ico"

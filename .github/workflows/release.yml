@@ -1,0 +1,429 @@
+name: release
+
+# Tags, and nothing else automatic.
+#
+# A `v*` tag is built on every platform, signed, notarized, packaged, signed
+# again for the appcast, and published to R2. There is exactly one real release
+# build per version -- the tag's.
+#
+# Deliberately NOT on pull_request. It was, briefly, because that is what the
+# workflow this is modelled on does; the result was every PR showing a check
+# called "release / build", which reads like a branch is publishing something.
+# Nothing was being published -- the publish job and every signing step are
+# gated on refs/tags/v -- but a status check has to say what it is at a glance,
+# and that one did not.
+#
+# ci.yml builds and tests pull requests instead. What that leaves unexercised
+# until a tag is the packaging: package-macos.sh, the DMG, windeployqt and the
+# Inno installer. workflow_dispatch is here so that can be dry-run on demand
+# rather than only ever running for real.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: "6.11.2"
+  R2_BUCKET: hyperwave-builds
+  CDN_URL: https://hyperwave-builds.hypernuclear.com
+  SPARKLE_VERSION: "2.9.0"
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Two separate macOS builds rather than one universal binary. The
+          # appcast carries a sparkle:cpu on each enclosure, so each machine
+          # downloads only its own architecture instead of a bundle that is half
+          # dead weight.
+          - os: macos-latest
+            platform: macos
+            arch: arm64
+            cmake-args: '-G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64'
+            qt-arch: clang_64
+          - os: macos-latest
+            platform: macos
+            arch: x64
+            cmake-args: '-G Ninja -DCMAKE_OSX_ARCHITECTURES=x86_64'
+            qt-arch: clang_64
+          # Pinned, not windows-latest: when GitHub rolls the label forward,
+          # CMake's "Visual Studio 17 2022" generator can stop finding an
+          # instance of Visual Studio at all.
+          - os: windows-2022
+            platform: windows
+            arch: x64
+            cmake-args: '-G "Visual Studio 17 2022" -A x64'
+            qt-arch: win64_msvc2022_64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history. The build number is `git rev-list --count HEAD` and a
+          # shallow clone returns 1 -- which would make every release look older
+          # than the one before it, and no update would ever be offered.
+          fetch-depth: 0
+
+      - name: Work out the version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            PROJECT="$(sed -n 's/^project(hyperwave VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+            VERSION="${PROJECT}-pr${{ github.event.number }}"
+          fi
+          BUILD=$(git rev-list --count HEAD)
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BUILD=$BUILD"     >> $GITHUB_ENV
+          echo "$VERSION" > build-version.txt
+          echo "Version $VERSION, build $BUILD"
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: ${{ matrix.qt-arch }}
+          # qtshadertools bakes the strand and glow shaders; qtquick3d is NOT
+          # requested, and must not be -- it is GPLv3-only, so linking it would
+          # make an open-source-Qt binary GPLv3. See the licence note in README.
+          modules: qtshadertools
+          # Qt 6.11+ on Windows uses a flattened per-arch repo layout that
+          # aqtinstall 3.3.0 -- the action's default -- cannot parse. Pinned to
+          # the same SHA the sibling products use so they move together.
+          aqtsource: "git+https://github.com/miurahr/aqtinstall.git@75ea7944aeac985e226df0a882cd5b3470e51a97"
+          cache: true
+
+      - name: Install Ninja
+        if: runner.os == 'macOS'
+        run: brew list ninja >/dev/null 2>&1 || brew install ninja
+
+      - name: Configure
+        shell: bash
+        run: |
+          # HYPERWAVE_EDDSA_PUBKEY is the PUBLIC half and lives in the tree, not
+          # in a secret: it ships inside every binary anyway, so hiding it buys
+          # nothing, and as a secret it becomes an invisible input that can
+          # silently disagree with the private half.
+          #
+          # HYPERWAVE_CODESIGN_IDENTITY is emptied here because CI signs in its
+          # own step, with a certificate imported into a throwaway keychain. The
+          # identity baked into CMakeLists is for local builds, where it exists
+          # so the system-audio TCC grant survives a rebuild.
+          cmake -S . -B build ${{ matrix.cmake-args }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DAPP_VERSION_BUILD="$BUILD" \
+            -DAPP_VERSION_DISPLAY="$VERSION" \
+            -DHYPERWAVE_CODESIGN_IDENTITY=""
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Test
+        shell: bash
+        working-directory: build
+        run: ctest --output-on-failure --build-config Release
+
+      # ===== macOS =====
+      - name: Install the Developer ID certificate
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          CERT_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERT_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERT_PASSWORD }}
+        run: |
+          # A throwaway keychain per run, deleted at the end. Importing into the
+          # login keychain on a shared runner would leave a signing identity
+          # behind for whatever runs next.
+          KEYCHAIN="build-${{ github.run_id }}.keychain"
+          PASSWORD="$(uuidgen)"
+          security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          echo "$CERT_BASE64" | base64 --decode > cert.p12
+          security import cert.p12 -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f cert.p12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+                   -s -k "$PASSWORD" "$KEYCHAIN" >/dev/null
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          echo "KEYCHAIN=$KEYCHAIN" >> $GITHUB_ENV
+
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        run: ./scripts/package-macos.sh build "$VERSION" "${{ matrix.arch }}"
+
+      - name: Notarize
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          APPLE_ID: ${{ secrets.APPLE_NOTARIZATION_APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_NOTARIZATION_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_NOTARIZATION_TEAM_ID }}
+        run: |
+          DMG="build/hyperwave-${VERSION}-macos-${{ matrix.arch }}.dmg"
+          # The bundle is notarized separately from the DMG. Sparkle ships the
+          # ZIP of the .app, and a ticket stapled to the DMG does not travel
+          # with the app inside it.
+          ditto -c -k --sequesterRsrc --keepParent build/hyperwave.app build/notarize.zip
+          for f in build/notarize.zip "$DMG"; do
+            xcrun notarytool submit "$f" --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          done
+          rm -f build/notarize.zip
+          xcrun stapler staple build/hyperwave.app
+          xcrun stapler staple "$DMG"
+
+      - name: Zip the bundle for Sparkle
+        if: runner.os == 'macOS'
+        run: |
+          # Built from the stapled bundle, so the copy Sparkle installs carries
+          # its own notarization ticket and passes Gatekeeper even offline.
+          ditto -c -k --sequesterRsrc --keepParent build/hyperwave.app \
+                "build/hyperwave-${VERSION}-macos-${{ matrix.arch }}.zip"
+
+      - name: Delete the temporary keychain
+        if: runner.os == 'macOS' && always() && env.KEYCHAIN != ''
+        run: security delete-keychain "$KEYCHAIN" || true
+
+      # ===== Windows =====
+      #
+      # No MSIX yet. The Store package needs a full set of tile assets and
+      # hyperwave has no icon at all -- see RELEASING.md. The EXE is what
+      # WinSparkle downloads to apply an update, so it is the one that has to
+      # exist first.
+      - name: Stage and package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist\windows -Force | Out-Null
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --qmldir qml --compiler-runtime `
+              --release --force build\Release\hyperwave.exe
+          Copy-Item build\Release\* dist\windows\ -Recurse -Force
+
+      - name: Build the EXE installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $root = (Get-Location).Path
+          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" `
+              /DAppVersion=$env:VERSION /DStagingDir="$root\dist\windows" `
+              /O"$root\build" packaging\windows\hyperwave.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+          Move-Item "build\hyperwave-setup-$env:VERSION.exe" `
+                    "build\hyperwave-$env:VERSION-windows-x64.exe" -Force
+
+      - name: Sign the EXE installer
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_APPLICATION_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://wus.codesigning.azure.net/
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files-folder: ${{ github.workspace }}\build
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: EdDSA-sign the installer for WinSparkle
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          # Signed AFTER Authenticode: signing an exe changes its bytes, so an
+          # EdDSA signature made first would not match what the user downloads
+          # and WinSparkle would reject the update.
+          $tool = Get-ChildItem build\_deps -Recurse -Filter winsparkle-tool.exe |
+                  Select-Object -First 1
+          if (-not $tool) { throw "winsparkle-tool.exe not found" }
+          $keyFile = [System.IO.Path]::GetTempFileName()
+          try {
+            "${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}" | Set-Content $keyFile -NoNewline
+            $sig = & $tool.FullName sign -f $keyFile "build\hyperwave-$env:VERSION-windows-x64.exe"
+            if ($LASTEXITCODE -ne 0 -or -not $sig) { throw "EdDSA signing failed" }
+            $sig | Set-Content build\eddsa-signature.txt -NoNewline
+          } finally {
+            Remove-Item $keyFile -Force -ErrorAction SilentlyContinue
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hyperwave-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            build/*.dmg
+            build/*.zip
+            build/*.exe
+            build/eddsa-signature.txt
+            build-version.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  # --- publish --------------------------------------------------------------
+  # Tags only. Both feeds are written in one job so a release can never land
+  # half-published, with macOS pointing at a version Windows has not uploaded.
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Same trap as the build job: the Windows appcast's sparkle:version is
+          # a commit count, and on a shallow clone that is 1 for every release.
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Work out the version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      - name: Build the macOS appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          # The archive's members are ./bin/... at the root -- there is no
+          # top-level Sparkle-x.y.z/ directory to strip or to name.
+          mkdir -p sparkle
+          curl -sL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
+            | tar xJ -C sparkle ./bin/generate_appcast ./bin/sign_update
+          test -x sparkle/bin/generate_appcast
+
+          KEY=$(mktemp); printf '%s' "$SPARKLE_PRIVATE_KEY" > "$KEY"
+          trap 'rm -f "$KEY"' EXIT
+
+          # One appcast per architecture, then merged. generate_appcast reads a
+          # whole directory and emits one <item> per archive; it has no notion
+          # of architecture, so the two are produced apart and the sparkle:cpu
+          # attribute is added on the way in.
+          #
+          # Located with find, never by a constructed path: upload-artifact
+          # roots an artifact at the least common ancestor of everything it
+          # matched, so these arrive under artifacts/<name>/build/ rather than
+          # artifacts/<name>/.
+          for ARCH in arm64 x64; do
+            mkdir -p "feed-$ARCH"
+            ZIP=$(find artifacts -type f -name "hyperwave-*-macos-${ARCH}.zip" | head -1)
+            if [ -z "$ZIP" ]; then
+              echo "::error::no macOS ${ARCH} zip in the artifacts"
+              find artifacts -type f | sed 's/^/  /'
+              exit 1
+            fi
+            cp "$ZIP" "feed-$ARCH/"
+            ./sparkle/bin/generate_appcast --ed-key-file "$KEY" \
+              --download-url-prefix "${CDN_URL}/releases/${VERSION}/" \
+              "feed-$ARCH/"
+          done
+
+          ARM=$(sed -n '/<item>/,/<\/item>/p' feed-arm64/appcast.xml \
+                | sed 's|<enclosure |<enclosure sparkle:cpu="arm64" |')
+          X64=$(sed -n '/<item>/,/<\/item>/p' feed-x64/appcast.xml \
+                | sed 's|<enclosure |<enclosure sparkle:cpu="x86_64" |')
+
+          cat > appcast-mac.xml <<EOF
+          <?xml version="1.0" standalone="yes"?>
+          <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+            <channel>
+              <title>hyperwave</title>
+              ${ARM}
+              ${X64}
+            </channel>
+          </rss>
+          EOF
+          cat appcast-mac.xml
+
+          # Refuse to publish an unsigned feed.
+          #
+          # generate_appcast checks the signing key against the SUPublicEDKey
+          # baked into the app, and when they disagree it prints a warning,
+          # omits sparkle:edSignature, and exits 0. The release then looks
+          # completely successful and ships a feed no client will install --
+          # the safe direction to fail, but only discovered by a user who never
+          # gets an update. HYPERWAVE_EDDSA_PUBKEY in CMakeLists.txt and the
+          # SPARKLE_EDDSA_PRIVATE_KEY secret must be halves of one pair.
+          SIGNED=$(grep -c 'sparkle:edSignature' appcast-mac.xml || true)
+          if [ "$SIGNED" -ne 2 ]; then
+            echo "::error::macOS appcast has $SIGNED signed enclosures, expected 2."
+            echo "The app's SUPublicEDKey almost certainly does not match"
+            echo "SPARKLE_EDDSA_PRIVATE_KEY. See RELEASING.md."
+            exit 1
+          fi
+
+      - name: Build the Windows appcast
+        run: |
+          # find, not a constructed path -- see the macOS appcast step.
+          EXE=$(find artifacts -type f -name "hyperwave-*-windows-x64.exe" | head -1)
+          SIGFILE=$(find artifacts -type f -name "eddsa-signature.txt" | head -1)
+          if [ -z "$EXE" ] || [ -z "$SIGFILE" ]; then
+            echo "::error::missing Windows installer or its EdDSA signature"
+            find artifacts -type f | sed 's/^/  /'
+            exit 1
+          fi
+          SIG=$(cat "$SIGFILE")
+          LEN=$(stat -f%z "$EXE")
+          BUILD=$(git rev-list --count "$GITHUB_REF_NAME")
+          # sparkle:version is the build number WinSparkle compares;
+          # shortVersionString is the string it shows. Swapping them would make
+          # every release compare equal.
+          cat > appcast-win.xml <<EOF
+          <?xml version="1.0" standalone="yes"?>
+          <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+            <channel>
+              <title>hyperwave</title>
+              <item>
+                <title>${VERSION}</title>
+                <pubDate>$(date -u +"%a, %d %b %Y %H:%M:%S +0000")</pubDate>
+                <sparkle:version>${BUILD}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>10.0.19041</sparkle:minimumSystemVersion>
+                <enclosure url="${CDN_URL}/releases/${VERSION}/hyperwave-${VERSION}-windows-x64.exe"
+                           sparkle:edSignature="${SIG}"
+                           length="${LEN}"
+                           type="application/octet-stream" />
+              </item>
+            </channel>
+          </rss>
+          EOF
+          cat appcast-win.xml
+
+      - name: Publish to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+        run: |
+          S3="aws s3 --endpoint-url $R2_ENDPOINT"
+
+          # Artifacts first, feeds last. A feed that names a file nobody has
+          # uploaded yet sends every running copy of the app to a 404, and they
+          # will have already told the user an update is waiting.
+          find artifacts -type f \
+               \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' \) -print0 |
+          while IFS= read -r -d '' f; do
+            $S3 cp "$f" "s3://${R2_BUCKET}/releases/${VERSION}/$(basename "$f")"
+          done
+
+          $S3 cp appcast-mac.xml "s3://${R2_BUCKET}/latest/mac/appcast.xml" \
+                --content-type application/xml
+          $S3 cp appcast-win.xml "s3://${R2_BUCKET}/latest/win/appcast.xml" \
+                --content-type application/xml
+
+          echo "Published ${VERSION} to ${CDN_URL}/releases/${VERSION}/"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "hyperwave ${VERSION}" \
+            --generate-notes \
+            $(find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \))
