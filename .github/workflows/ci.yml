@@ -116,3 +116,48 @@ jobs:
             exit 0
           fi
           ctest --output-on-failure
+
+  # Windows compiles, and that is all it does so far.
+  #
+  # The backend here is stubs, so this job proves the tree still configures and
+  # builds with MSVC and nothing more. It exists now rather than later because
+  # the moment somebody writes real WASAPI or appbar code into those stubs, the
+  # alternative is a few hundred lines of Win32 that has never met a compiler.
+  #
+  # continue-on-error while that is true: a red tick on an unimplemented
+  # platform should not block a macOS change. Take it off the day the Windows
+  # backend does something.
+  windows:
+    runs-on: windows-2022
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Qt (open source)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          modules: qtshadertools qtquick3d
+          aqtsource: "git+https://github.com/miurahr/aqtinstall.git@75ea7944aeac985e226df0a882cd5b3470e51a97"
+          cache: true
+
+      - name: Configure
+        shell: bash
+        run: |
+          # Not via a preset: CMakePresets.json excludes Windows on purpose,
+          # because Qt Creator turns every enabled preset into a kit and a
+          # preset naming no compiler produces one with no toolchain at all.
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DHYPERWAVE_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Release -j 4
+
+      - name: Test
+        working-directory: build
+        run: ctest --output-on-failure --build-config Release

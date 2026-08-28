@@ -13,75 +13,115 @@ already works.
 
 ## Windows: where the visualiser lives
 
-Three options were considered and two are dead:
+macOS gives this app a reserved strip that no window ever covers. Windows has
+no such thing on offer to a third party, so the question is which of the
+imperfect substitutes to build first. Four were considered.
 
-- **Deskbands**, the classic "toolbar docked inside the taskbar", are the
-  obvious answer and are **removed in Windows 11**. Not deprecated — removed.
-- **Windows 11 Widgets** are Adaptive Cards with a refresh budget measured in
-  minutes. They cannot animate, so they cannot host a visualiser.
-- **An AppBar** (`SHAppBarMessage`) does work: it docks a real strip to a screen
-  edge that maximised windows respect. It also permanently reserves screen
-  space, which is a heavy price for an ambient decoration. Kept in reserve.
+### The decision: an application desktop toolbar
 
-**The decision: an animated notification-area icon as the always-present anchor,
-plus an optional frameless, translucent strip that snaps just above the taskbar
-and remembers where it was dragged.** Ship both, let the user pick.
+**An appbar** -- Microsoft's name is "application desktop toolbar", and
+`SHAppBarMessage` is the API -- docks a window to a screen edge and *the system
+prevents other applications from using that area*. Maximised windows start below
+it. That is not an approximation of the macOS menu bar, it is the same bargain:
+a permanent strip of screen in exchange for never being covered.
 
-### The tray is square, and that is now a real distinction
+Three things settled it.
 
-This is the part that changed since the decision was made, and it changed for
-the better.
+It is the only option that is **guaranteed visible**. A floating window is
+covered the moment something goes fullscreen or steals topmost; a desktop widget
+is covered by the first maximised window; a taskbar overlay depends on winning a
+z-order argument with a XAML shell forever.
 
-`Visualiser::widthPt()` splits the looks into two families. The ring asks for a
-square; the bars, mirror, lines, terrain and strands ask for a strip. That was
-added so a circle would not sit in the middle of ninety-one points of empty menu
-bar — but a notification-area icon is *inherently* square, sixteen to thirty-two
-pixels depending on DPI, and the split turns out to describe Windows better than
-it describes macOS.
+It **solves the fullscreen problem for free**. A translucent always-on-top
+window over a game in exclusive fullscreen flickers or forces the game out of
+its mode, and macOS never faces this because its fullscreen is a Space. An
+appbar is simply *told*: `ABN_FULLSCREENAPP` arrives when a fullscreen app opens
+or the last one closes, and the documented response is to drop to the bottom of
+the z-order and restore afterwards. Every other surface means hand-rolling that
+detection with `SHQueryUserNotificationState` and getting the edge cases wrong.
 
-So: **the ring is the tray look, and the strip looks go on the strip.**
-Twenty-eight bars in a 24-pixel icon is eight bands of three pixels, which is a
-smudge. A ring in a 24-pixel icon is a ring. Nothing needs inventing for this;
-the taxonomy is already in the code.
+It is **still a live API**. Deskbands -- the thing that genuinely lived *inside*
+the taskbar, like the old Media Player mini-player and the Language Bar -- are
+removed in Windows 11. Appbars are not: `shellapi.h`, `Shell32.lib`, supported
+since XP, with an `ext-ms-win-shell-shell32` API set entry added in Windows 10.
 
-### Frame rate in the tray is a limit, not a preference
+The system also hands over `ABN_POSCHANGED` when the taskbar moves, resizes or
+hides, and `ABM_GETTASKBARPOS` for its rectangle -- which every other option on
+this list would have had to ask for anyway.
 
-`Shell_NotifyIcon(NIM_MODIFY, …)` is a cross-process call into `explorer.exe`.
-Doing it sixty times a second, forever, is antisocial in a way that a
-`CADisplayLink` on your own layer is not. Twelve to fifteen is the honest
-ceiling.
+### The objection, which is real
 
-`BarPresenter::setPreferredFps()` is already per-presenter, so this needs no
-restructuring — the tray presenter simply asks for less than the strip does. But
-it does change which looks survive there: peak-hold dots and the mirror's spring
-read fine at fifteen, while the strands' spin and the lines' flash will strobe.
-Another argument for the ring.
+**Almost nobody has knowingly seen an appbar.** The mainstream examples are
+museum pieces: the Office 97 Shortcut Bar, RocketDock and ObjectDock in docked
+mode. The clearest modern one is a hobby project,
+[AppSwitcherBar](https://github.com/adamecr/AppSwitcherBar), which is built on
+exactly this API and whose README puts the consequence plainly -- it "will
+reduce the area for the other applications so they will not overlap even when
+maximized".
 
-### Two things that will not bite, and one that will
+So the convention is unfamiliar, and "this app permanently took 24 pixels of my
+screen" is a confusing thing to discover rather than to choose. That is a
+product problem, not a technical one, and it has product answers:
 
-**`QSystemTrayIcon` is fine on Windows.** The reason macOS needed a hand-built
-`NSStatusItem` is entirely macOS's: Qt's Cocoa plugin calls `setTemplate:` on the
-status-item image, and a template image is a monochrome mask, so the gradient
-would arrive as a silhouette. Windows has no such behaviour. Build a `QIcon`
-from the `QImage` and let Qt do the `HICON` conversion; do not hand-roll
-`CreateIconIndirect`.
+- **Never dock silently.** First run offers it, explains in one sentence that it
+  reserves a strip the way the taskbar does, and defaults to *not* docked.
+- **Make undocking obvious and instant.** One item in the tray menu, and
+  `ABM_REMOVE` gives the space straight back.
+- **Be thin.** There is no reason to take a full taskbar's height for a
+  visualiser; the macOS strip is 22 points.
 
-**The glow already has a Windows path.** `GpuContext` has the
-`QRhiD3D11InitParams` branch, and the shaders bake HLSL 5.0 alongside MSL and
-SPIR-V — verified with `qsb --dump`, not assumed. The bloom divisor also already
-backs off on small targets, which is exactly the tray case: a 24-pixel icon gets
-a full-resolution bloom rather than a six-pixel one.
+### The other three, kept as alternates
 
-**Discoverability will bite.** Windows 11 hides new tray icons behind the
-overflow chevron by default, so a first run can look like nothing happened. The
-strip is what makes the app discoverable; the icon is what makes it feel native.
-Do not ship only the icon.
+- **A floating strip parked over the taskbar's empty space.** The taskbar is
+  already reserved area no window covers, so a topmost strip sitting in it is
+  visible without costing anything extra. Attractive, and fragile: Windows 11
+  centres the taskbar so the empty region moves as apps open, and the shell
+  repaints on its own schedule. This is the fallback when someone does not want
+  to give up the pixels.
+- **A desktop widget**, Rainmeter-style, reparented under `Progman`/`WorkerW` so
+  it lives on the wallpaper. Costs nothing, intrudes on nothing, and is invisible
+  exactly when the machine is being used. Ship it; do not lead with it.
+- **The title bar of a maximised window** was considered and rejected. Chrome,
+  Edge, VS Code, Slack and Spotify all draw their own tabs, menus and search into
+  that space, so the failure mode is not "looks slightly off", it is "covered the
+  thing you were about to click" -- several times a day, while chasing foreground
+  window geometry, per-monitor DPI and theme changes to do it.
+
+### The tray icon is an anchor, not a visualiser
+
+Earlier drafts of this document had the tray icon animating. It should not.
+
+At sixteen to twenty-four pixels **none of the six looks actually reads**:
+twenty-eight bars becomes eight bands of three pixels, the ring becomes a blob,
+the strands become a smudge. And `Shell_NotifyIcon(NIM_MODIFY, ...)` is a
+cross-process call into `explorer.exe`, so animating means an IPC round trip
+twelve to fifteen times a second, forever, to draw something illegible -- behind
+the Windows 11 overflow chevron, where a first run may never see it at all.
+
+The icon's job is the menu, the settings, quitting, and being the thing a user
+looks for to confirm the app is running. Draw it once.
+
+`QSystemTrayIcon` is the right vehicle. The reason macOS needed a hand-built
+`NSStatusItem` is entirely macOS's -- Qt's Cocoa plugin calls `setTemplate:` on
+the status-item image and a template image is a monochrome mask, so the gradient
+would arrive as a silhouette. Windows has no such behaviour.
+
+### What the appbar means for the looks
+
+An appbar is a strip, so all six looks work in it unchanged, which is the
+opposite of the tray-icon constraint that shaped the previous draft.
+`Visualiser::widthPt()` still matters, but for a different reason: the ring asks
+for a square, so in a horizontal appbar it occupies its height and leaves the
+rest of the bar empty. Either centre it or let the bar shrink to the look --
+`setWidthPt()` already carries that decision, and on an appbar the width is ours
+to choose because the *edge* is what is reserved, not the whole span.
 
 ### No display link
 
 Either synchronise a timer to `DwmGetCompositionTimingInfo`, or accept a plain
 timer and the occasional dropped frame. Note the cost table in the README before
-choosing 60 over 30.
+choosing 60 over 30. `BarPresenter::setPreferredFps()` is already per-presenter,
+so the appbar and the tray can run at different rates without restructuring.
 
 ## Windows: what is markedly easier here
 
@@ -193,12 +233,31 @@ sensible timer interval.
 1. **WASAPI loopback into `MonoRing`.** Everything else is invisible until
    samples arrive, and `--verify-audio` already proves it end to end without a
    single pixel being drawn.
-2. **The frameless strip.** It is the discoverable surface, it has no size
-   constraint, and all six looks work on it unchanged. This is the point at
-   which the app is usable on Windows.
-3. **The tray icon**, square, ring by default, at fifteen frames a second.
-4. **Per-app metering**, which is cheap here and makes the `Playing` list real.
-5. **Fullscreen detection**, before someone with a game finds it first.
+2. **A plain frameless window** implementing `BarPresenter`. Not the shipping
+   surface -- the point is to get pixels on screen and confirm the shared
+   renderer, the glow and the D3D11 path all work before putting shell
+   integration on top of them. Debug it here, not inside an appbar.
+3. **The appbar.** `ABM_NEW`, then `ABM_QUERYPOS` followed by `ABM_SETPOS` on
+   every `ABN_POSCHANGED`, then `ABN_FULLSCREENAPP`. Undocking has to work from
+   the first commit: `ABM_REMOVE` before the window is destroyed is not
+   optional, because an appbar that fails to unregister leaves its reserved
+   strip behind after the process is gone, and the only way back is a reboot or
+   another appbar claiming the same edge. Test the crash path deliberately.
+4. **The static tray icon and menu**, which is what makes the app findable and
+   quittable.
+5. **Per-app metering**, which is cheap here and makes the `Playing` list real.
 
-Microphone input, per-app capture and the AppBar come after that, and none of
-them block a first release.
+Microphone input, per-app capture, the desktop widget and the taskbar overlay
+all come after that, and none of them block a first release.
+
+## A note on building any of this
+
+None of the Windows code is compiled anywhere today. CI builds macOS only, which
+was the right call while the Windows files were stubs and the wrong one the
+moment somebody writes a real backend into them.
+
+**Add a Windows job to `.github/workflows/ci.yml` before writing the first line
+of WASAPI or appbar code**, so that everything after it is at least
+compile-checked by a machine that has the SDK. Writing a few hundred lines of
+Win32 that has never seen a compiler is how a port acquires a hundred errors
+before it acquires a single behaviour.
