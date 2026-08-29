@@ -999,10 +999,24 @@ void App::showAbout()
     QMessageBox box;
     box.setWindowTitle(QStringLiteral("hyperwave"));
     box.setText(QStringLiteral("<b>hyperwave</b> %1").arg(QStringLiteral(HYPERWAVE_VERSION)));
+    // Rich text, for the sake of the one link.
+    //
+    // Which costs two things worth naming. QMessageBox decides plain or rich by
+    // sniffing the string, so adding an anchor silently reformats the whole
+    // block: the newlines that used to separate these lines stop separating
+    // anything and have to be <br>. And the status detail is interpolated into
+    // markup now, so it is escaped -- it carries the output device's name, and
+    // there is nothing stopping someone owning a pair of headphones with an
+    // ampersand in the name.
+    //
+    // Nothing else is needed to make the link work: QMessageBox builds the
+    // informative label with openExternalLinks set and links reachable by
+    // mouse, so it opens in the browser on its own.
     box.setInformativeText(QStringLiteral("A system audio visualiser that lives in the menu bar."
-                                          "\n\nCapture: %1\nRate: %2 Hz\n\n"
-                                          "© 2026 Hypernuclear LLC")
-                               .arg(m_audio->source()->statusDetail())
+                                          "<br><br>Capture: %1<br>Rate: %2 Hz<br><br>"
+                                          "<a href=\"https://hypernuclear.com\">hypernuclear.com</a>"
+                                          "<br>© 2026 hypernuclear LLC")
+                               .arg(m_audio->source()->statusDetail().toHtmlEscaped())
                                .arg(m_audio->source()->sampleRate(), 0, 'f', 0));
     box.setStandardButtons(QMessageBox::Ok);
 

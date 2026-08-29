@@ -25,11 +25,18 @@ namespace hyperwave {
 
 namespace {
 
-constexpr const char *kTapName = "Hyperwave System Audio";
+// Lowercase because a user can see it: an orphaned tap shows up in Audio MIDI
+// Setup under this name.
+constexpr const char *kTapName = "hyperwave System Audio";
 
 // Every tap this app creates starts with this, so the startup sweep can find
 // orphans from a previous run without knowing which kind they were.
-constexpr const char *kTapNamePrefix = "Hyperwave";
+//
+// Matched case-insensitively, which is not fussiness. Builds up to 0.1.0 named
+// their taps "Hyperwave ...", and those are exactly the ones that might be
+// lying around when a newer build first runs. A case-sensitive sweep would walk
+// straight past every orphan the old name left behind.
+constexpr const char *kTapNamePrefix = "hyperwave";
 
 // Frames of scratch on the realtime stack. A device handing us more than this
 // in one callback would mean a buffer longer than 170 ms, which no output
@@ -148,14 +155,37 @@ CoreAudioTapSource::CoreAudioTapSource(QObject *parent)
     // case a notification is ever missed.
     m_meterRefresh.setSingleShot(true);
     m_meterRefresh.setInterval(400);
-    connect(&m_meterRefresh, &QTimer::timeout, this, &CoreAudioTapSource::refreshMeterProcesses);
+    connect(&m_meterRefresh, &QTimer::timeout, this, &CoreAudioTapSource::dispatchMeterRefresh);
     m_meterFallback.setInterval(15000);
-    connect(&m_meterFallback, &QTimer::timeout, this, &CoreAudioTapSource::refreshMeterProcesses);
+    connect(&m_meterFallback, &QTimer::timeout, this, &CoreAudioTapSource::dispatchMeterRefresh);
+
+    // A thread for the refresh, because it is not fast and the main thread is
+    // where the strip is drawn.
+    //
+    // The debounce above collapses a burst of notifications into one refresh,
+    // but it cannot make that refresh cheap: enumerating every audio process is
+    // three synchronous round trips to coreaudiod each, and rebuilding the tap
+    // set is more. Launching any application registers it with CoreAudio and
+    // fires the process-list notification, so all of that used to land on the
+    // main thread at the exact moment the user was watching something else
+    // open, and the strip stopped for as long as it took. Nothing here touches
+    // the view layer or any member other than the meter, which locks.
+    m_meterThread.setObjectName(QStringLiteral("hyperwave.meter"));
+    m_meterContext = new QObject;
+    m_meterContext->moveToThread(&m_meterThread);
+    connect(&m_meterThread, &QThread::finished, m_meterContext, &QObject::deleteLater);
+    m_meterThread.start();
 }
 
 CoreAudioTapSource::~CoreAudioTapSource()
 {
     stop();
+    // The queued refresh holds a bare `this`, so the thread has to be joined
+    // before any member it reaches through that is destroyed. stop() has
+    // already disarmed the meter, so anything still queued is a no-op, but it
+    // still has to finish running.
+    m_meterThread.quit();
+    m_meterThread.wait();
 }
 
 void CoreAudioTapSource::setPermissionState(PermissionState state)
@@ -233,7 +263,11 @@ bool CoreAudioTapSource::start()
         m_statusDetail += QStringLiteral(" — device ") + m_sourceDeviceUid;
 
     installListeners();
-    refreshMeterProcesses();
+    m_meter.setEnabled(true);   // stop() latches it off; this is the other half
+    // Dispatched rather than called: the first build is the expensive one --
+    // every tap in the set rather than the handful that moved -- and there is
+    // no reason for launch to wait on it.
+    dispatchMeterRefresh();
     m_meterFallback.start();
     m_running = true;
     setPermissionState(PermissionState::Probing);
@@ -253,6 +287,9 @@ void CoreAudioTapSource::stop()
     m_rebuildDebounce.stop();
     m_meterRefresh.stop();
     m_meterFallback.stop();
+    // Blocks if a rebuild is in flight on the meter thread, which is the point:
+    // this is where the two threads meet. It also latches the meter off, so a
+    // refresh still sitting in the queue cannot build a tap set behind us.
     m_meter.stop();
     removeListeners();
     stopIo();
@@ -349,7 +386,7 @@ bool CoreAudioTapSource::buildAggregate(bool includeOutputDevice)
 
     NSMutableDictionary *composition = [@{
         @(kAudioAggregateDeviceUIDKey) : aggUid,
-        @(kAudioAggregateDeviceNameKey) : @"Hyperwave Analyzer",
+        @(kAudioAggregateDeviceNameKey) : @"hyperwave Analyzer",
         // Private: it does not appear in Sound preferences and it dies with us.
         @(kAudioAggregateDeviceIsPrivateKey) : @1,
         @(kAudioAggregateDeviceIsStackedKey) : @0,
@@ -662,6 +699,20 @@ bool CoreAudioTapSource::restartCapture()
     return start();
 }
 
+void CoreAudioTapSource::dispatchMeterRefresh()
+{
+    if (m_shuttingDown.load(std::memory_order_acquire))
+        return;
+    // Queued onto the meter thread. The pool is explicit because this is not a
+    // run loop thread with one already wrapped around each turn, and the probe
+    // underneath autoreleases NSString and NSURL freely.
+    QMetaObject::invokeMethod(m_meterContext, [this] {
+        @autoreleasepool {
+            refreshMeterProcesses();
+        }
+    });
+}
+
 void CoreAudioTapSource::refreshMeterProcesses()
 {
     // Meter every process an application owns, not just the one wearing its name.
@@ -902,7 +953,12 @@ void CoreAudioTapSource::sweepOrphanedTaps()
         AudioObjectPropertyAddress da = addr(kAudioTapPropertyDescription);
         if (AudioObjectGetPropertyData(tap, &da, 0, nullptr, &descSize, &desc) != noErr || !desc)
             continue;
-        if ([desc.name hasPrefix:@"Hyperwave"]) {
+        // hasPrefix: is case-sensitive, and the name it is looking for changed
+        // case in 0.1.1. See kTapNamePrefix.
+        const NSRange match =
+            [desc.name rangeOfString:@(kTapNamePrefix)
+                             options:NSCaseInsensitiveSearch | NSAnchoredSearch];
+        if (match.location != NSNotFound) {
             qInfo("hyperwave: destroying an orphaned tap from a previous run");
             AudioHardwareDestroyProcessTap(tap);
         }
