@@ -172,9 +172,34 @@ jobs:
           # ZIP of the .app, and a ticket stapled to the DMG does not travel
           # with the app inside it.
           ditto -c -k --sequesterRsrc --keepParent build/hyperwave.app build/notarize.zip
+
+          # Print Apple's reasons when it refuses.
+          #
+          # `notarytool submit --wait` reports "status: Invalid" and exits
+          # non-zero having said nothing about WHICH file was wrong or why --
+          # the detail is in a log that has to be fetched separately, by
+          # submission id. Without this a rejection costs a whole release cycle
+          # to learn anything from, which is exactly what v0.1.0 cost.
+          notarize() {
+            local file="$1" out id
+            out=$(xcrun notarytool submit "$file" --apple-id "$APPLE_ID" \
+                    --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait 2>&1) || true
+            echo "$out"
+            id=$(echo "$out" | awk '/^  id: /{print $2; exit}')
+            if echo "$out" | grep -q "status: Accepted"; then
+              return 0
+            fi
+            echo "::error::notarization failed for $file"
+            if [ -n "$id" ]; then
+              echo "--- Apple's notarization log for $id ---"
+              xcrun notarytool log "$id" --apple-id "$APPLE_ID" \
+                --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" || true
+            fi
+            return 1
+          }
+
           for f in build/notarize.zip "$DMG"; do
-            xcrun notarytool submit "$f" --apple-id "$APPLE_ID" \
-              --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            notarize "$f"
           done
           rm -f build/notarize.zip
           xcrun stapler staple build/hyperwave.app

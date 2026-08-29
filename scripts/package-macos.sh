@@ -252,9 +252,24 @@ if [ -n "$IDENTITY" ]; then
             codesign --force --options runtime --timestamp --sign "$IDENTITY" "$ver"
         done
     done
+    # The RELEASE entitlements, not the development ones. The development pair
+    # carries get-task-allow so a debugger can attach, and Apple refuses to
+    # notarize anything signed with it.
     codesign --force --options runtime --timestamp \
-             --entitlements "$REPO_ROOT/hyperwave.entitlements" \
+             --entitlements "$REPO_ROOT/hyperwave-release.entitlements" \
              --sign "$IDENTITY" "$APP"
+
+    # Refuse to hand Apple something it is guaranteed to reject.
+    #
+    # Cheap, local, and immediate, where the same mistake costs a full build,
+    # two signings and a round trip to the notary service to learn about
+    # otherwise -- and arrives as "Invalid" with no reason attached.
+    if codesign -d --entitlements - "$APP" 2>/dev/null | grep -q "get-task-allow"; then
+        echo "ERROR: $APP is signed with get-task-allow." >&2
+        echo "       Notarization will fail. Check which entitlements file" >&2
+        echo "       was used -- it must be hyperwave-release.entitlements." >&2
+        exit 1
+    fi
     codesign --verify --deep --strict --verbose=2 "$APP"
 else
     echo "WARNING: no Developer ID identity found. The bundle stays" >&2

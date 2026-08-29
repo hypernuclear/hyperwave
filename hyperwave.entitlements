@@ -2,7 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Deliberately near-empty.
+	<!-- The entitlements a LOCAL build is signed with. Never a released one:
+	     see hyperwave-release.entitlements, which is what
+	     scripts/package-macos.sh uses.
+
+	     The two keys below let a debugger attach to a Developer-ID-signed
+	     build, and com.apple.security.get-task-allow is an automatic
+	     notarization refusal -- Apple rejects anything carrying it, reporting
+	     only "status: Invalid" unless you go and fetch the log by submission
+	     id. If these ever reach a release signature again, that is the
+	     symptom to expect.
+
+	     Deliberately near-empty otherwise.
 	     Not sandboxed. System audio capture via CoreAudio process taps is
 	     gated by a TCC grant (kTCCServiceAudioCapture), not by an
 	     entitlement, and it is not clear that taps are permitted under App
