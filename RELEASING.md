@@ -171,10 +171,10 @@ DMG of the wrong thing.
   artwork; nothing downstream needs to change.
 - **No DMG background art.** `packaging/macos/dmg-background.tiff` is optional
   in the script; without it create-dmg uses a plain window.
-- **Windows is unproven.** The backend had never been run on Windows when this
-  was written. Shipping a Windows build in the first release is a decision to
-  make deliberately, not a default -- dropping the `windows` matrix entry is a
-  three-line change and the macOS half is unaffected.
+- **Windows has been run, once, by hand.** It builds and packages in CI and
+  works on a real machine. What has never happened there is a signed installer
+  or an applied update: those steps are tag-gated, so the first release is the
+  first time they run.
 - **None of this pipeline has been executed.** The macOS packaging script has
   been run locally and produces a DMG; everything above it -- signing with a
   real identity, notarization, the appcast, the R2 upload -- has not.

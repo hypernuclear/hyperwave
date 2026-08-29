@@ -9,51 +9,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-08-28
 
-### Fixed
-- The ring was fuzzy and drew outside itself. Its bloom ran at a quarter
-  resolution, which on a 44-pixel square status item is an eleven-pixel texture
-  -- blurred and composited back, that reads as being out of focus rather than
-  as glow -- so the divisor now backs off on small targets. And the stroke
-  width, the coloured copies' offset and the spring's overshoot were all pushing
-  past the radius without being budgeted for, so a loud passage clipped against
-  the top of the item.
-- The microphone ran most of a second late. The output ring discards its backlog
-  every tick to stay current and the input ring did not, so with two devices on
-  two clocks the excess simply accumulated until the ring was full and stayed
-  there. It now keeps only the block about to be mixed, which is much less than
-  the output keeps: the analyser reads a whole FFT frame out of the output ring,
-  while anything in the input ring beyond the current block is not early but
-  late. Measured queue depth went from 65,536 frames to about 1,024 -- roughly
-  680 ms to 11 ms at 96 kHz -- and the depth is now shown in the HUD and in
-  `--verify-audio`, because a queue that grows is latency and should be visible
-  rather than inferred.
-- The glow flipped every frame vertically. The post-process takes its texture
-  coordinate from the fullscreen triangle's vertex position, and clip space is
-  y-up where an uploaded QImage is v-down, so each frame was sampled upside down
-  and read back mirrored -- invisible on a symmetric look, glaring on the bars,
-  whose peak dots ended up under the bars.
-- `HYPERWAVE_FAKE_AUDIO` did nothing. It was parsed into an option that nothing
-  read, while the README and a VS Code configuration both claimed it made
-  previews behave identically on any machine. It now synthesises into the
-  analyser's input, so the FFT, band mapping and ballistics run exactly as they
-  do on real audio, and it is broadband rather than a handful of tones -- pure
-  partials light a few bands and leave the rest at the floor, which made looks
-  that depend on contrast appear broken when they were working.
-- The strand and terrain settings fought back while being typed into. A spin box
-  emitted on every keystroke, and each emission came round as a re-seed that
-  rewrote the text under the cursor, so the field never seemed to let go. It
-  commits on Enter or focus-out now, and a change is no longer echoed back to
-  the panel it came from.
-- Every value lost precision each time a panel was seeded. Setting a slider
-  emitted valueChanged, whose handler wrote the position back through a
-  thousand-step quantisation: 0.12 became 0.11998, 0.8 became 0.7981, and the
-  degraded numbers were saved the next time any other control moved. A control
-  being told what to show no longer answers back.
+First release.
 
-- `--windowed` segfaulted on launch. The windowed surface has no presenter, and
-  `rebuildStyle()` dereferenced one unconditionally to ask whether it preferred
-  a compact strip — so the mode documented as the way to iterate on the visuals,
-  and committed as a VS Code configuration, crashed before drawing a frame.
+### What it is
+
+**The visualiser.** Six looks, switched in `Appearance` or with `--viz` for one
+run: **Bars**, twenty-eight of them with peak-hold dots and a gradient anchored
+to the strip rather than to each bar; **Mirror**, the same bars grown from the
+centre line through an underdamped spring so they overshoot and settle;
+**Lines**, a wall of upright strokes that flash rather than pulse; **Ring**, a
+closed outline pushed outward by the spectrum and drawn five times in separated
+colours; **Strands**, a bundle of lines wrapped around an axis on the GPU
+through QRhi; and **Terrain**, time slices stacking away from you under
+perspective.
+
+**Colour.** Five ramps -- `signature`, `ember`, `lagoon`, `rainbow` and `mono`,
+the last taking the menu bar's own foreground so it follows light and dark.
+`rainbow` runs left to right on the bar-shaped looks and along depth on terrain
+and strands, so the nearest ridge is the start of the ramp. Chosen in the menu
+or with `--gradient`.
+
+**Capture.** System audio on macOS through CoreAudio process taps: no virtual
+audio driver, no Screen Recording permission. The source list is output devices
+rather than applications, because CoreAudio will say whether a process holds an
+open stream but not whether it is making a sound. A microphone or line-in can be
+mixed in alongside, on by default and switchable off.
+
+**Permission.** Silence is never treated as denial. A tap without the
+system-audio grant delivers digital silence, and so does a quiet machine; the
+only hard evidence of refusal is the tap failing to be created, so
+"System Audio Access…" is always in the menu rather than appearing when the app
+has guessed it is being denied.
+
+**On a notched Mac**, a panel anchored under the camera housing, because a
+status item on a crowded menu bar can be pushed underneath the notch while macOS
+still reports it as visible. It is additional, never a replacement.
+
+**Glow**, per look rather than one switch for everything: a bright pass, a
+separable Gaussian, a radial ray march and a composite with lateral chromatic
+aberration, running over whatever a look drew.
+
+**A settings window** with every parameter of the running look, each taking
+effect on the next frame and saved as it changes.
+
+**Auto-updates**, Sparkle on macOS and WinSparkle on Windows, reading one
+appcast and verifying one ed25519 signature.
+
+**Usage analytics**, on by default and switchable off in the menu. Nothing the
+app hears ever leaves the machine -- no audio, no track titles, no application
+or device names. A build without an app key compiled in has no backend at all.
+See "What it sends" in the README.
+
+**Under it all**, a shared analysis chain with no platform code in it:
+hand-written real FFT, geometric band mapping, ballistics, a lock-free ring, and
+one QPainter renderer that every surface draws from, so the platforms cannot
+drift into showing different pictures. Headless tests cover the ring, the FFT
+against a naive DFT, the ballistics and the spectrum. CI fetches open-source Qt
+rather than assuming one is installed.
 
 ### Added
 - Usage analytics, on by default and switchable off in the menu. Nothing about
@@ -175,6 +187,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `install-qt-action` with aqtinstall pinned to a commit that understands Qt
   6.11's repository layout, building and testing arm64 and x86_64 on every push
   and pull request.
+
+### Fixed
+- The ring was fuzzy and drew outside itself. Its bloom ran at a quarter
+  resolution, which on a 44-pixel square status item is an eleven-pixel texture
+  -- blurred and composited back, that reads as being out of focus rather than
+  as glow -- so the divisor now backs off on small targets. And the stroke
+  width, the coloured copies' offset and the spring's overshoot were all pushing
+  past the radius without being budgeted for, so a loud passage clipped against
+  the top of the item.
+- The microphone ran most of a second late. The output ring discards its backlog
+  every tick to stay current and the input ring did not, so with two devices on
+  two clocks the excess simply accumulated until the ring was full and stayed
+  there. It now keeps only the block about to be mixed, which is much less than
+  the output keeps: the analyser reads a whole FFT frame out of the output ring,
+  while anything in the input ring beyond the current block is not early but
+  late. Measured queue depth went from 65,536 frames to about 1,024 -- roughly
+  680 ms to 11 ms at 96 kHz -- and the depth is now shown in the HUD and in
+  `--verify-audio`, because a queue that grows is latency and should be visible
+  rather than inferred.
+- The glow flipped every frame vertically. The post-process takes its texture
+  coordinate from the fullscreen triangle's vertex position, and clip space is
+  y-up where an uploaded QImage is v-down, so each frame was sampled upside down
+  and read back mirrored -- invisible on a symmetric look, glaring on the bars,
+  whose peak dots ended up under the bars.
+- `HYPERWAVE_FAKE_AUDIO` did nothing. It was parsed into an option that nothing
+  read, while the README and a VS Code configuration both claimed it made
+  previews behave identically on any machine. It now synthesises into the
+  analyser's input, so the FFT, band mapping and ballistics run exactly as they
+  do on real audio, and it is broadband rather than a handful of tones -- pure
+  partials light a few bands and leave the rest at the floor, which made looks
+  that depend on contrast appear broken when they were working.
+- The strand and terrain settings fought back while being typed into. A spin box
+  emitted on every keystroke, and each emission came round as a re-seed that
+  rewrote the text under the cursor, so the field never seemed to let go. It
+  commits on Enter or focus-out now, and a change is no longer echoed back to
+  the panel it came from.
+- Every value lost precision each time a panel was seeded. Setting a slider
+  emitted valueChanged, whose handler wrote the position back through a
+  thousand-step quantisation: 0.12 became 0.11998, 0.8 became 0.7981, and the
+  degraded numbers were saved the next time any other control moved. A control
+  being told what to show no longer answers back.
+
+- `--windowed` segfaulted on launch. The windowed surface has no presenter, and
+  `rebuildStyle()` dereferenced one unconditionally to ask whether it preferred
+  a compact strip — so the mode documented as the way to iterate on the visuals,
+  and committed as a VS Code configuration, crashed before drawing a frame.
+
+### Known limits
+
+- **Linux is stubs.** It compiles and displays nothing.
+- Track title, artist and transport controls are deliberately absent. The
+  plumbing they needed -- per-app AppleScript, since `MediaRemote` has been
+  entitlement-gated since macOS 15.4 -- cost a permission prompt per controlled
+  app and worked for two of them.
 
 [Unreleased]: https://github.com/hypernuclear/hyperwave/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/hypernuclear/hyperwave/releases/tag/v0.1.0
