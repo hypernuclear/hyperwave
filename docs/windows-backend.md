@@ -289,9 +289,10 @@ sensible timer interval.
 
 ## What exists now
 
-Written, and compiled by nothing yet -- there was no Windows machine in the loop
-when it was written, so the CI job is its first real test. Expect the first run
-to be red and treat what it says as the starting point.
+Written without a Windows machine in the loop, then compiled by CI and run on a
+real one. It works. What follows is what was built and why; the reasoning above
+it is the decision record, kept because the alternatives get re-proposed
+otherwise.
 
 - **`WasapiSource.cpp`** -- real loopback capture. Activates the render endpoint,
   initialises with `AUDCLNT_STREAMFLAGS_LOOPBACK`, polls `IAudioCaptureClient`

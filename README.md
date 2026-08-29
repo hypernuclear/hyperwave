@@ -346,10 +346,10 @@ open build/hyperwave.app
 - macOS 14.2 or later (process taps landed in 14.2)
 - Qt 6.11+ — the online installer, at `~/Qt/6.11.x/macos`
 
-**Windows has a backend but no odometer reading yet.** WASAPI loopback capture,
-a docked application desktop toolbar and a tray icon are all written; none of it
-had been run on Windows at the time of writing, and CI is what compiles it. Treat
-it as unproven rather than as working. Linux is still stubs.
+**Windows works.** WASAPI loopback capture, a docked application desktop toolbar
+and a tray icon, built and packaged by CI and exercised on a real machine. It is
+newer than the macOS side and has had far less use, so treat rough edges as
+likely rather than surprising. Linux is still stubs.
 [docs/windows-backend.md](docs/windows-backend.md) has the decisions, the build
 order and the traps.
 
