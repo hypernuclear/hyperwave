@@ -4,6 +4,7 @@
 #include <memory>
 
 #include <QString>
+#include <QThread>
 #include <QTimer>
 
 #include "audio/AudioSource.h"
@@ -85,6 +86,11 @@ private:
     void removeListeners();
     void sweepOrphanedTaps();
     void refreshOutputDevice();
+    // Main thread. Hands the work below to the meter thread and returns.
+    void dispatchMeterRefresh();
+    // Meter thread. Enumerating processes and rebuilding the tap set are both
+    // long runs of synchronous calls into coreaudiod, and the main thread is
+    // where the strip is drawn.
     void refreshMeterProcesses();
     bool restartCapture();
     void noteHardwareChange();
@@ -104,8 +110,18 @@ private:
     // per candidate process, so "which apps are audible" is measured rather
     // than inferred from a property that cannot answer it.
     mutable AudioLevelMeter m_meter;
-    QTimer m_meterRefresh;    // debounce after a process-list change
+    QTimer m_meterRefresh;    // debounce after a process-list change, on the main thread
     QTimer m_meterFallback;   // slow backstop in case a notification is missed
+
+    // Declared after m_meter so it is torn down first: the refresh captures a
+    // bare `this`, and the thread must be joined before anything it reaches
+    // through that can go away. The destructor does not rely on this ordering
+    // -- it joins explicitly -- but getting it wrong here would be silent.
+    QThread m_meterThread;
+    // Lives on m_meterThread and exists only to be something to queue onto.
+    // A bare QObject rather than a worker class because the work is already a
+    // member function; this just gives it an event loop to arrive on.
+    QObject *m_meterContext = nullptr;
 
     std::atomic<std::uint64_t> m_callbackCount{0};
     std::atomic<std::uint64_t> m_overruns{0};

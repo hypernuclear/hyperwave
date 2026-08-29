@@ -40,13 +40,27 @@ public:
     AudioLevelMeter(const AudioLevelMeter &) = delete;
     AudioLevelMeter &operator=(const AudioLevelMeter &) = delete;
 
+    // Threading. setProcesses() and stop() take a lock and may be called from
+    // any thread; in practice setProcesses() runs on the meter thread and
+    // stop() on the main one, and that lock is what makes a shutdown landing in
+    // the middle of a rebuild safe. levelDb() and isAudible() are readers and
+    // take a different, much shorter lock, so opening the menu never ends up
+    // waiting on coreaudiod.
+
     // The processes to meter, by CoreAudio object id. Rebuilds the tap set only
     // when the membership actually changes -- tearing an aggregate down and
     // building it back up on every poll would be far more expensive than the
-    // measurement it exists to take.
+    // measurement it exists to take -- and even then rebuilds only the
+    // difference, keeping every tap that is still wanted alive across it.
     void setProcesses(const QVector<quint32> &objectIds);
 
     void stop();
+
+    // Re-arms the meter after stop(). stop() latches it off on purpose: a
+    // refresh already in flight when the source shut down would otherwise build
+    // a fresh tap set immediately afterwards and leave it running with nothing
+    // left to read it.
+    void setEnabled(bool enabled);
 
     // Peak level seen recently, in dBFS. -120 for silent, unmetered or unknown.
     //

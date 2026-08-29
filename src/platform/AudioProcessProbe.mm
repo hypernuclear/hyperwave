@@ -1,6 +1,7 @@
 #include "platform/AudioProcessProbe.h"
 
 #include <algorithm>
+#include <mutex>
 #include <unistd.h>
 #include <vector>
 
@@ -63,9 +64,20 @@ bool readIsPlaying(AudioObjectID object)
 // dominating everything else it does, ahead of the FFT, the renderer and the
 // per-application metering combined, purely because it ran for every process
 // once a second. Names do not change for the life of a process, so ask once.
+//
+// Locked, because there are now two callers on two threads: the meter refresh
+// runs on hyperwave.meter and the menu asks the same question from the main
+// thread. Two writers in one QHash is a crash, not a stale read. The
+// LaunchServices lookup happens under the lock as well -- it is the thing being
+// cached, and serialising the rare miss is cheaper than a second cache design.
+// (The AppKit calls themselves are safe away from the main thread: these are
+// read-only queries on NSRunningApplication, NSWorkspace and NSFileManager,
+// none of which touch the view layer.)
 QString cachedName(pid_t pid)
 {
+    static std::mutex mutex;
     static QHash<qint64, QString> cache;
+    const std::lock_guard<std::mutex> lock(mutex);
     const auto key = static_cast<qint64>(pid);
     const auto it = cache.constFind(key);
     if (it != cache.constEnd())
@@ -101,7 +113,9 @@ QString appNameForBundleId(const QString &bundleId)
 {
     if (bundleId.isEmpty())
         return {};
+    static std::mutex mutex;
     static QHash<QString, QString> cache;
+    const std::lock_guard<std::mutex> lock(mutex);
     const auto it = cache.constFind(bundleId);
     if (it != cache.constEnd())
         return *it;
