@@ -33,6 +33,29 @@ DMG="$BUILD_DIR/hyperwave-${VERSION}-macos-${ARCH}.dmg"
 
 [ -d "$APP" ] || { echo "no bundle at $APP -- build first" >&2; exit 1; }
 
+# --- the entitlements have to be valid XML ---------------------------------
+#
+# Checked here, in the first second of the script, because codesign checks it
+# in the last: an invalid file is only rejected when the app itself is signed,
+# which is after macdeployqt, the prune, the thin and forty individual
+# signatures. On a runner that is several minutes to be told
+# "AMFIUnserializeXML: syntax error near line 13".
+#
+# `plutil -lint` is NOT sufficient and is the reason this exists. It accepted a
+# file whose comment contained a double hyphen -- illegal inside an XML comment,
+# and rejected by the parser Apple's code signing actually uses. xmllint catches
+# it; plutil does not.
+ENTITLEMENTS="$REPO_ROOT/hyperwave-release.entitlements"
+if command -v xmllint >/dev/null; then
+    if ! xmllint --noout "$ENTITLEMENTS" 2>/tmp/hw-ent-err; then
+        echo "ERROR: $ENTITLEMENTS is not valid XML:" >&2
+        sed 's/^/       /' /tmp/hw-ent-err >&2
+        rm -f /tmp/hw-ent-err
+        exit 1
+    fi
+    rm -f /tmp/hw-ent-err
+fi
+
 # --- is the bundle actually current? ---------------------------------------
 #
 # This script signs and packages; it does NOT compile. Refuse to package a
@@ -256,7 +279,7 @@ if [ -n "$IDENTITY" ]; then
     # carries get-task-allow so a debugger can attach, and Apple refuses to
     # notarize anything signed with it.
     codesign --force --options runtime --timestamp \
-             --entitlements "$REPO_ROOT/hyperwave-release.entitlements" \
+             --entitlements "$ENTITLEMENTS" \
              --sign "$IDENTITY" "$APP"
 
     # Refuse to hand Apple something it is guaranteed to reject.

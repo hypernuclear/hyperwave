@@ -8,7 +8,7 @@
 
 	     The two keys below let a debugger attach to a Developer-ID-signed
 	     build, and com.apple.security.get-task-allow is an automatic
-	     notarization refusal -- Apple rejects anything carrying it, reporting
+	     notarization refusal — Apple rejects anything carrying it, reporting
 	     only "status: Invalid" unless you go and fetch the log by submission
 	     id. If these ever reach a release signature again, that is the
 	     symptom to expect.
