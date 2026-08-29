@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The entitlements a DISTRIBUTED build is signed with. Used by
+	     scripts/package-macos.sh; hyperwave.entitlements is the local
+	     development pair, and the difference between them is the point.
+
+	     What must NOT be here, and is why this file exists at all:
+	     com.apple.security.get-task-allow, which lets a debugger attach.
+	     Apple's notary service refuses outright to notarize anything
+	     carrying it, and it says so only in a log that has to be fetched
+	     separately by submission id -- so the failure arrives as
+	     "status: Invalid" with no reason attached. That is what v0.1.0's
+	     first tag cost. com.apple.security.cs.debugger is the same class of
+	     thing and is likewise absent.
+
+	     Not sandboxed. System audio capture via CoreAudio process taps is
+	     gated by a TCC grant (kTCCServiceAudioCapture), not by an
+	     entitlement, and it is not clear taps are permitted under App Sandbox
+	     at all. Sandboxing would buy nothing and might cost the one feature
+	     this app has.
+
+	     The single entitlement below exists for Sparkle. A hardened-runtime
+	     app has to be allowed to relaunch itself after the updater swaps the
+	     binary, and that relaunch is an Apple Event to itself. Without it the
+	     update installs and the app never comes back, which looks like the
+	     update broke it. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>
