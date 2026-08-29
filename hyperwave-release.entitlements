@@ -10,7 +10,7 @@
 	     com.apple.security.get-task-allow, which lets a debugger attach.
 	     Apple's notary service refuses outright to notarize anything
 	     carrying it, and it says so only in a log that has to be fetched
-	     separately by submission id -- so the failure arrives as
+	     separately by submission id — so the failure arrives as
 	     "status: Invalid" with no reason attached. That is what v0.1.0's
 	     first tag cost. com.apple.security.cs.debugger is the same class of
 	     thing and is likewise absent.
