@@ -365,7 +365,7 @@ Qt is found automatically: `QT_ROOT` if set, otherwise the newest
 `~/Qt/6.*/macos`. Override with `-DCMAKE_PREFIX_PATH=...`, or keep a local
 `CMakeUserPresets.json` (git-ignored) with a preset inheriting `dev`.
 
-Every build is code-signed with the Hypernuclear Developer ID. That is not about
+Every build is code-signed with the hypernuclear Developer ID. That is not about
 distribution — an ad-hoc signature is keyed by the code hash, so each rebuild
 would look like a brand new app and re-prompt for the audio permission forever.
 

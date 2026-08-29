@@ -280,7 +280,7 @@ void AudioLevelMeter::setProcesses(const QVector<quint32> &objectIds)
             initStereoMixdownOfProcesses:@[ @(static_cast<AudioObjectID>(objectId)) ]];
         // The prefix matters: the startup sweep in CoreAudioTapSource destroys
         // orphans by name, and these have to be caught by it too.
-        desc.name = [NSString stringWithFormat:@"Hyperwave Meter %u", objectId];
+        desc.name = [NSString stringWithFormat:@"hyperwave Meter %u", objectId];
         desc.UUID = [NSUUID UUID];
         desc.privateTap = YES;
         desc.muteBehavior = CATapUnmuted;   // metering must never silence anyone
@@ -329,7 +329,7 @@ void AudioLevelMeter::setProcesses(const QVector<quint32> &objectIds)
         @(kAudioAggregateDeviceUIDKey) :
             [NSString stringWithFormat:@"com.hypernuclear.hyperwave.meter.%@",
                                        [[NSUUID UUID] UUIDString]],
-        @(kAudioAggregateDeviceNameKey) : @"Hyperwave Meter",
+        @(kAudioAggregateDeviceNameKey) : @"hyperwave Meter",
         @(kAudioAggregateDeviceIsPrivateKey) : @1,
         @(kAudioAggregateDeviceIsStackedKey) : @0,
         @(kAudioAggregateDeviceTapListKey) : tapList,

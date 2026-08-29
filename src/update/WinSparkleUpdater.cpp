@@ -21,7 +21,11 @@ WinSparkleUpdater::WinSparkleUpdater(QObject *parent)
     //   set_app_build_version  the value compared against <sparkle:version>
     // Passing only the first would make WinSparkle compare marketing strings,
     // and "0.1.0" never sorts above "0.1.0".
-    win_sparkle_set_app_details(L"Hypernuclear", L"hyperwave",
+    // Lowercase like everywhere else the user can read it. Safe to change after
+    // shipping: WinSparkle keys its settings off this, but under HKCU, and the
+    // registry does not care about case -- an existing install keeps whatever
+    // it had stored.
+    win_sparkle_set_app_details(L"hypernuclear", L"hyperwave",
                                 QStringLiteral(HYPERWAVE_VERSION).toStdWString().c_str());
     win_sparkle_set_app_build_version(
         QStringLiteral(HYPERWAVE_VERSION_BUILD).toStdWString().c_str());

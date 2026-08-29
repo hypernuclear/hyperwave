@@ -21,7 +21,7 @@
 AppName=hyperwave
 AppVersion={#AppVersion}
 AppVerName=hyperwave {#AppVersion}
-AppPublisher=Hypernuclear LLC
+AppPublisher=hypernuclear LLC
 AppPublisherURL=https://hypernuclear.com
 DefaultDirName={autopf}\hyperwave
 DefaultGroupName=hyperwave

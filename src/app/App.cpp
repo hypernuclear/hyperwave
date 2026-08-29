@@ -1015,7 +1015,7 @@ void App::showAbout()
     box.setInformativeText(QStringLiteral("A system audio visualiser that lives in the menu bar."
                                           "<br><br>Capture: %1<br>Rate: %2 Hz<br><br>"
                                           "<a href=\"https://hypernuclear.com\">hypernuclear.com</a>"
-                                          "<br>© 2026 Hypernuclear LLC")
+                                          "<br>© 2026 hypernuclear LLC")
                                .arg(m_audio->source()->statusDetail().toHtmlEscaped())
                                .arg(m_audio->source()->sampleRate(), 0, 'f', 0));
     box.setStandardButtons(QMessageBox::Ok);

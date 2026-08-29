@@ -25,11 +25,18 @@ namespace hyperwave {
 
 namespace {
 
-constexpr const char *kTapName = "Hyperwave System Audio";
+// Lowercase because a user can see it: an orphaned tap shows up in Audio MIDI
+// Setup under this name.
+constexpr const char *kTapName = "hyperwave System Audio";
 
 // Every tap this app creates starts with this, so the startup sweep can find
 // orphans from a previous run without knowing which kind they were.
-constexpr const char *kTapNamePrefix = "Hyperwave";
+//
+// Matched case-insensitively, which is not fussiness. Builds up to 0.1.0 named
+// their taps "Hyperwave ...", and those are exactly the ones that might be
+// lying around when a newer build first runs. A case-sensitive sweep would walk
+// straight past every orphan the old name left behind.
+constexpr const char *kTapNamePrefix = "hyperwave";
 
 // Frames of scratch on the realtime stack. A device handing us more than this
 // in one callback would mean a buffer longer than 170 ms, which no output
@@ -379,7 +386,7 @@ bool CoreAudioTapSource::buildAggregate(bool includeOutputDevice)
 
     NSMutableDictionary *composition = [@{
         @(kAudioAggregateDeviceUIDKey) : aggUid,
-        @(kAudioAggregateDeviceNameKey) : @"Hyperwave Analyzer",
+        @(kAudioAggregateDeviceNameKey) : @"hyperwave Analyzer",
         // Private: it does not appear in Sound preferences and it dies with us.
         @(kAudioAggregateDeviceIsPrivateKey) : @1,
         @(kAudioAggregateDeviceIsStackedKey) : @0,
@@ -946,7 +953,12 @@ void CoreAudioTapSource::sweepOrphanedTaps()
         AudioObjectPropertyAddress da = addr(kAudioTapPropertyDescription);
         if (AudioObjectGetPropertyData(tap, &da, 0, nullptr, &descSize, &desc) != noErr || !desc)
             continue;
-        if ([desc.name hasPrefix:@"Hyperwave"]) {
+        // hasPrefix: is case-sensitive, and the name it is looking for changed
+        // case in 0.1.1. See kTapNamePrefix.
+        const NSRange match =
+            [desc.name rangeOfString:@(kTapNamePrefix)
+                             options:NSCaseInsensitiveSearch | NSAnchoredSearch];
+        if (match.location != NSNotFound) {
             qInfo("hyperwave: destroying an orphaned tap from a previous run");
             AudioHardwareDestroyProcessTap(tap);
         }
