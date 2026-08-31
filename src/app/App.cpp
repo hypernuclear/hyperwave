@@ -309,6 +309,7 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
     connect(p, &BarPresenter::screenConfigurationChanged, this, [this] {
         // A different bar is a different amount of room, so the last verdict on
         // whether the status item fits does not carry over.
+        qInfo("hyperwave: displays changed, reviewing surfaces");
         m_barObscured = false;
         scheduleSurfaceReview();
     });
@@ -755,8 +756,15 @@ void App::reviewSurfaces()
     if (m_options.windowed)
         return;
     const bool wantNotch = notchPanelWanted();
-    if (wantNotch == (m_notchSurface != nullptr) && wantNotch == (m_barSurface == nullptr))
-        return;   // already showing the right one, and only the right one
+    if (wantNotch == (m_notchSurface != nullptr) && wantNotch == (m_barSurface == nullptr)) {
+        // The right surface -- but not necessarily in the same menu bar it was
+        // last checked against. Opening a lid moves the bar to another screen,
+        // with different room and a housing on it, without changing which
+        // surface is the correct one to be using. Tying the check to a surface
+        // swap meant that case was never looked at.
+        scheduleBarVerification();
+        return;
+    }
     // The wanted surface is installed before the unwanted one is taken away.
     // install() can refuse -- a status item can fail to be created, and the
     // panel refuses outright when the housing has gone -- and the order means a
@@ -784,10 +792,16 @@ void App::reviewSurfaces()
     // up, so the one that stayed is now describing the wrong thing.
     refreshMenu();
     qInfo("hyperwave: drawing in the %s", m_notchSurface ? "notch panel" : "menu bar");
+    scheduleBarVerification();
+}
+
+void App::scheduleBarVerification()
+{
+    if (!m_barSurface || m_barObscured)
+        return;
     // Deferred, because the item has no frame until AppKit has laid the bar
     // out, and asking before then reads a zero rect that intersects nothing.
-    if (m_barSurface && !m_barObscured)
-        QTimer::singleShot(kBarPlacementSettleMs, this, &App::verifyBarSurface);
+    QTimer::singleShot(kBarPlacementSettleMs, this, &App::verifyBarSurface);
 }
 void App::retireSurface(Surface *&slot)
 {

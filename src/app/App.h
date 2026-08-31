@@ -149,6 +149,10 @@ private:
     // where it is invisible and unclickable -- and since the panel is the thing
     // being turned off to get there, that state has no way back.
     void verifyBarSurface();
+    // Queues that check. Called after every review, including the ones that
+    // change nothing: the menu bar the item sits in can be replaced underneath
+    // it while the answer to "which surface" stays the same.
+    void scheduleBarVerification();
     // Detaches a surface now and destroys it one turn of the event loop later.
     // The swap can be driven from a menu action, and the menu belongs to the
     // presenter being taken away.
