@@ -733,13 +733,14 @@ bool App::notchAvailable() const
 
 bool App::notchPanelWanted() const
 {
-    if (!MacNotchPresenter::isAvailable())
+    // Through notchAvailable(), which is where the platform guard lives, so
+    // that this stays a statement about the preference rather than about macOS.
+    if (!notchAvailable())
         return false;
     // The preference, unless honouring it would put the strip somewhere nobody
     // can see or click. m_barObscured is only ever set by having tried, so a
     // menu bar that has room is still a menu bar the user gets to choose.
     return m_settings.useNotchPanel() || m_barObscured;
-    return false;
 }
 void App::verifyBarSurface()
 {
@@ -780,12 +781,14 @@ void App::reviewSurfaces()
     // panel refuses outright when the housing has gone -- and the order means a
     // refusal leaves the old surface up rather than leaving nothing at all.
     if (wantNotch) {
+#ifdef Q_OS_MACOS
         if (!m_notchSurface)
             addSurface(std::make_unique<MacNotchPresenter>(this), true);
         if (m_notchSurface) {
             retireSurface(m_barSurface);
             setNotchTabVisible(true);
         }
+#endif
     } else {
         if (!m_barSurface)
             addSurface(BarPresenter::create(this), false);
