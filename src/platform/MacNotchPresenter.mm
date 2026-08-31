@@ -322,6 +322,10 @@ struct MacNotchPresenter::Impl
     bool tabVisible = true;
     int preferredFps = 60;
     bool clockRunning = false;
+    // Ordered out because the housing went away under us. Tracked rather than
+    // re-ordered every frame: ordering a window front on every geometry change
+    // fights with whatever else is at NSStatusWindowLevel.
+    bool offScreen = false;
 
     // Two, for the same reason the status item needs two: Core Animation reads
     // the bytes after present() returns.
@@ -513,7 +517,11 @@ bool MacNotchPresenter::isVisibleOnScreen() const
     // The window is ours and always ordered front; there is no overflow to be
     // pushed into and no other app's items to be crowded out by. That is the
     // entire point of drawing here.
-    return m_impl->window != nil;
+    //
+    // The geometry check is the exception: between the lid closing and App
+    // dropping the surface, the window is still alive but there is no housing
+    // to draw under, and frames spent on it go nowhere visible.
+    return m_impl->window != nil && m_impl->geometry.valid;
 }
 
 bool MacNotchPresenter::isExpanded() const
@@ -627,6 +635,28 @@ void MacNotchPresenter::applyFrame()
         return;
 
     const NotchGeometry &g = m_impl->geometry;
+
+    // No housing on the screen that owns the menu bar: the lid was shut and an
+    // external display took over. notchGeometry() zeroes the notch but still
+    // fills in screenFrame, so laying out from it produced a zero-width,
+    // tab-height window parked at the top centre of a display with no notch to
+    // hide it -- ordered front, at NSStatusWindowLevel, being drawn into.
+    //
+    // App tears the surface down when it notices, but that is coalesced behind
+    // a timer and this runs first, straight off the screen notification.
+    if (!g.valid) {
+        if (!m_impl->offScreen) {
+            m_impl->view.stripLayer.hidden = YES;
+            [m_impl->window orderOut:nil];
+            m_impl->offScreen = true;
+        }
+        return;
+    }
+    if (m_impl->offScreen) {
+        [m_impl->window orderFrontRegardless];
+        m_impl->offScreen = false;
+    }
+
     CGFloat width = g.notchWidth;
     CGFloat height = g.notchHeight;
 

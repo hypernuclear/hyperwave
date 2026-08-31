@@ -583,6 +583,16 @@ void App::onGeometryChanged(Surface &surface)
 {
     if (!surface.presenter)
         return;
+    // Only from the status item. It is the surface that survives every display
+    // configuration, so its geometry changes are the reliable signal that the
+    // screens moved -- and unlike the panel, it does not emit this signal in
+    // response to its own expanding, collapsing and tab-hiding, which would
+    // restart the review timer every time the audio fell silent.
+#ifdef Q_OS_MACOS
+    if (!surface.isNotch)
+        scheduleNotchReview();
+#endif
+
     surface.heightPt = surface.presenter->heightPt();
     surface.dpr = surface.presenter->devicePixelRatio() * m_options.previewScale;
     rebuildStyle(surface);
@@ -685,6 +695,81 @@ void App::onAudioBecameActive()
     }
     setNotchTabVisible(true);
 }
+
+void App::scheduleNotchReview()
+{
+    if (m_options.windowed)
+        return;
+
+    if (!m_notchReview) {
+        m_notchReview = new QTimer(this);
+        m_notchReview->setSingleShot(true);
+        // NSApplicationDidChangeScreenParametersNotification arrives while the
+        // configuration is still settling, and arrives two or three times for
+        // one lid movement. Acting on the first builds the panel against
+        // geometry that is about to change again, then tears it straight back
+        // down -- visible as the tab flickering in and out on every dock.
+        m_notchReview->setInterval(250);
+        connect(m_notchReview, &QTimer::timeout, this, &App::reviewNotchAvailability);
+    }
+    // restart, not start: the last notification of a burst is the one whose
+    // geometry is worth reading.
+    m_notchReview->start();
+}
+
+void App::reviewNotchAvailability()
+{
+#ifdef Q_OS_MACOS
+    const bool available = MacNotchPresenter::isAvailable();
+    if (available == (m_notchSurface != nullptr))
+        return;
+
+    if (available) {
+        addSurface(std::make_unique<MacNotchPresenter>(this), true);
+        // install() can still refuse, in which case nothing was added and the
+        // next screen change will try again.
+        if (!m_notchSurface)
+            return;
+        applyFrameRate();
+        // Neither of these is part of addSurface(): the panel carries its own
+        // copy of the menu, and its own source picker.
+        refreshMenu();
+        setNotchTabVisible(true);
+        qInfo("hyperwave: notch panel added, the menu bar screen has a housing");
+    } else {
+        removeNotchSurface();
+        // The "Hide notch panel when silent" entry is conditional on the panel
+        // existing, so the menu is now describing something that is gone.
+        refreshMenu();
+        qInfo("hyperwave: notch panel removed, the menu bar screen has no housing");
+    }
+#endif
+}
+
+void App::removeNotchSurface()
+{
+    if (!m_notchSurface)
+        return;
+
+    const auto it = std::find_if(m_surfaces.begin(), m_surfaces.end(),
+                                 [this](const std::unique_ptr<Surface> &s) {
+                                     return s.get() == m_notchSurface;
+                                 });
+    m_notchSurface = nullptr;
+    if (it == m_surfaces.end())
+        return;
+
+    // Explicitly, before the erase. Waiting for ~MacNotchPresenter would work,
+    // but this way the window is ordered out on this turn of the event loop
+    // rather than at whatever point the unique_ptr happens to run down.
+    if ((*it)->presenter)
+        (*it)->presenter->remove();
+
+    // The surfaces are held behind unique_ptr, so erasing one does not move the
+    // others: m_menuSurface stays pointing at the same Surface it always did.
+    m_surfaces.erase(it);
+}
+
 void App::setNotchTabVisible(bool visible)
 {
     if (!m_notchSurface)

@@ -129,6 +129,14 @@ private:
 
     void applyFrameRate();
     void setNotchTabVisible(bool visible);
+    // The notch panel comes and goes with the display. Closing the lid on a
+    // docked MacBook takes the housing away and hands the menu bar to an
+    // external screen; opening it hands it back. Deciding once at startup meant
+    // launching in clamshell produced no panel for the whole session, and
+    // closing the lid left the panel installed against zeroed geometry.
+    void scheduleNotchReview();
+    void reviewNotchAvailability();
+    void removeNotchSurface();
     MenuModel buildMenu() const;
     void showAbout();
     void relaunch();
@@ -173,6 +181,9 @@ private:
     std::vector<std::unique_ptr<Surface>> m_surfaces;
     Surface *m_menuSurface = nullptr;   // the one that carries the menu
     Surface *m_notchSurface = nullptr;
+    // Coalesces the screen-change notifications behind one review. Built on
+    // first use, so a platform that never schedules a review never makes one.
+    QTimer *m_notchReview = nullptr;
 
     QThread m_dspThread;
     DspWorker *m_worker = nullptr;   // lives on m_dspThread, owned by it
