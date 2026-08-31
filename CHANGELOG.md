@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-31
+
+The notch panel stops being an extra and becomes a choice.
+
+### Changed
+- **On a Mac with a camera housing, the strip now draws in the notch and the
+  menu bar item goes away.** 0.1.0 showed both at once. That was never a
+  decision -- the panel was added as insurance against a status item being
+  crowded under the housing, and nothing ever turned the insured thing off, so
+  the app drew the same strip twice into the same corner of the same screen.
+  Uncheck `Appearance -> Draw in the notch` to put it back in the menu bar; the
+  choice is remembered and applies the moment you make it. Displays with no
+  housing are unaffected and have no such entry.
+- Which surface is up is now decided continuously rather than once at startup,
+  because the answer changes underneath the app. Closing the lid on a docked
+  MacBook takes the housing away and hands the menu bar to another screen;
+  opening it hands it back.
+- The expanded notch panel is the strip and nothing else. It used to carry a
+  dropdown for the audio source, which was a second copy of a list the
+  right-click menu already has and cost the panel a row it did not need.
+- Rebuilding the per-application level meter no longer runs on the main thread.
+  Enumerating processes and rebuilding the tap set are both long runs of
+  synchronous calls into `coreaudiod`, and the main thread is the one drawing
+  the strip.
+- "About" carries a link to hypernuclear.com.
+- `hyper*` product names are lowercase in everything user-visible. Storage keys
+  and the signing identity keep their capitals, since changing those would
+  orphan existing preferences and break the update path.
+
+### Added
+- `Appearance -> Draw in the notch`, to choose between the two surfaces.
+- The panel eases open and shut on hover instead of snapping between its two
+  sizes.
+- A fallback for a menu bar with no room. macOS lays status items out
+  right-to-left and steps straight over the camera housing, so on a crowded bar
+  the slot the app is given can fall underneath it -- where there are no pixels
+  and nothing to click, while `NSStatusItem.visible` still reports `YES`.
+  hyperwave now measures the item against the housing and goes back to the
+  panel if they overlap, holding the tab out so the panel is visible even when
+  the machine is quiet. The menu entry then reads *menu bar is full*; choose it
+  again once you have made room and it retries.
+- Headless tests for the terrain's horizontal centring, across shear and depth
+  and at both ends of its history.
+
+### Fixed
+- The terrain sat off centre, overhanging one edge of the strip and leaving
+  dead space at the other. Its shear is applied so as to be centred on depth,
+  but depth also sets how wide each row is: the nearest row is the widest and
+  takes the whole of the shear in one direction, while the rows taking the
+  other half have been narrowed by perspective. Measured at 6x on a 91pt strip,
+  it overhung the left edge by 14px and left 94px empty on the right.
+- Hovering the notch made the panel flicker between its two sizes instead of
+  settling open. Animating a window's size makes AppKit re-evaluate its
+  tracking areas on every step and emit an exit/enter pair each time, with the
+  pointer stationary and inside the window throughout.
+- Launching with the lid shut on a docked MacBook produced no notch panel for
+  the rest of the session, and closing the lid left the panel laid out against
+  a housing that was no longer there.
+
 ## [0.1.0] - 2026-08-28
 
 First release.
@@ -242,5 +301,6 @@ rather than assuming one is installed.
   entitlement-gated since macOS 15.4 -- cost a permission prompt per controlled
   app and worked for two of them.
 
-[Unreleased]: https://github.com/hypernuclear/hyperwave/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hypernuclear/hyperwave/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hypernuclear/hyperwave/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hypernuclear/hyperwave/releases/tag/v0.1.0
