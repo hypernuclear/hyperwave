@@ -79,12 +79,14 @@ public:
     void emitClicked();
     void emitMenuAction(const QString &actionId);
     void handleHover(bool inside);
-    void handleSourcePick(const QString &uid);
     void setDevices(const AudioDeviceList &devices, const QString &current) override;
     void showMenu();
 
 private:
-    void applyFrame();
+    // `animated` eases the window to its new size, for the hover expand and
+    // collapse. Off everywhere else: a display reconfiguration is a jump, not
+    // a movement, and easing it only makes it look uncertain.
+    void applyFrame(bool animated = false);
 
     struct Impl;
     std::unique_ptr<Impl> m_impl;

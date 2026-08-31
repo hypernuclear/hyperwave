@@ -189,9 +189,13 @@ too crowded for more than 14.
 
 ![expanded](docs/notch-expanded.png)
 
-Hover and it drops down: bigger bars and a dropdown for the audio source. The
-screenshot is the panel alone -- on a notched Mac the strip above the picker
-sits behind the camera housing itself.
+Hover and it eases down into a taller panel: bigger bars, more room. The
+screenshot is the panel alone -- on a notched Mac its top row sits behind the
+camera housing itself.
+
+There is deliberately nothing in it but the strip. It used to carry a dropdown
+for the audio source, which was a second copy of a list the right-click menu
+already has and cost the panel a row it did not need.
 
 **Right-click the panel for the menu.** That is not a convenience; it is the
 only way in on the display this panel exists for. If the status item has been

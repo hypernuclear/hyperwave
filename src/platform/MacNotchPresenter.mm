@@ -73,13 +73,23 @@ constexpr CGFloat kTabHeight = 20.0;
 // changing any one row does not silently start overlapping the next.
 constexpr CGFloat kExpandedOverhang = 96.0;
 constexpr CGFloat kExpandedStripHeight = 54.0;
-constexpr CGFloat kExpandedSourcesHeight = 22.0;
 constexpr CGFloat kExpandedPad = 10.0;
 constexpr CGFloat kCornerRadius = 14.0;
+
 CGFloat expandedHeight(CGFloat notchHeight)
 {
-    return notchHeight + kExpandedPad + kExpandedSourcesHeight + kExpandedPad
-        + kExpandedStripHeight + kExpandedPad;
+    return notchHeight + kExpandedPad + kExpandedStripHeight + kExpandedPad;
+}
+
+// Hover. Expanding is given longer than collapsing: the panel arriving is what
+// the pointer is waiting for, while the panel leaving should get out of the way.
+// The curve is weighted to the finish, so the size settles rather than stopping.
+constexpr NSTimeInterval kExpandSeconds = 0.22;
+constexpr NSTimeInterval kCollapseSeconds = 0.16;
+
+CAMediaTimingFunction *hoverCurve()
+{
+    return [CAMediaTimingFunction functionWithControlPoints:0.2f:0.0f:0.0f:1.0f];
 }
 
 } // namespace
@@ -90,12 +100,6 @@ CGFloat expandedHeight(CGFloat notchHeight)
 @interface HLNotchView : NSView
 @property (nonatomic, assign) hyperwave::MacNotchPresenter *presenter;
 @property (nonatomic, strong) CALayer *stripLayer;
-@property (nonatomic, strong) NSPopUpButton *sources;
-@property (nonatomic, assign) CGFloat notchHeight;
-@property (nonatomic, assign) CGFloat notchWidth;
-@property (nonatomic, assign) BOOL expanded;
-- (void)layoutContent;
-- (void)setDevices:(const hyperwave::AudioDeviceList &)devices current:(const QString &)currentUid;
 @end
 
 @implementation HLNotchView {
@@ -119,52 +123,13 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _stripLayer.contentsGravity = kCAGravityCenter;
         _stripLayer.masksToBounds = YES;
         [self.layer addSublayer:_stripLayer];
-
-        _sources = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
-        _sources.bezelStyle = NSBezelStyleRoundRect;
-        _sources.controlSize = NSControlSizeSmall;
-        _sources.font = [NSFont systemFontOfSize:11.0];
-        _sources.target = self;
-        _sources.action = @selector(sourcePicked:);
-        _sources.hidden = YES;
-        [self addSubview:_sources];
     }
     return self;
 }
 
-// Laid out by hand rather than with constraints. The panel has two elements
-// and two states; a constraint graph would be more machinery than arithmetic.
-- (void)layoutContent
-{
-    const NSRect b = self.bounds;
-    const BOOL show = _expanded;
-
-    _sources.hidden = !show;
-
-    if (!show)
-        return;
-
-    const CGFloat pad = 14.0;
-
-    // Under the housing: the source picker, then the strip in the bottom row
-    // expandedHeight() has already reserved for it -- nothing here may reach
-    // into that row.
-    //
-    // The popup is given a fixed generous width rather than its fitting size,
-    // so the panel does not change shape every time the selected device's name
-    // changes length.
-    const CGFloat sourcesWidth = std::min<CGFloat>(b.size.width - 2 * pad, 240.0);
-    const CGFloat y = b.size.height - _notchHeight - kExpandedPad - kExpandedSourcesHeight;
-    _sources.frame = NSMakeRect((b.size.width - sourcesWidth) / 2.0, y, sourcesWidth,
-                                kExpandedSourcesHeight);
-}
-
-- (void)setFrameSize:(NSSize)size
-{
-    [super setFrameSize:size];
-    [self layoutContent];
-}
-
+// No subview layout to do. The panel is one black shape with the strip as a
+// sublayer, and present() places that from the view's live bounds -- which is
+// what lets the strip track a window frame that is mid-animation.
 - (BOOL)isFlipped { return NO; }
 // Deliberately NOT wantsUpdateLayer. With it set and no -updateLayer of our
 // own, AppKit takes over the backing layer and quietly discards the corner
@@ -226,46 +191,6 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _presenter->showMenu();
 }
 
-
-// Fills the source popup.
-//
-// A popup rather than a row of buttons: with ten output devices on this
-// machine the row was wider than the panel, and a device is a name rather than
-// an icon anyway -- "Scarlett Solo USB" does not have a face.
-- (void)setDevices:(const hyperwave::AudioDeviceList &)devices
-           current:(const QString &)currentUid
-{
-    [_sources removeAllItems];
-    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Source"];
-    NSMenuItem *all = [[NSMenuItem alloc] initWithTitle:@"All system audio"
-                                                 action:nil
-                                          keyEquivalent:@""];
-    all.representedObject = @"";
-    [menu addItem:all];
-    if (!devices.isEmpty())
-        [menu addItem:[NSMenuItem separatorItem]];
-    NSMenuItem *selected = all;
-    for (const hyperwave::AudioDevice &device : devices) {
-        NSString *title = device.isDefaultOutput
-            ? [NSString stringWithFormat:@"%@  ·  output", device.name.toNSString()]
-            : device.name.toNSString();
-        NSMenuItem *entry = [[NSMenuItem alloc] initWithTitle:title
-                                                       action:nil
-                                                keyEquivalent:@""];
-        entry.representedObject = device.uid.toNSString();
-        [menu addItem:entry];
-        if (device.uid == currentUid)
-            selected = entry;
-    }
-    _sources.menu = menu;
-    [_sources selectItem:selected];
-}
-- (void)sourcePicked:(NSPopUpButton *)sender
-{
-    id represented = sender.selectedItem.representedObject;
-    if (_presenter && [represented isKindOfClass:[NSString class]])
-        _presenter->handleSourcePick(QString::fromNSString(represented));
-}
 @end
 
 // A target for the display link, since a C++ object cannot be one.
@@ -402,8 +327,6 @@ bool MacNotchPresenter::install()
 
     m_impl->view = [[HLNotchView alloc] initWithFrame:NSMakeRect(0, 0, width, height)];
     m_impl->view.presenter = this;
-    m_impl->view.notchHeight = g.notchHeight;
-    m_impl->view.notchWidth = g.notchWidth;
     m_impl->view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     m_impl->window.contentView = m_impl->view;
 
@@ -502,8 +425,11 @@ void MacNotchPresenter::present(const QImage &image)
     [CATransaction setDisableActions:YES];
     m_impl->view.stripLayer.contentsScale = dpr;
     // Bottom-anchored: the strip lives in the tab, below the housing.
-    // Collapsed the strip owns the tab; expanded it sits in the bottom row,
-    // clear of the source picker above it.
+    // Collapsed the strip owns the tab; expanded it sits in the bottom row
+    // expandedHeight() reserves for it, one pad clear of the housing above.
+    //
+    // Read from the view's bounds every frame, which is what carries the strip
+    // along with a window frame that is mid-animation.
     const CGFloat y = m_impl->expanded ? kExpandedPad : (kTabHeight - h) / 2.0;
     m_impl->view.stripLayer.frame = CGRectMake((bounds.size.width - w) / 2.0, y, w, h);
     m_impl->view.stripLayer.contents = (__bridge id)cg;
@@ -534,9 +460,13 @@ void MacNotchPresenter::setExpanded(bool expanded)
     if (expanded == m_impl->expanded || !m_impl->window)
         return;
     m_impl->expanded = expanded;
-    m_impl->view.expanded = expanded;
-    applyFrame();
+    // The one animated transition. Everything else that moves this window --
+    // the tab retracting, a display being reconfigured -- is either a state
+    // change nobody is looking at or a jump to somewhere else entirely, and
+    // easing those only makes them look uncertain.
+    applyFrame(true);
 }
+
 void MacNotchPresenter::handleHover(bool inside)
 {
     setExpanded(inside);
@@ -629,7 +559,7 @@ bool MacNotchPresenter::isTabVisible() const
     return m_impl->tabVisible;
 }
 
-void MacNotchPresenter::applyFrame()
+void MacNotchPresenter::applyFrame(bool animated)
 {
     if (!m_impl->window)
         return;
@@ -680,21 +610,41 @@ void MacNotchPresenter::applyFrame()
 
     const NSRect frame = NSMakeRect(NSMidX(g.screenFrame) - width / 2.0,
                                     NSMaxY(g.screenFrame) - height, width, height);
-    [m_impl->window setFrame:frame display:YES animate:NO];
-    [m_impl->view setFrameSize:frame.size];
-    [m_impl->view layoutContent];
-    Q_EMIT geometryChanged();
-}
 
-void MacNotchPresenter::handleSourcePick(const QString &bundleId)
-{
-    Q_EMIT menuActionTriggered(QLatin1String(MenuAction::kSourcePrefix) + bundleId);
+    // The window resizes its own content view, and present() places the strip
+    // from that view's live bounds every frame, so the strip rides the
+    // animation instead of having to be animated alongside it. Setting the
+    // view's frame here by hand would put it at the final size immediately and
+    // undo exactly that.
+    if (animated) {
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+            context.duration = m_impl->expanded ? kExpandSeconds : kCollapseSeconds;
+            context.timingFunction = hoverCurve();
+            [m_impl->window.animator setFrame:frame display:YES];
+        }];
+    } else {
+        [m_impl->window setFrame:frame display:YES animate:NO];
+    }
+
+    // Emitted with the final geometry rather than per animation step: this is
+    // what sizes the render buffers, and reallocating them sixty times over a
+    // fifth of a second to land back where one call would have put them is not
+    // a smoother panel, only a busier one.
+    Q_EMIT geometryChanged();
 }
 
 void MacNotchPresenter::setDevices(const AudioDeviceList &devices, const QString &current)
 {
-    if (m_impl->view)
-        [m_impl->view setDevices:devices current:current];
+    // Nothing to fill. The panel used to carry a source popup in the expanded
+    // state; it was a second copy of a list the right-click menu already has,
+    // and it cost the panel a 32pt row that pushed the strip further from the
+    // housing. The menu is one right-click away on the panel itself, which is
+    // the same gesture that reaches it on the status item.
+    //
+    // The override stays because PanelPresenter declares it for the Windows
+    // panel, which does have a picker.
+    Q_UNUSED(devices);
+    Q_UNUSED(current);
 }
 
 void MacNotchPresenter::emitFrameDue()
