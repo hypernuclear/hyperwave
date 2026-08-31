@@ -307,10 +307,8 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
     // Every surface reports this, so the review still happens when the surface
     // that would have reported it is the one being taken away.
     connect(p, &BarPresenter::screenConfigurationChanged, this, [this] {
-        // A different bar is a different amount of room, so the last verdict on
-        // whether the status item fits does not carry over.
         qInfo("hyperwave: displays changed, reviewing surfaces");
-        m_barObscured = false;
+        noteDisplayChange();
         scheduleSurfaceReview();
     });
 
@@ -455,6 +453,9 @@ bool App::start()
         // or the preference does. The panel and the status item are alternatives
         // rather than companions: they draw the same strip, and running both put
         // two of them in the same corner of the same screen.
+        // Seeded before the first review so the first genuine change of display
+        // is measured against what launch actually found.
+        m_notchWasAvailable = notchAvailable();
         reviewSurfaces();
         if (m_surfaces.empty()) {
             qCritical("hyperwave: could not create a menu bar item");
@@ -721,6 +722,15 @@ void App::scheduleSurfaceReview()
     // geometry is worth reading.
     m_surfaceReview->start();
 }
+bool App::notchAvailable() const
+{
+#ifdef Q_OS_MACOS
+    return MacNotchPresenter::isAvailable();
+#else
+    return false;
+#endif
+}
+
 bool App::notchPanelWanted() const
 {
     if (!MacNotchPresenter::isAvailable())
@@ -793,6 +803,26 @@ void App::reviewSurfaces()
     refreshMenu();
     qInfo("hyperwave: drawing in the %s", m_notchSurface ? "notch panel" : "menu bar");
     scheduleBarVerification();
+}
+
+void App::noteDisplayChange()
+{
+    const bool available = notchAvailable();
+    if (available == m_notchWasAvailable)
+        return;
+
+    // Only a housing appearing or going away counts as a different menu bar.
+    //
+    // Everything else that posts a screen-parameters notification is the same
+    // bar being reshuffled -- and adding or removing a status item posts one,
+    // which is to say this app's own fallback does. Clearing the verdict on
+    // every notification made that a loop: fall back to the panel, retiring the
+    // item announces a display change, the change clears the verdict, the
+    // review puts the item back, 600ms later it is buried again. Measured on
+    // the hardware, four full round trips in nine seconds, visible as the notch
+    // appearing and vanishing.
+    m_notchWasAvailable = available;
+    m_barObscured = false;
 }
 
 void App::scheduleBarVerification()

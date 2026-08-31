@@ -143,7 +143,12 @@ private:
     // True when the panel is both possible and asked for. False everywhere but
     // a notched Mac, which is what makes the status item the only surface on
     // every other platform and display.
+    bool notchAvailable() const;
     bool notchPanelWanted() const;
+    // Decides whether a screen-parameters notification was a real change of
+    // menu bar or the same one being reshuffled -- which the app's own status
+    // item coming and going also announces.
+    void noteDisplayChange();
     // Asks the status item, a beat after it was installed, whether macOS put it
     // somewhere usable. It can land under the camera housing on a crowded bar,
     // where it is invisible and unclickable -- and since the panel is the thing
@@ -206,6 +211,10 @@ private:
     // camera housing. Forces the panel back for as long as it holds, and is
     // cleared whenever the displays change or the user asks again.
     bool m_barObscured = false;
+    // Whether the menu bar screen had a camera housing at the last review.
+    // Compared against on every screen-parameters notification; see
+    // noteDisplayChange().
+    bool m_notchWasAvailable = false;
     Surface *m_barSurface = nullptr;     // the status item
     Surface *m_notchSurface = nullptr;   // the panel under the camera housing
     // Retired surfaces, waiting out one turn of the event loop before they are
