@@ -103,8 +103,10 @@
 - (void)screenParametersChanged:(NSNotification *)note
 {
     (void)note;
-    if (_presenter)
-        _presenter->emitGeometryChanged();
+    if (!_presenter)
+        return;
+    _presenter->emitGeometryChanged();
+    _presenter->emitScreenConfigurationChanged();
 }
 
 - (void)occlusionChanged:(NSNotification *)note
@@ -441,6 +443,11 @@ void MacBarPresenter::emitFrameDue()
 void MacBarPresenter::emitGeometryChanged()
 {
     Q_EMIT geometryChanged();
+}
+
+void MacBarPresenter::emitScreenConfigurationChanged()
+{
+    Q_EMIT screenConfigurationChanged();
 }
 
 void MacBarPresenter::emitClicked()

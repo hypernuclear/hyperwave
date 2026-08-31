@@ -129,14 +129,25 @@ private:
 
     void applyFrameRate();
     void setNotchTabVisible(bool visible);
-    // The notch panel comes and goes with the display. Closing the lid on a
-    // docked MacBook takes the housing away and hands the menu bar to an
-    // external screen; opening it hands it back. Deciding once at startup meant
-    // launching in clamshell produced no panel for the whole session, and
-    // closing the lid left the panel installed against zeroed geometry.
-    void scheduleNotchReview();
-    void reviewNotchAvailability();
-    void removeNotchSurface();
+    // Which of the two macOS surfaces is up, reviewed at runtime rather than
+    // decided once at startup.
+    //
+    // It has to be runtime because the answer changes underneath the app: the
+    // notch panel comes and goes with the display, and closing the lid on a
+    // docked MacBook hands the menu bar to a screen with no housing. Deciding
+    // once at startup meant launching in clamshell produced no panel for the
+    // whole session, and closing the lid left the panel installed against
+    // zeroed geometry.
+    void scheduleSurfaceReview();
+    void reviewSurfaces();
+    // True when the panel is both possible and asked for. False everywhere but
+    // a notched Mac, which is what makes the status item the only surface on
+    // every other platform and display.
+    bool notchPanelWanted() const;
+    // Detaches a surface now and destroys it one turn of the event loop later.
+    // The swap can be driven from a menu action, and the menu belongs to the
+    // presenter being taken away.
+    void retireSurface(Surface *&slot);
     MenuModel buildMenu() const;
     void showAbout();
     void relaunch();
@@ -179,11 +190,17 @@ private:
     // Deque rather than vector: surfaces hand out references that outlive the
     // call, and a vector reallocating on the second push would dangle them.
     std::vector<std::unique_ptr<Surface>> m_surfaces;
-    Surface *m_menuSurface = nullptr;   // the one that carries the menu
-    Surface *m_notchSurface = nullptr;
+    // Exactly one of these is live at a time on macOS, and m_barSurface is the
+    // only one anywhere else. Both null only in --windowed, which has no
+    // presenter at all.
+    Surface *m_barSurface = nullptr;     // the status item
+    Surface *m_notchSurface = nullptr;   // the panel under the camera housing
+    // Retired surfaces, waiting out one turn of the event loop before they are
+    // destroyed. See retireSurface().
+    std::vector<std::unique_ptr<Surface>> m_retiredSurfaces;
     // Coalesces the screen-change notifications behind one review. Built on
     // first use, so a platform that never schedules a review never makes one.
-    QTimer *m_notchReview = nullptr;
+    QTimer *m_surfaceReview = nullptr;
 
     QThread m_dspThread;
     DspWorker *m_worker = nullptr;   // lives on m_dspThread, owned by it

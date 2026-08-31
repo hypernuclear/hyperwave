@@ -74,6 +74,16 @@ Q_SIGNALS:
     void clicked();
     void geometryChanged();
 
+    // The displays were reconfigured -- a lid opened or shut, a monitor was
+    // plugged in, the menu bar moved to another screen.
+    //
+    // Separate from geometryChanged because that one also fires for a surface
+    // resizing itself, and the host's answer to "which surface should be up"
+    // must not be reopened every time a panel expands under the pointer. Every
+    // surface emits it, so the host still hears about the display even when the
+    // surface it would have asked is the one that just went away.
+    void screenConfigurationChanged();
+
     // Fired just before the menu opens, so the app can refresh the list of
     // which apps are currently producing audio rather than polling for it.
     void menuAboutToShow();

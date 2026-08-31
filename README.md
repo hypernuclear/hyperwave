@@ -176,10 +176,17 @@ right, hyperwave's strip gets pushed underneath the camera housing and becomes
 invisible — while macOS still reports `statusItem.visible == true`. The app is
 running, the tap is working, and you see nothing.
 
-So on those Macs hyperwave also draws a panel anchored to the housing. The
+So on those Macs hyperwave draws a panel anchored to the housing instead. The
 space directly below the notch is the one part of that region no other app
-competes for. It is additional, never a replacement: the status item is still
-what people expect to find and what they can drag.
+competes for, which is what makes it a fix rather than another contender.
+
+**One or the other, never both.** On a Mac with a housing the panel is the
+default, because it is the surface that cannot be crowded out. Uncheck
+*Appearance → Draw in the notch* and the strip moves back to the menu bar as an
+ordinary status item; the choice is remembered, and it applies the moment you
+pick it. On a display with no housing there is no choice to make and the status
+item is all there is — including when you close the lid on a docked MacBook,
+which takes the housing away mid-session and hands the strip back to the bar.
 
 ![collapsed](docs/notch-collapsed.png)
 
@@ -462,7 +469,9 @@ the *same* renderer; the moment the platforms run different DSP you get to chase
 `platform/` holds that seam in three interfaces: `AudioSource` for capture,
 `BarPresenter` for a surface that draws a QImage and nothing else, and
 `PanelPresenter` for the richer surfaces -- the notch panel, the appbar -- that
-also retract when idle and carry their own source picker.
+also retract when idle and can carry their own source picker. Exactly one
+presenter is installed at a time; `App::reviewSurfaces()` picks it and re-picks
+it whenever the displays or the preference change.
 
 ## Three things that are load-bearing
 

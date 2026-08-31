@@ -47,6 +47,7 @@ public:
     // an Objective-C helper object has to reach them.
     void emitFrameDue();
     void emitGeometryChanged();
+    void emitScreenConfigurationChanged();
     void emitClicked();
     void emitMenuAction(const QString &actionId);
     void emitMenuAboutToShow();

@@ -258,8 +258,10 @@ NSRect panelFrame(const NotchGeometry &g, bool expanded, bool tabVisible)
 - (void)screenParametersChanged:(NSNotification *)note
 {
     (void)note;
-    if (_presenter)
-        _presenter->emitGeometryChanged();
+    if (!_presenter)
+        return;
+    _presenter->emitGeometryChanged();
+    _presenter->emitScreenConfigurationChanged();
 }
 
 - (void)hoverWatchFired:(NSTimer *)timer
@@ -733,6 +735,11 @@ void MacNotchPresenter::emitGeometryChanged()
 {
     m_impl->geometry = notchGeometry();
     Q_EMIT geometryChanged();
+}
+
+void MacNotchPresenter::emitScreenConfigurationChanged()
+{
+    Q_EMIT screenConfigurationChanged();
 }
 
 void MacNotchPresenter::emitClicked()

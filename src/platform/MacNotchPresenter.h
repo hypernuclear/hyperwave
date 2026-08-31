@@ -18,6 +18,12 @@ namespace hyperwave {
 //
 // The space directly below the notch is the one piece of that region no other
 // app competes for, which is what makes it a fix rather than another contender.
+// That is also why it is the default on hardware that has a housing: it is the
+// surface that cannot be crowded out.
+//
+// It replaces the status item rather than joining it. The two ran together at
+// first, which put two copies of the same strip in the same corner of the same
+// screen; Settings::useNotchPanel picks one.
 //
 // Two states:
 //   Collapsed  a black tab hanging below the notch with the strip inside it,
@@ -76,6 +82,7 @@ public:
     // Reached from the Objective-C helper.
     void emitFrameDue();
     void emitGeometryChanged();
+    void emitScreenConfigurationChanged();
     void emitClicked();
     void emitMenuAction(const QString &actionId);
     // Decides from the pointer's position whether the panel should be open,
