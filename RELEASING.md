@@ -4,9 +4,11 @@ The pipeline is `.github/workflows/release.yml`. A `v*` tag builds every
 platform, signs, notarizes, packages, signs again for the appcast, and
 publishes to R2. A pull request builds and tests and stops there.
 
-Nothing here has been run yet. It is a faithful port of a pipeline that works,
-which is not the same as a pipeline that has worked *here* -- read
-[What is not done](#what-is-not-done) before tagging anything.
+This has now shipped a release. v0.1.0 went out on 2026-08-29, on the third
+attempt: the first two tag builds failed in notarization over the entitlements
+file. Signing, notarization, both appcasts and the R2 upload have all run
+against the real secrets. Read [What is not done](#what-is-not-done) anyway --
+the Windows half of the pipeline is still less proven than the macOS half.
 
 ## Before the first release
 
@@ -171,10 +173,12 @@ DMG of the wrong thing.
   artwork; nothing downstream needs to change.
 - **No DMG background art.** `packaging/macos/dmg-background.tiff` is optional
   in the script; without it create-dmg uses a plain window.
-- **Windows has been run, once, by hand.** It builds and packages in CI and
-  works on a real machine. What has never happened there is a signed installer
-  or an applied update: those steps are tag-gated, so the first release is the
-  first time they run.
-- **None of this pipeline has been executed.** The macOS packaging script has
-  been run locally and produces a DMG; everything above it -- signing with a
-  real identity, notarization, the appcast, the R2 upload -- has not.
+- **No Windows update has ever been applied.** The installer builds, packages
+  and is signed on a tag, and it runs on a real machine. What has not happened
+  is WinSparkle finding a newer build in the feed and installing it over an
+  older one -- v0.1.0 was the first release, so there was nothing to update
+  from. v0.2.0 is the first build that can be reached by an update rather than
+  a download, on either platform.
+- **The macOS update path is equally new.** Sparkle reads the feed and verifies
+  the signature at v0.1.0, but no copy has yet installed a newer version over
+  itself.
