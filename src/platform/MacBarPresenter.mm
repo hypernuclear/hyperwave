@@ -341,8 +341,13 @@ bool MacBarPresenter::isObscured() const
     // this item gets can fall inside it, and the housing is a cutout: there are
     // no pixels there and nothing to click. The item reports visible == YES the
     // whole time, so overlap is the only way to find out.
-    if (!m_impl->statusItem.visible)
+    // Two different failures, worth telling apart in a log: macOS declining to
+    // show the item at all because the bar is full, and macOS showing it in a
+    // slot that happens to be underneath the housing.
+    if (!m_impl->statusItem.visible) {
+        qWarning("hyperwave: macOS is not showing the status item; the menu bar is full");
         return true;
+    }
 
     NSWindow *window = m_impl->statusItem.button.window;
     if (!window)

@@ -742,9 +742,13 @@ void App::verifyBarSurface()
     // the app cannot be left in: no surface anyone can reach, and no menu to
     // reach a surface from.
     m_barObscured = true;
-    qWarning("hyperwave: the menu bar has no room clear of the camera housing; "
-             "drawing in the notch instead");
+    qWarning("hyperwave: the status item is not reachable in this menu bar; "
+             "drawing in the notch instead, with the tab held out");
     reviewSurfaces();
+    // The panel is the only surface now, so it has to be showing. Without this
+    // a quiet machine gets a retracted tab and no status item, which is the
+    // same nothing the fallback exists to prevent.
+    setNotchTabVisible(true);
 }
 void App::reviewSurfaces()
 {
@@ -820,7 +824,14 @@ void App::setNotchTabVisible(bool visible)
     if (!m_notchSurface)
         return;
     auto *notch = static_cast<PanelPresenter *>(m_notchSurface->presenter.get());
-    notch->setTabVisible(visible || !m_settings.notchAutoHide());
+    // m_barObscured beats the auto-hide preference.
+    //
+    // Retracting is fine when the panel is a choice: the notch looks stock on a
+    // quiet machine and the housing stays hoverable. It is not fine when the
+    // panel is standing in for a menu bar that had no room, because then it is
+    // the only surface there is, and a retracted tab plus no status item is an
+    // app that is running and drawing and showing the user nothing at all.
+    notch->setTabVisible(visible || !m_settings.notchAutoHide() || m_barObscured);
     Q_UNUSED(visible);
 }
 
