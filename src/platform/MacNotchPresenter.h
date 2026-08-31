@@ -78,7 +78,11 @@ public:
     void emitGeometryChanged();
     void emitClicked();
     void emitMenuAction(const QString &actionId);
-    void handleHover(bool inside);
+    // Decides from the pointer's position whether the panel should be open,
+    // rather than being told. AppKit emits an exit/enter pair for every step of
+    // an animated resize, with the pointer stationary and inside the window the
+    // whole time, so an enter or an exit is only a reason to look again.
+    void reviewHover();
     void setDevices(const AudioDeviceList &devices, const QString &current) override;
     void showMenu();
 
@@ -87,6 +91,12 @@ private:
     // collapse. Off everywhere else: a display reconfiguration is a jump, not
     // a movement, and easing it only makes it look uncertain.
     void applyFrame(bool animated = false);
+
+    // A poll, alive only while the panel is open, for the departure AppKit can
+    // fail to report at all once its tracking state has been inverted by an
+    // animation. See startHoverWatch().
+    void startHoverWatch();
+    void stopHoverWatch();
 
     struct Impl;
     std::unique_ptr<Impl> m_impl;

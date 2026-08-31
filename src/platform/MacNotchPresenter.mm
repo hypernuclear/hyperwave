@@ -92,6 +92,30 @@ CAMediaTimingFunction *hoverCurve()
     return [CAMediaTimingFunction functionWithControlPoints:0.2f:0.0f:0.0f:1.0f];
 }
 
+// How often the panel checks that the pointer is still on it while open. See
+// startHoverWatch() for why it cannot rely on being told.
+constexpr NSTimeInterval kHoverWatchSeconds = 0.15;
+
+// Where the window sits for a given state. Derived from the notch rather than
+// read back from the window, so a frame that is halfway through an animation
+// cannot change the answer to "is the pointer on the panel".
+NSRect panelFrame(const NotchGeometry &g, bool expanded, bool tabVisible)
+{
+    CGFloat width = g.notchWidth;
+    CGFloat height = g.notchHeight;
+
+    if (expanded) {
+        width = g.notchWidth + 2 * kExpandedOverhang;
+        height = expandedHeight(g.notchHeight);
+    } else if (tabVisible) {
+        height = g.notchHeight + kTabHeight;
+    }
+    // Otherwise: exactly the housing, which is invisible against the housing.
+
+    return NSMakeRect(NSMidX(g.screenFrame) - width / 2.0, NSMaxY(g.screenFrame) - height, width,
+                      height);
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -160,18 +184,26 @@ CAMediaTimingFunction *hoverCurve()
     [self addTrackingArea:_tracking];
 }
 
+// Both of these are a nudge to go and look, never the answer.
+//
+// Animating the window's size makes AppKit re-evaluate tracking on every step
+// of the animation, and it emits a full exit/enter pair each time even though
+// the pointer has not moved. Measured with the pointer parked on the notch:
+// 109 events in four seconds, every one of them reporting a location inside
+// the window. Acting on them directly restarted the animation on each pair, so
+// the panel never reached its open size and flickered between the two.
 - (void)mouseEntered:(NSEvent *)event
 {
     (void)event;
     if (_presenter)
-        _presenter->handleHover(true);
+        _presenter->reviewHover();
 }
 
 - (void)mouseExited:(NSEvent *)event
 {
     (void)event;
     if (_presenter)
-        _presenter->handleHover(false);
+        _presenter->reviewHover();
 }
 
 - (void)mouseDown:(NSEvent *)event
@@ -199,6 +231,7 @@ CAMediaTimingFunction *hoverCurve()
 - (void)step:(id)sender;
 - (void)menuItemChosen:(NSMenuItem *)sender;
 - (void)screenParametersChanged:(NSNotification *)note;
+- (void)hoverWatchFired:(NSTimer *)timer;
 @end
 
 @implementation HLNotchHook
@@ -229,6 +262,13 @@ CAMediaTimingFunction *hoverCurve()
         _presenter->emitGeometryChanged();
 }
 
+- (void)hoverWatchFired:(NSTimer *)timer
+{
+    (void)timer;
+    if (_presenter)
+        _presenter->reviewHover();
+}
+
 @end
 
 namespace hyperwave {
@@ -247,6 +287,8 @@ struct MacNotchPresenter::Impl
     bool tabVisible = true;
     int preferredFps = 60;
     bool clockRunning = false;
+    // Runs only while the panel is open. See startHoverWatch().
+    NSTimer *hoverWatch = nil;
     // Ordered out because the housing went away under us. Tracked rather than
     // re-ordered every frame: ordering a window front on every geometry change
     // fights with whatever else is at NSStatusWindowLevel.
@@ -346,6 +388,7 @@ bool MacNotchPresenter::install()
 void MacNotchPresenter::remove()
 {
     stopClock();
+    stopHoverWatch();
     if (m_impl->hook) {
         [[NSNotificationCenter defaultCenter] removeObserver:m_impl->hook];
         m_impl->hook.presenter = nullptr;
@@ -465,11 +508,55 @@ void MacNotchPresenter::setExpanded(bool expanded)
     // change nobody is looking at or a jump to somewhere else entirely, and
     // easing those only makes them look uncertain.
     applyFrame(true);
+
+    if (expanded)
+        startHoverWatch();
+    else
+        stopHoverWatch();
 }
 
-void MacNotchPresenter::handleHover(bool inside)
+void MacNotchPresenter::reviewHover()
 {
-    setExpanded(inside);
+    if (!m_impl->window || !m_impl->geometry.valid)
+        return;
+
+    // Hysteresis, and the reason this asks rather than being told: the tab is
+    // what you aim at to open the panel, and the whole panel is what you have
+    // to leave to close it again. Both rectangles come from the notch geometry,
+    // so an animation in progress cannot change the answer -- which is what
+    // stops AppKit's resize-driven exit/enter pairs from reopening the question
+    // sixty times a second.
+    const NSRect target = panelFrame(m_impl->geometry, m_impl->expanded, m_impl->tabVisible);
+    setExpanded(NSPointInRect([NSEvent mouseLocation], target));
+}
+
+void MacNotchPresenter::startHoverWatch()
+{
+    if (m_impl->hoverWatch || !m_impl->hook)
+        return;
+
+    // The backstop for a departure nobody reports.
+    //
+    // Because the exits AppKit sends mid-animation are indistinguishable from
+    // real ones, its idea of inside-ness ends up inverted from ours, and then
+    // the exit for the pointer actually leaving never arrives: the panel would
+    // stay open until something else disturbed it. Polling closes that hole,
+    // and it only runs while the panel is open, so an idle notch still costs
+    // nothing.
+    m_impl->hoverWatch = [NSTimer timerWithTimeInterval:kHoverWatchSeconds
+                                                 target:m_impl->hook
+                                               selector:@selector(hoverWatchFired:)
+                                               userInfo:nil
+                                                repeats:YES];
+    // Common modes, for the same reason the display link uses them: the panel
+    // must not freeze open while its own right-click menu is tracking.
+    [[NSRunLoop mainRunLoop] addTimer:m_impl->hoverWatch forMode:NSRunLoopCommonModes];
+}
+
+void MacNotchPresenter::stopHoverWatch()
+{
+    [m_impl->hoverWatch invalidate];
+    m_impl->hoverWatch = nil;
 }
 
 void MacNotchPresenter::setPreferredFps(int fps)
@@ -587,19 +674,12 @@ void MacNotchPresenter::applyFrame(bool animated)
         m_impl->offScreen = false;
     }
 
-    CGFloat width = g.notchWidth;
-    CGFloat height = g.notchHeight;
-
-    if (m_impl->expanded) {
-        width = g.notchWidth + 2 * kExpandedOverhang;
-        height = expandedHeight(g.notchHeight);
-    } else if (m_impl->tabVisible) {
-        height = g.notchHeight + kTabHeight;
-    }
-    // Otherwise: exactly the housing, which is invisible against the housing.
-    // The window stays alive so the notch remains hoverable -- retracting it
+    // Shared with reviewHover(), which needs the rectangle for a state the
+    // window is not in yet. The window stays alive even when that rectangle is
+    // exactly the housing, so the notch remains hoverable -- retracting it
     // entirely would leave no way in on a display crowded enough to have hidden
     // the status item, which is the situation this panel exists for.
+    const NSRect frame = panelFrame(g, m_impl->expanded, m_impl->tabVisible);
 
     // Retracted, the window occupies exactly the housing, which is a physical
     // cutout -- nothing drawn there reaches the panel. Hiding the strip anyway
@@ -607,9 +687,6 @@ void MacNotchPresenter::applyFrame(bool animated)
     // region, and there is no point compositing bars nobody can see.
     const bool showStrip = m_impl->expanded || m_impl->tabVisible;
     m_impl->view.stripLayer.hidden = !showStrip;
-
-    const NSRect frame = NSMakeRect(NSMidX(g.screenFrame) - width / 2.0,
-                                    NSMaxY(g.screenFrame) - height, width, height);
 
     // The window resizes its own content view, and present() places the strip
     // from that view's live bounds every frame, so the strip rides the
