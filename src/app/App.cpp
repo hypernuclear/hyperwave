@@ -35,6 +35,10 @@ constexpr int kCompactBands = 14;
 constexpr int kAtRestFramesBeforeSleep = 4;
 
 constexpr qreal kVerifySeconds = 5.0;
+// How long to let AppKit place a freshly installed status item before asking
+// where it ended up. Generous: being wrong in this direction costs one late
+// check, being wrong the other way costs a reading of a rect that is not set.
+constexpr int kBarPlacementSettleMs = 600;
 
 } // namespace
 
@@ -302,7 +306,12 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
     connect(p, &BarPresenter::geometryChanged, this, [this, s] { onGeometryChanged(*s); });
     // Every surface reports this, so the review still happens when the surface
     // that would have reported it is the one being taken away.
-    connect(p, &BarPresenter::screenConfigurationChanged, this, &App::scheduleSurfaceReview);
+    connect(p, &BarPresenter::screenConfigurationChanged, this, [this] {
+        // A different bar is a different amount of room, so the last verdict on
+        // whether the status item fits does not carry over.
+        m_barObscured = false;
+        scheduleSurfaceReview();
+    });
 
     if (isNotch) {
         m_notchSurface = s;
@@ -713,8 +722,29 @@ void App::scheduleSurfaceReview()
 }
 bool App::notchPanelWanted() const
 {
-    return MacNotchPresenter::isAvailable() && m_settings.useNotchPanel();
+    if (!MacNotchPresenter::isAvailable())
+        return false;
+    // The preference, unless honouring it would put the strip somewhere nobody
+    // can see or click. m_barObscured is only ever set by having tried, so a
+    // menu bar that has room is still a menu bar the user gets to choose.
+    return m_settings.useNotchPanel() || m_barObscured;
     return false;
+}
+void App::verifyBarSurface()
+{
+    if (!m_barSurface || !m_barSurface->presenter || m_barObscured)
+        return;
+    if (!m_barSurface->presenter->isObscured())
+        return;
+    // The status item went under the camera housing. Nothing about it says so
+    // -- macOS reports it visible -- and the panel that would have covered for
+    // it is exactly what was turned off to get here, so this is the one state
+    // the app cannot be left in: no surface anyone can reach, and no menu to
+    // reach a surface from.
+    m_barObscured = true;
+    qWarning("hyperwave: the menu bar has no room clear of the camera housing; "
+             "drawing in the notch instead");
+    reviewSurfaces();
 }
 void App::reviewSurfaces()
 {
@@ -750,6 +780,10 @@ void App::reviewSurfaces()
     // up, so the one that stayed is now describing the wrong thing.
     refreshMenu();
     qInfo("hyperwave: drawing in the %s", m_notchSurface ? "notch panel" : "menu bar");
+    // Deferred, because the item has no frame until AppKit has laid the bar
+    // out, and asking before then reads a zero rect that intersects nothing.
+    if (m_barSurface && !m_barObscured)
+        QTimer::singleShot(kBarPlacementSettleMs, this, &App::verifyBarSurface);
 }
 void App::retireSurface(Surface *&slot)
 {
@@ -901,9 +935,17 @@ MenuModel App::buildMenu() const
     // Offered whenever the display has a housing, not only while the panel is
     // up: it is the way back from the menu bar as much as the way to the notch.
     if (MacNotchPresenter::isAvailable()) {
-        gradients.append(MenuItem::action(QLatin1String(MenuAction::kToggleNotch),
-                                          QStringLiteral("Draw in the notch"))
-                             .withCheck(m_settings.useNotchPanel()));
+        // Checked against what is actually on screen rather than what was asked
+        // for. The two differ when the menu bar had no room clear of the
+        // housing, and a tick disagreeing with the visible strip would read as
+        // the setting being broken. Left enabled in that state on purpose:
+        // choosing it again is how you retry after making room.
+        MenuItem item = MenuItem::action(QLatin1String(MenuAction::kToggleNotch),
+                                         QStringLiteral("Draw in the notch"))
+                            .withCheck(m_notchSurface != nullptr);
+        if (m_barObscured)
+            item.withDetail(QStringLiteral("menu bar is full"));
+        gradients.append(item);
     }
 #endif
     if (m_notchSurface) {
@@ -1030,7 +1072,13 @@ void App::onMenuAction(const QString &actionId)
         return;
     }
     if (actionId == QLatin1String(MenuAction::kToggleNotch)) {
-        m_settings.setUseNotchPanel(!m_settings.useNotchPanel());
+        // Toggles what is on screen, not the stored value, so that choosing it
+        // while the panel is standing in for a full menu bar means "try the
+        // menu bar again" rather than "set the preference you already have".
+        m_settings.setUseNotchPanel(m_notchSurface == nullptr);
+        // Cleared so the attempt is a real one. If the bar still has no room
+        // clear of the housing, verifyBarSurface() puts the panel straight back.
+        m_barObscured = false;
         // Scheduled, not immediate. This is running from inside the tracking of
         // a menu that belongs to the presenter about to be taken away.
         scheduleSurfaceReview();

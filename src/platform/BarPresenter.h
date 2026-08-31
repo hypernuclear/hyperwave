@@ -51,6 +51,16 @@ public:
     // are reasons to stop spending cycles drawing.
     virtual bool isVisibleOnScreen() const = 0;
 
+    // Whether this surface has ended up somewhere nobody can see or click.
+    //
+    // Distinct from isVisibleOnScreen(), which is a per-frame "is it worth
+    // drawing" and is deliberately permissive. This one answers "did the host
+    // put us somewhere unusable", and it exists because macOS will lay a status
+    // item out underneath the camera housing -- a physical cutout with no
+    // pixels behind it -- while still reporting the item as visible. A surface
+    // that cannot say otherwise is assumed fine.
+    virtual bool isObscured() const { return false; }
+
     // Drives the clock. On macOS this is a display link bound to the view's
     // screen; the presenter calls back once per vsync while running.
     // Frames per second the host should aim for. Measured on macOS 26, dropping

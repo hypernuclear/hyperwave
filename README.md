@@ -188,6 +188,18 @@ pick it. On a display with no housing there is no choice to make and the status
 item is all there is — including when you close the lid on a docked MacBook,
 which takes the housing away mid-session and hands the strip back to the bar.
 
+Asking for the menu bar on a notched Mac does not always get it. macOS lays
+status items out right-to-left and steps straight over the housing, so on a
+crowded bar the slot hyperwave is given can fall underneath it — where there
+are no pixels and nothing to click, while `NSStatusItem.visible` still reports
+`YES`. hyperwave measures the item against the housing after installing it and
+goes back to the panel if they overlap, because the alternative is a running app
+with no surface anyone can reach and no menu to fix it from. The menu entry then
+reads *menu bar is full*; choose it again once you have made room and it retries.
+If you ever do get stuck with nothing on screen,
+`defaults write com.hypernuclear.hyperwave "notch.usePanel" -bool true` and
+relaunch.
+
 ![collapsed](docs/notch-collapsed.png)
 
 Collapsed, it is a tab hanging below the housing with the strip inside it. The

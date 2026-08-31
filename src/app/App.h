@@ -144,6 +144,11 @@ private:
     // a notched Mac, which is what makes the status item the only surface on
     // every other platform and display.
     bool notchPanelWanted() const;
+    // Asks the status item, a beat after it was installed, whether macOS put it
+    // somewhere usable. It can land under the camera housing on a crowded bar,
+    // where it is invisible and unclickable -- and since the panel is the thing
+    // being turned off to get there, that state has no way back.
+    void verifyBarSurface();
     // Detaches a surface now and destroys it one turn of the event loop later.
     // The swap can be driven from a menu action, and the menu belongs to the
     // presenter being taken away.
@@ -193,6 +198,10 @@ private:
     // Exactly one of these is live at a time on macOS, and m_barSurface is the
     // only one anywhere else. Both null only in --windowed, which has no
     // presenter at all.
+    // Set when the status item was installed and turned out to be under the
+    // camera housing. Forces the panel back for as long as it holds, and is
+    // cleared whenever the displays change or the user asks again.
+    bool m_barObscured = false;
     Surface *m_barSurface = nullptr;     // the status item
     Surface *m_notchSurface = nullptr;   // the panel under the camera housing
     // Retired surfaces, waiting out one turn of the event loop before they are

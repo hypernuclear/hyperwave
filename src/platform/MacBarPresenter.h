@@ -32,6 +32,7 @@ public:
     void setWidthPt(qreal widthPt) override;
     void present(const QImage &image) override;
     bool isVisibleOnScreen() const override;
+    bool isObscured() const override;
     bool prefersCompact() const override;
 
     void setPreferredFps(int fps) override;

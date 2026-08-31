@@ -331,6 +331,50 @@ bool MacBarPresenter::isVisibleOnScreen() const
     return m_impl->statusItem.visible;
 }
 
+bool MacBarPresenter::isObscured() const
+{
+    if (!m_impl->statusItem)
+        return true;   // nothing installed is the same as nothing anyone can use
+
+    // macOS lays status items out right-to-left from the right edge of the menu
+    // bar and does not step over the camera housing. On a crowded bar the slot
+    // this item gets can fall inside it, and the housing is a cutout: there are
+    // no pixels there and nothing to click. The item reports visible == YES the
+    // whole time, so overlap is the only way to find out.
+    if (!m_impl->statusItem.visible)
+        return true;
+
+    NSWindow *window = m_impl->statusItem.button.window;
+    if (!window)
+        return false;   // not laid out yet; the caller asks again later
+
+    NSScreen *screen = window.screen ?: [NSScreen screens].firstObject;
+    if (!screen)
+        return false;
+
+    if (@available(macOS 12.0, *)) {
+        const NSRect left = screen.auxiliaryTopLeftArea;
+        const NSRect right = screen.auxiliaryTopRightArea;
+        if (screen.safeAreaInsets.top <= 0 || left.size.width <= 0 || right.size.width <= 0)
+            return false;   // no housing on the screen this item is on
+
+        // The housing is the gap the two unobscured areas leave between them,
+        // taken up to the top of the screen.
+        const NSRect housing = NSMakeRect(NSMaxX(left), NSMinY(left),
+                                          NSMinX(right) - NSMaxX(left),
+                                          NSMaxY(screen.frame) - NSMinY(left));
+        if (NSIntersectsRect(housing, window.frame)) {
+            qWarning("hyperwave: status item at (%.0f,%.0f %.0fx%.0f) overlaps the camera "
+                     "housing at (%.0f,%.0f %.0fx%.0f)",
+                     window.frame.origin.x, window.frame.origin.y, window.frame.size.width,
+                     window.frame.size.height, housing.origin.x, housing.origin.y,
+                     housing.size.width, housing.size.height);
+            return true;
+        }
+    }
+    return false;
+}
+
 void MacBarPresenter::startClock()
 {
     if (m_impl->clockRunning || !m_impl->view || !m_impl->hook)
