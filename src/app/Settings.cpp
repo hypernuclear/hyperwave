@@ -11,6 +11,7 @@ constexpr const char *kCompactKey = "appearance/compact";
 constexpr const char *kHalfRateKey = "power/halfRateOnBattery";
 constexpr const char *kSourceKey = "audio/sourceDeviceUid";
 constexpr const char *kNotchAutoHideKey = "notch/autoHide";
+constexpr const char *kUseNotchPanelKey = "notch/usePanel";
 } // namespace
 
 Settings::Settings(QObject *parent, const QString &application)
@@ -298,6 +299,19 @@ void Settings::setNotchAutoHide(bool enabled)
         return;
     m_store.setValue(QLatin1String(kNotchAutoHideKey), enabled);
     Q_EMIT notchAutoHideChanged(enabled);
+}
+
+bool Settings::useNotchPanel() const
+{
+    return m_store.value(QLatin1String(kUseNotchPanelKey), true).toBool();
+}
+
+void Settings::setUseNotchPanel(bool enabled)
+{
+    if (useNotchPanel() == enabled)
+        return;
+    m_store.setValue(QLatin1String(kUseNotchPanelKey), enabled);
+    Q_EMIT useNotchPanelChanged(enabled);
 }
 
 } // namespace hyperwave

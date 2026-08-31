@@ -35,6 +35,10 @@ constexpr int kCompactBands = 14;
 constexpr int kAtRestFramesBeforeSleep = 4;
 
 constexpr qreal kVerifySeconds = 5.0;
+// How long to let AppKit place a freshly installed status item before asking
+// where it ended up. Generous: being wrong in this direction costs one late
+// check, being wrong the other way costs a reading of a rect that is not set.
+constexpr int kBarPlacementSettleMs = 600;
 
 } // namespace
 
@@ -300,6 +304,13 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
     BarPresenter *p = s->presenter.get();
     connect(p, &BarPresenter::frameDue, this, [this, s] { onFrameDue(*s); });
     connect(p, &BarPresenter::geometryChanged, this, [this, s] { onGeometryChanged(*s); });
+    // Every surface reports this, so the review still happens when the surface
+    // that would have reported it is the one being taken away.
+    connect(p, &BarPresenter::screenConfigurationChanged, this, [this] {
+        qInfo("hyperwave: displays changed, reviewing surfaces");
+        noteDisplayChange();
+        scheduleSurfaceReview();
+    });
 
     if (isNotch) {
         m_notchSurface = s;
@@ -312,7 +323,7 @@ void App::addSurface(std::unique_ptr<BarPresenter> presenter, bool isNotch)
     }
     if (!isNotch) {
         // The status item carries the menu; the notch panel expands instead.
-        m_menuSurface = s;
+        m_barSurface = s;
         connect(p, &BarPresenter::menuAboutToShow, this, &App::refreshMenu);
         connect(p, &BarPresenter::menuActionTriggered, this, &App::onMenuAction);
     }
@@ -433,23 +444,24 @@ bool App::start()
     }
 
     if (!m_options.windowed) {
-        addSurface(BarPresenter::create(this), false);
+#ifdef Q_OS_MACOS
+        // Read before the first review, since it decides whether there is a
+        // notch to prefer.
+        MacNotchPresenter::setFakeNotch(m_options.fakeNotch);
+#endif
+        // One surface, chosen here and re-chosen whenever the display changes
+        // or the preference does. The panel and the status item are alternatives
+        // rather than companions: they draw the same strip, and running both put
+        // two of them in the same corner of the same screen.
+        // Seeded before the first review so the first genuine change of display
+        // is measured against what launch actually found.
+        m_notchWasAvailable = notchAvailable();
+        reviewSurfaces();
         if (m_surfaces.empty()) {
             qCritical("hyperwave: could not create a menu bar item");
             return false;
         }
 
-#ifdef Q_OS_MACOS
-        // The notch panel is additional, never a replacement. The status item
-        // is what people expect to find and what they can drag; the panel is
-        // insurance against it being crowded off a notched display entirely.
-        MacNotchPresenter::setFakeNotch(m_options.fakeNotch);
-        if (MacNotchPresenter::isAvailable())
-            addSurface(std::make_unique<MacNotchPresenter>(this), true);
-#endif
-
-        applyFrameRate();
-        refreshMenu();
     }
 
     if (m_options.windowed || m_options.hud) {
@@ -685,12 +697,188 @@ void App::onAudioBecameActive()
     }
     setNotchTabVisible(true);
 }
+
+void App::scheduleSurfaceReview()
+{
+    if (m_options.windowed)
+        return;
+    if (!m_surfaceReview) {
+        m_surfaceReview = new QTimer(this);
+        m_surfaceReview->setSingleShot(true);
+        // NSApplicationDidChangeScreenParametersNotification arrives while the
+        // configuration is still settling, and arrives two or three times for
+        // one lid movement. Acting on the first builds the panel against
+        // geometry that is about to change again, then tears it straight back
+        // down -- visible as the tab flickering in and out on every dock.
+        //
+        // The delay does a second job for the menu toggle. That action is
+        // delivered from inside the tracking of a menu the outgoing presenter
+        // owns, and swapping surfaces there would free the status item, and the
+        // menu, underneath AppKit.
+        m_surfaceReview->setInterval(250);
+        connect(m_surfaceReview, &QTimer::timeout, this, &App::reviewSurfaces);
+    }
+    // restart, not start: the last notification of a burst is the one whose
+    // geometry is worth reading.
+    m_surfaceReview->start();
+}
+bool App::notchAvailable() const
+{
+#ifdef Q_OS_MACOS
+    return MacNotchPresenter::isAvailable();
+#else
+    return false;
+#endif
+}
+
+bool App::notchPanelWanted() const
+{
+    // Through notchAvailable(), which is where the platform guard lives, so
+    // that this stays a statement about the preference rather than about macOS.
+    if (!notchAvailable())
+        return false;
+    // The preference, unless honouring it would put the strip somewhere nobody
+    // can see or click. m_barObscured is only ever set by having tried, so a
+    // menu bar that has room is still a menu bar the user gets to choose.
+    return m_settings.useNotchPanel() || m_barObscured;
+}
+void App::verifyBarSurface()
+{
+    if (!m_barSurface || !m_barSurface->presenter || m_barObscured)
+        return;
+    if (!m_barSurface->presenter->isObscured())
+        return;
+    // The status item went under the camera housing. Nothing about it says so
+    // -- macOS reports it visible -- and the panel that would have covered for
+    // it is exactly what was turned off to get here, so this is the one state
+    // the app cannot be left in: no surface anyone can reach, and no menu to
+    // reach a surface from.
+    m_barObscured = true;
+    qWarning("hyperwave: the status item is not reachable in this menu bar; "
+             "drawing in the notch instead, with the tab held out");
+    reviewSurfaces();
+    // The panel is the only surface now, so it has to be showing. Without this
+    // a quiet machine gets a retracted tab and no status item, which is the
+    // same nothing the fallback exists to prevent.
+    setNotchTabVisible(true);
+}
+void App::reviewSurfaces()
+{
+    if (m_options.windowed)
+        return;
+    const bool wantNotch = notchPanelWanted();
+    if (wantNotch == (m_notchSurface != nullptr) && wantNotch == (m_barSurface == nullptr)) {
+        // The right surface -- but not necessarily in the same menu bar it was
+        // last checked against. Opening a lid moves the bar to another screen,
+        // with different room and a housing on it, without changing which
+        // surface is the correct one to be using. Tying the check to a surface
+        // swap meant that case was never looked at.
+        scheduleBarVerification();
+        return;
+    }
+    // The wanted surface is installed before the unwanted one is taken away.
+    // install() can refuse -- a status item can fail to be created, and the
+    // panel refuses outright when the housing has gone -- and the order means a
+    // refusal leaves the old surface up rather than leaving nothing at all.
+    if (wantNotch) {
+#ifdef Q_OS_MACOS
+        if (!m_notchSurface)
+            addSurface(std::make_unique<MacNotchPresenter>(this), true);
+        if (m_notchSurface) {
+            retireSurface(m_barSurface);
+            setNotchTabVisible(true);
+        }
+#endif
+    } else {
+        if (!m_barSurface)
+            addSurface(BarPresenter::create(this), false);
+        if (m_barSurface)
+            retireSurface(m_notchSurface);
+    }
+    if (!m_barSurface && !m_notchSurface) {
+        qCritical("hyperwave: no surface could be installed");
+        return;
+    }
+    applyFrameRate();
+    // Neither is part of addSurface(): a new surface arrives with no menu, and
+    // the entries that describe the notch are conditional on which surface is
+    // up, so the one that stayed is now describing the wrong thing.
+    refreshMenu();
+    qInfo("hyperwave: drawing in the %s", m_notchSurface ? "notch panel" : "menu bar");
+    scheduleBarVerification();
+}
+
+void App::noteDisplayChange()
+{
+    const bool available = notchAvailable();
+    if (available == m_notchWasAvailable)
+        return;
+
+    // Only a housing appearing or going away counts as a different menu bar.
+    //
+    // Everything else that posts a screen-parameters notification is the same
+    // bar being reshuffled -- and adding or removing a status item posts one,
+    // which is to say this app's own fallback does. Clearing the verdict on
+    // every notification made that a loop: fall back to the panel, retiring the
+    // item announces a display change, the change clears the verdict, the
+    // review puts the item back, 600ms later it is buried again. Measured on
+    // the hardware, four full round trips in nine seconds, visible as the notch
+    // appearing and vanishing.
+    m_notchWasAvailable = available;
+    m_barObscured = false;
+}
+
+void App::scheduleBarVerification()
+{
+    if (!m_barSurface || m_barObscured)
+        return;
+    // Deferred, because the item has no frame until AppKit has laid the bar
+    // out, and asking before then reads a zero rect that intersects nothing.
+    QTimer::singleShot(kBarPlacementSettleMs, this, &App::verifyBarSurface);
+}
+void App::retireSurface(Surface *&slot)
+{
+    if (!slot)
+        return;
+    const auto it = std::find_if(m_surfaces.begin(), m_surfaces.end(),
+                                 [slot](const std::unique_ptr<Surface> &s) {
+                                     return s.get() == slot;
+                                 });
+    slot = nullptr;
+    if (it == m_surfaces.end())
+        return;
+    // Detached now, destroyed later.
+    //
+    // Destroying it here would be simpler and is wrong: this runs from the
+    // menu, and on the notch panel that menu is popped up by the presenter
+    // itself, which still touches its own members after the action returns.
+    // Moving the unique_ptr is pure C++ and cannot reach AppKit; the destructor
+    // that does is left to the next turn of the event loop, by which point
+    // nothing is tracking. The surface stays alive until then, so any frame
+    // callback still in flight finds a live object.
+    m_retiredSurfaces.push_back(std::move(*it));
+    m_surfaces.erase(it);
+    QTimer::singleShot(0, this, [this] {
+        for (auto &surface : m_retiredSurfaces) {
+            if (surface->presenter)
+                surface->presenter->remove();
+        }
+        m_retiredSurfaces.clear();
+    });
+}
 void App::setNotchTabVisible(bool visible)
 {
     if (!m_notchSurface)
         return;
     auto *notch = static_cast<PanelPresenter *>(m_notchSurface->presenter.get());
-    notch->setTabVisible(visible || !m_settings.notchAutoHide());
+    // m_barObscured beats the auto-hide preference.
+    //
+    // Retracting is fine when the panel is a choice: the notch looks stock on a
+    // quiet machine and the housing stays hoverable. It is not fine when the
+    // panel is standing in for a menu bar that had no room, because then it is
+    // the only surface there is, and a retracted tab plus no status item is an
+    // app that is running and drawing and showing the user nothing at all.
+    notch->setTabVisible(visible || !m_settings.notchAutoHide() || m_barObscured);
     Q_UNUSED(visible);
 }
 
@@ -801,6 +989,23 @@ MenuModel App::buildMenu() const
     gradients.append(MenuItem::action(QLatin1String(MenuAction::kToggleCompact),
                                       QStringLiteral("Compact strip"))
                          .withCheck(m_settings.compact()));
+#ifdef Q_OS_MACOS
+    // Offered whenever the display has a housing, not only while the panel is
+    // up: it is the way back from the menu bar as much as the way to the notch.
+    if (MacNotchPresenter::isAvailable()) {
+        // Checked against what is actually on screen rather than what was asked
+        // for. The two differ when the menu bar had no room clear of the
+        // housing, and a tick disagreeing with the visible strip would read as
+        // the setting being broken. Left enabled in that state on purpose:
+        // choosing it again is how you retry after making room.
+        MenuItem item = MenuItem::action(QLatin1String(MenuAction::kToggleNotch),
+                                         QStringLiteral("Draw in the notch"))
+                            .withCheck(m_notchSurface != nullptr);
+        if (m_barObscured)
+            item.withDetail(QStringLiteral("menu bar is full"));
+        gradients.append(item);
+    }
+#endif
     if (m_notchSurface) {
         gradients.append(MenuItem::action(QLatin1String(MenuAction::kToggleAutoHide),
                                           QStringLiteral("Hide notch panel when silent"))
@@ -922,6 +1127,19 @@ void App::onMenuAction(const QString &actionId)
         for (auto &surface : m_surfaces)
             onGeometryChanged(*surface);
         onAudioBecameActive();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kToggleNotch)) {
+        // Toggles what is on screen, not the stored value, so that choosing it
+        // while the panel is standing in for a full menu bar means "try the
+        // menu bar again" rather than "set the preference you already have".
+        m_settings.setUseNotchPanel(m_notchSurface == nullptr);
+        // Cleared so the attempt is a real one. If the bar still has no room
+        // clear of the housing, verifyBarSurface() puts the panel straight back.
+        m_barObscured = false;
+        // Scheduled, not immediate. This is running from inside the tracking of
+        // a menu that belongs to the presenter about to be taken away.
+        scheduleSurfaceReview();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kToggleAutoHide)) {

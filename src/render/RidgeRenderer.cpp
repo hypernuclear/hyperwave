@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <QPainter>
 #include <QPen>
@@ -139,6 +140,32 @@ void RidgeRenderer::render(const FrameState &state, const RenderStyle &style, qr
 
     const int drawn = std::min(rows, std::max(m_filled, 1));
 
+    // Where the projection actually leaves its ink, horizontally.
+    //
+    // The shear is applied as (z - 0.5) so that it is centred on depth -- but
+    // depth is also what sets a row's width. The nearest row is the widest and
+    // takes the whole negative half of the shear, while the rows taking the
+    // positive half have been narrowed by perspective, so centred in z is not
+    // centred in x. Measured at 6x on a 91pt strip, the terrain overhung the
+    // left edge by 14px and left 94px empty on the right; every other look is
+    // symmetric to the pixel.
+    //
+    // Taken over the rows actually drawn rather than solved for the endpoints:
+    // with a negative shearX the extremes are not necessarily at the ends, and
+    // the HUD can set one live.
+    qreal inkMin = std::numeric_limits<qreal>::max();
+    qreal inkMax = std::numeric_limits<qreal>::lowest();
+    for (int age = 0; age < drawn; ++age) {
+        const qreal z = drawn > 1 ? static_cast<qreal>(age) / (drawn - 1) : 0.0;
+        const qreal halfSpan = halfWidth * r.spreadX / (1.0 + z * r.depth);
+        const qreal shear = (z - 0.5) * r.shearX * w;
+        inkMin = std::min(inkMin, halfWidth - halfSpan + shear);
+        inkMax = std::max(inkMax, halfWidth + halfSpan + shear);
+    }
+    // Applied inside project(), so it moves the ridges and the mesh lines
+    // together and the two passes cannot disagree about where centre is.
+    const qreal centreOffset = halfWidth - (inkMin + inkMax) * 0.5;
+
     // One projection, used by both passes, so a ridge and the mesh line
     // crossing it cannot disagree about where a point is.
     const auto project = [&](int age, int sample) {
@@ -151,7 +178,8 @@ void RidgeRenderer::render(const FrameState &state, const RenderStyle &style, qr
         // the right drags the whole terrain off centre and leaves a wedge of
         // dead space, which reads as a layout bug rather than as a viewpoint.
         const qreal shear = (z - 0.5) * r.shearX * w;
-        return QPointF(halfWidth + (u - 0.5) * 2.0 * halfWidth * r.spreadX * scale + shear,
+        return QPointF(centreOffset + halfWidth
+                           + (u - 0.5) * 2.0 * halfWidth * r.spreadX * scale + shear,
                        horizonY + (camHeight - magnitude * amplitude) * scale);
     };
     const auto fadeAt = [&](int age) {

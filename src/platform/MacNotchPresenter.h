@@ -18,6 +18,12 @@ namespace hyperwave {
 //
 // The space directly below the notch is the one piece of that region no other
 // app competes for, which is what makes it a fix rather than another contender.
+// That is also why it is the default on hardware that has a housing: it is the
+// surface that cannot be crowded out.
+//
+// It replaces the status item rather than joining it. The two ran together at
+// first, which put two copies of the same strip in the same corner of the same
+// screen; Settings::useNotchPanel picks one.
 //
 // Two states:
 //   Collapsed  a black tab hanging below the notch with the strip inside it,
@@ -76,15 +82,28 @@ public:
     // Reached from the Objective-C helper.
     void emitFrameDue();
     void emitGeometryChanged();
+    void emitScreenConfigurationChanged();
     void emitClicked();
     void emitMenuAction(const QString &actionId);
-    void handleHover(bool inside);
-    void handleSourcePick(const QString &uid);
+    // Decides from the pointer's position whether the panel should be open,
+    // rather than being told. AppKit emits an exit/enter pair for every step of
+    // an animated resize, with the pointer stationary and inside the window the
+    // whole time, so an enter or an exit is only a reason to look again.
+    void reviewHover();
     void setDevices(const AudioDeviceList &devices, const QString &current) override;
     void showMenu();
 
 private:
-    void applyFrame();
+    // `animated` eases the window to its new size, for the hover expand and
+    // collapse. Off everywhere else: a display reconfiguration is a jump, not
+    // a movement, and easing it only makes it look uncertain.
+    void applyFrame(bool animated = false);
+
+    // A poll, alive only while the panel is open, for the departure AppKit can
+    // fail to report at all once its tracking state has been inverted by an
+    // animation. See startHoverWatch().
+    void startHoverWatch();
+    void stopHoverWatch();
 
     struct Impl;
     std::unique_ptr<Impl> m_impl;

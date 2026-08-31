@@ -51,6 +51,16 @@ public:
     // are reasons to stop spending cycles drawing.
     virtual bool isVisibleOnScreen() const = 0;
 
+    // Whether this surface has ended up somewhere nobody can see or click.
+    //
+    // Distinct from isVisibleOnScreen(), which is a per-frame "is it worth
+    // drawing" and is deliberately permissive. This one answers "did the host
+    // put us somewhere unusable", and it exists because macOS will lay a status
+    // item out underneath the camera housing -- a physical cutout with no
+    // pixels behind it -- while still reporting the item as visible. A surface
+    // that cannot say otherwise is assumed fine.
+    virtual bool isObscured() const { return false; }
+
     // Drives the clock. On macOS this is a display link bound to the view's
     // screen; the presenter calls back once per vsync while running.
     // Frames per second the host should aim for. Measured on macOS 26, dropping
@@ -73,6 +83,16 @@ Q_SIGNALS:
 
     void clicked();
     void geometryChanged();
+
+    // The displays were reconfigured -- a lid opened or shut, a monitor was
+    // plugged in, the menu bar moved to another screen.
+    //
+    // Separate from geometryChanged because that one also fires for a surface
+    // resizing itself, and the host's answer to "which surface should be up"
+    // must not be reopened every time a panel expands under the pointer. Every
+    // surface emits it, so the host still hears about the display even when the
+    // surface it would have asked is the one that just went away.
+    void screenConfigurationChanged();
 
     // Fired just before the menu opens, so the app can refresh the list of
     // which apps are currently producing audio rather than polling for it.

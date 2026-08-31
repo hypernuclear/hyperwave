@@ -73,13 +73,47 @@ constexpr CGFloat kTabHeight = 20.0;
 // changing any one row does not silently start overlapping the next.
 constexpr CGFloat kExpandedOverhang = 96.0;
 constexpr CGFloat kExpandedStripHeight = 54.0;
-constexpr CGFloat kExpandedSourcesHeight = 22.0;
 constexpr CGFloat kExpandedPad = 10.0;
 constexpr CGFloat kCornerRadius = 14.0;
+
 CGFloat expandedHeight(CGFloat notchHeight)
 {
-    return notchHeight + kExpandedPad + kExpandedSourcesHeight + kExpandedPad
-        + kExpandedStripHeight + kExpandedPad;
+    return notchHeight + kExpandedPad + kExpandedStripHeight + kExpandedPad;
+}
+
+// Hover. Expanding is given longer than collapsing: the panel arriving is what
+// the pointer is waiting for, while the panel leaving should get out of the way.
+// The curve is weighted to the finish, so the size settles rather than stopping.
+constexpr NSTimeInterval kExpandSeconds = 0.22;
+constexpr NSTimeInterval kCollapseSeconds = 0.16;
+
+CAMediaTimingFunction *hoverCurve()
+{
+    return [CAMediaTimingFunction functionWithControlPoints:0.2f:0.0f:0.0f:1.0f];
+}
+
+// How often the panel checks that the pointer is still on it while open. See
+// startHoverWatch() for why it cannot rely on being told.
+constexpr NSTimeInterval kHoverWatchSeconds = 0.15;
+
+// Where the window sits for a given state. Derived from the notch rather than
+// read back from the window, so a frame that is halfway through an animation
+// cannot change the answer to "is the pointer on the panel".
+NSRect panelFrame(const NotchGeometry &g, bool expanded, bool tabVisible)
+{
+    CGFloat width = g.notchWidth;
+    CGFloat height = g.notchHeight;
+
+    if (expanded) {
+        width = g.notchWidth + 2 * kExpandedOverhang;
+        height = expandedHeight(g.notchHeight);
+    } else if (tabVisible) {
+        height = g.notchHeight + kTabHeight;
+    }
+    // Otherwise: exactly the housing, which is invisible against the housing.
+
+    return NSMakeRect(NSMidX(g.screenFrame) - width / 2.0, NSMaxY(g.screenFrame) - height, width,
+                      height);
 }
 
 } // namespace
@@ -90,12 +124,6 @@ CGFloat expandedHeight(CGFloat notchHeight)
 @interface HLNotchView : NSView
 @property (nonatomic, assign) hyperwave::MacNotchPresenter *presenter;
 @property (nonatomic, strong) CALayer *stripLayer;
-@property (nonatomic, strong) NSPopUpButton *sources;
-@property (nonatomic, assign) CGFloat notchHeight;
-@property (nonatomic, assign) CGFloat notchWidth;
-@property (nonatomic, assign) BOOL expanded;
-- (void)layoutContent;
-- (void)setDevices:(const hyperwave::AudioDeviceList &)devices current:(const QString &)currentUid;
 @end
 
 @implementation HLNotchView {
@@ -119,52 +147,13 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _stripLayer.contentsGravity = kCAGravityCenter;
         _stripLayer.masksToBounds = YES;
         [self.layer addSublayer:_stripLayer];
-
-        _sources = [[NSPopUpButton alloc] initWithFrame:NSZeroRect pullsDown:NO];
-        _sources.bezelStyle = NSBezelStyleRoundRect;
-        _sources.controlSize = NSControlSizeSmall;
-        _sources.font = [NSFont systemFontOfSize:11.0];
-        _sources.target = self;
-        _sources.action = @selector(sourcePicked:);
-        _sources.hidden = YES;
-        [self addSubview:_sources];
     }
     return self;
 }
 
-// Laid out by hand rather than with constraints. The panel has two elements
-// and two states; a constraint graph would be more machinery than arithmetic.
-- (void)layoutContent
-{
-    const NSRect b = self.bounds;
-    const BOOL show = _expanded;
-
-    _sources.hidden = !show;
-
-    if (!show)
-        return;
-
-    const CGFloat pad = 14.0;
-
-    // Under the housing: the source picker, then the strip in the bottom row
-    // expandedHeight() has already reserved for it -- nothing here may reach
-    // into that row.
-    //
-    // The popup is given a fixed generous width rather than its fitting size,
-    // so the panel does not change shape every time the selected device's name
-    // changes length.
-    const CGFloat sourcesWidth = std::min<CGFloat>(b.size.width - 2 * pad, 240.0);
-    const CGFloat y = b.size.height - _notchHeight - kExpandedPad - kExpandedSourcesHeight;
-    _sources.frame = NSMakeRect((b.size.width - sourcesWidth) / 2.0, y, sourcesWidth,
-                                kExpandedSourcesHeight);
-}
-
-- (void)setFrameSize:(NSSize)size
-{
-    [super setFrameSize:size];
-    [self layoutContent];
-}
-
+// No subview layout to do. The panel is one black shape with the strip as a
+// sublayer, and present() places that from the view's live bounds -- which is
+// what lets the strip track a window frame that is mid-animation.
 - (BOOL)isFlipped { return NO; }
 // Deliberately NOT wantsUpdateLayer. With it set and no -updateLayer of our
 // own, AppKit takes over the backing layer and quietly discards the corner
@@ -195,18 +184,26 @@ CGFloat expandedHeight(CGFloat notchHeight)
     [self addTrackingArea:_tracking];
 }
 
+// Both of these are a nudge to go and look, never the answer.
+//
+// Animating the window's size makes AppKit re-evaluate tracking on every step
+// of the animation, and it emits a full exit/enter pair each time even though
+// the pointer has not moved. Measured with the pointer parked on the notch:
+// 109 events in four seconds, every one of them reporting a location inside
+// the window. Acting on them directly restarted the animation on each pair, so
+// the panel never reached its open size and flickered between the two.
 - (void)mouseEntered:(NSEvent *)event
 {
     (void)event;
     if (_presenter)
-        _presenter->handleHover(true);
+        _presenter->reviewHover();
 }
 
 - (void)mouseExited:(NSEvent *)event
 {
     (void)event;
     if (_presenter)
-        _presenter->handleHover(false);
+        _presenter->reviewHover();
 }
 
 - (void)mouseDown:(NSEvent *)event
@@ -226,46 +223,6 @@ CGFloat expandedHeight(CGFloat notchHeight)
         _presenter->showMenu();
 }
 
-
-// Fills the source popup.
-//
-// A popup rather than a row of buttons: with ten output devices on this
-// machine the row was wider than the panel, and a device is a name rather than
-// an icon anyway -- "Scarlett Solo USB" does not have a face.
-- (void)setDevices:(const hyperwave::AudioDeviceList &)devices
-           current:(const QString &)currentUid
-{
-    [_sources removeAllItems];
-    NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Source"];
-    NSMenuItem *all = [[NSMenuItem alloc] initWithTitle:@"All system audio"
-                                                 action:nil
-                                          keyEquivalent:@""];
-    all.representedObject = @"";
-    [menu addItem:all];
-    if (!devices.isEmpty())
-        [menu addItem:[NSMenuItem separatorItem]];
-    NSMenuItem *selected = all;
-    for (const hyperwave::AudioDevice &device : devices) {
-        NSString *title = device.isDefaultOutput
-            ? [NSString stringWithFormat:@"%@  ·  output", device.name.toNSString()]
-            : device.name.toNSString();
-        NSMenuItem *entry = [[NSMenuItem alloc] initWithTitle:title
-                                                       action:nil
-                                                keyEquivalent:@""];
-        entry.representedObject = device.uid.toNSString();
-        [menu addItem:entry];
-        if (device.uid == currentUid)
-            selected = entry;
-    }
-    _sources.menu = menu;
-    [_sources selectItem:selected];
-}
-- (void)sourcePicked:(NSPopUpButton *)sender
-{
-    id represented = sender.selectedItem.representedObject;
-    if (_presenter && [represented isKindOfClass:[NSString class]])
-        _presenter->handleSourcePick(QString::fromNSString(represented));
-}
 @end
 
 // A target for the display link, since a C++ object cannot be one.
@@ -274,6 +231,7 @@ CGFloat expandedHeight(CGFloat notchHeight)
 - (void)step:(id)sender;
 - (void)menuItemChosen:(NSMenuItem *)sender;
 - (void)screenParametersChanged:(NSNotification *)note;
+- (void)hoverWatchFired:(NSTimer *)timer;
 @end
 
 @implementation HLNotchHook
@@ -300,8 +258,17 @@ CGFloat expandedHeight(CGFloat notchHeight)
 - (void)screenParametersChanged:(NSNotification *)note
 {
     (void)note;
+    if (!_presenter)
+        return;
+    _presenter->emitGeometryChanged();
+    _presenter->emitScreenConfigurationChanged();
+}
+
+- (void)hoverWatchFired:(NSTimer *)timer
+{
+    (void)timer;
     if (_presenter)
-        _presenter->emitGeometryChanged();
+        _presenter->reviewHover();
 }
 
 @end
@@ -322,6 +289,12 @@ struct MacNotchPresenter::Impl
     bool tabVisible = true;
     int preferredFps = 60;
     bool clockRunning = false;
+    // Runs only while the panel is open. See startHoverWatch().
+    NSTimer *hoverWatch = nil;
+    // Ordered out because the housing went away under us. Tracked rather than
+    // re-ordered every frame: ordering a window front on every geometry change
+    // fights with whatever else is at NSStatusWindowLevel.
+    bool offScreen = false;
 
     // Two, for the same reason the status item needs two: Core Animation reads
     // the bytes after present() returns.
@@ -398,8 +371,6 @@ bool MacNotchPresenter::install()
 
     m_impl->view = [[HLNotchView alloc] initWithFrame:NSMakeRect(0, 0, width, height)];
     m_impl->view.presenter = this;
-    m_impl->view.notchHeight = g.notchHeight;
-    m_impl->view.notchWidth = g.notchWidth;
     m_impl->view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     m_impl->window.contentView = m_impl->view;
 
@@ -419,6 +390,7 @@ bool MacNotchPresenter::install()
 void MacNotchPresenter::remove()
 {
     stopClock();
+    stopHoverWatch();
     if (m_impl->hook) {
         [[NSNotificationCenter defaultCenter] removeObserver:m_impl->hook];
         m_impl->hook.presenter = nullptr;
@@ -498,8 +470,11 @@ void MacNotchPresenter::present(const QImage &image)
     [CATransaction setDisableActions:YES];
     m_impl->view.stripLayer.contentsScale = dpr;
     // Bottom-anchored: the strip lives in the tab, below the housing.
-    // Collapsed the strip owns the tab; expanded it sits in the bottom row,
-    // clear of the source picker above it.
+    // Collapsed the strip owns the tab; expanded it sits in the bottom row
+    // expandedHeight() reserves for it, one pad clear of the housing above.
+    //
+    // Read from the view's bounds every frame, which is what carries the strip
+    // along with a window frame that is mid-animation.
     const CGFloat y = m_impl->expanded ? kExpandedPad : (kTabHeight - h) / 2.0;
     m_impl->view.stripLayer.frame = CGRectMake((bounds.size.width - w) / 2.0, y, w, h);
     m_impl->view.stripLayer.contents = (__bridge id)cg;
@@ -513,7 +488,11 @@ bool MacNotchPresenter::isVisibleOnScreen() const
     // The window is ours and always ordered front; there is no overflow to be
     // pushed into and no other app's items to be crowded out by. That is the
     // entire point of drawing here.
-    return m_impl->window != nil;
+    //
+    // The geometry check is the exception: between the lid closing and App
+    // dropping the surface, the window is still alive but there is no housing
+    // to draw under, and frames spent on it go nowhere visible.
+    return m_impl->window != nil && m_impl->geometry.valid;
 }
 
 bool MacNotchPresenter::isExpanded() const
@@ -526,12 +505,60 @@ void MacNotchPresenter::setExpanded(bool expanded)
     if (expanded == m_impl->expanded || !m_impl->window)
         return;
     m_impl->expanded = expanded;
-    m_impl->view.expanded = expanded;
-    applyFrame();
+    // The one animated transition. Everything else that moves this window --
+    // the tab retracting, a display being reconfigured -- is either a state
+    // change nobody is looking at or a jump to somewhere else entirely, and
+    // easing those only makes them look uncertain.
+    applyFrame(true);
+
+    if (expanded)
+        startHoverWatch();
+    else
+        stopHoverWatch();
 }
-void MacNotchPresenter::handleHover(bool inside)
+
+void MacNotchPresenter::reviewHover()
 {
-    setExpanded(inside);
+    if (!m_impl->window || !m_impl->geometry.valid)
+        return;
+
+    // Hysteresis, and the reason this asks rather than being told: the tab is
+    // what you aim at to open the panel, and the whole panel is what you have
+    // to leave to close it again. Both rectangles come from the notch geometry,
+    // so an animation in progress cannot change the answer -- which is what
+    // stops AppKit's resize-driven exit/enter pairs from reopening the question
+    // sixty times a second.
+    const NSRect target = panelFrame(m_impl->geometry, m_impl->expanded, m_impl->tabVisible);
+    setExpanded(NSPointInRect([NSEvent mouseLocation], target));
+}
+
+void MacNotchPresenter::startHoverWatch()
+{
+    if (m_impl->hoverWatch || !m_impl->hook)
+        return;
+
+    // The backstop for a departure nobody reports.
+    //
+    // Because the exits AppKit sends mid-animation are indistinguishable from
+    // real ones, its idea of inside-ness ends up inverted from ours, and then
+    // the exit for the pointer actually leaving never arrives: the panel would
+    // stay open until something else disturbed it. Polling closes that hole,
+    // and it only runs while the panel is open, so an idle notch still costs
+    // nothing.
+    m_impl->hoverWatch = [NSTimer timerWithTimeInterval:kHoverWatchSeconds
+                                                 target:m_impl->hook
+                                               selector:@selector(hoverWatchFired:)
+                                               userInfo:nil
+                                                repeats:YES];
+    // Common modes, for the same reason the display link uses them: the panel
+    // must not freeze open while its own right-click menu is tracking.
+    [[NSRunLoop mainRunLoop] addTimer:m_impl->hoverWatch forMode:NSRunLoopCommonModes];
+}
+
+void MacNotchPresenter::stopHoverWatch()
+{
+    [m_impl->hoverWatch invalidate];
+    m_impl->hoverWatch = nil;
 }
 
 void MacNotchPresenter::setPreferredFps(int fps)
@@ -621,25 +648,40 @@ bool MacNotchPresenter::isTabVisible() const
     return m_impl->tabVisible;
 }
 
-void MacNotchPresenter::applyFrame()
+void MacNotchPresenter::applyFrame(bool animated)
 {
     if (!m_impl->window)
         return;
 
     const NotchGeometry &g = m_impl->geometry;
-    CGFloat width = g.notchWidth;
-    CGFloat height = g.notchHeight;
 
-    if (m_impl->expanded) {
-        width = g.notchWidth + 2 * kExpandedOverhang;
-        height = expandedHeight(g.notchHeight);
-    } else if (m_impl->tabVisible) {
-        height = g.notchHeight + kTabHeight;
+    // No housing on the screen that owns the menu bar: the lid was shut and an
+    // external display took over. notchGeometry() zeroes the notch but still
+    // fills in screenFrame, so laying out from it produced a zero-width,
+    // tab-height window parked at the top centre of a display with no notch to
+    // hide it -- ordered front, at NSStatusWindowLevel, being drawn into.
+    //
+    // App tears the surface down when it notices, but that is coalesced behind
+    // a timer and this runs first, straight off the screen notification.
+    if (!g.valid) {
+        if (!m_impl->offScreen) {
+            m_impl->view.stripLayer.hidden = YES;
+            [m_impl->window orderOut:nil];
+            m_impl->offScreen = true;
+        }
+        return;
     }
-    // Otherwise: exactly the housing, which is invisible against the housing.
-    // The window stays alive so the notch remains hoverable -- retracting it
+    if (m_impl->offScreen) {
+        [m_impl->window orderFrontRegardless];
+        m_impl->offScreen = false;
+    }
+
+    // Shared with reviewHover(), which needs the rectangle for a state the
+    // window is not in yet. The window stays alive even when that rectangle is
+    // exactly the housing, so the notch remains hoverable -- retracting it
     // entirely would leave no way in on a display crowded enough to have hidden
     // the status item, which is the situation this panel exists for.
+    const NSRect frame = panelFrame(g, m_impl->expanded, m_impl->tabVisible);
 
     // Retracted, the window occupies exactly the housing, which is a physical
     // cutout -- nothing drawn there reaches the panel. Hiding the strip anyway
@@ -648,23 +690,40 @@ void MacNotchPresenter::applyFrame()
     const bool showStrip = m_impl->expanded || m_impl->tabVisible;
     m_impl->view.stripLayer.hidden = !showStrip;
 
-    const NSRect frame = NSMakeRect(NSMidX(g.screenFrame) - width / 2.0,
-                                    NSMaxY(g.screenFrame) - height, width, height);
-    [m_impl->window setFrame:frame display:YES animate:NO];
-    [m_impl->view setFrameSize:frame.size];
-    [m_impl->view layoutContent];
-    Q_EMIT geometryChanged();
-}
+    // The window resizes its own content view, and present() places the strip
+    // from that view's live bounds every frame, so the strip rides the
+    // animation instead of having to be animated alongside it. Setting the
+    // view's frame here by hand would put it at the final size immediately and
+    // undo exactly that.
+    if (animated) {
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+            context.duration = m_impl->expanded ? kExpandSeconds : kCollapseSeconds;
+            context.timingFunction = hoverCurve();
+            [m_impl->window.animator setFrame:frame display:YES];
+        }];
+    } else {
+        [m_impl->window setFrame:frame display:YES animate:NO];
+    }
 
-void MacNotchPresenter::handleSourcePick(const QString &bundleId)
-{
-    Q_EMIT menuActionTriggered(QLatin1String(MenuAction::kSourcePrefix) + bundleId);
+    // Emitted with the final geometry rather than per animation step: this is
+    // what sizes the render buffers, and reallocating them sixty times over a
+    // fifth of a second to land back where one call would have put them is not
+    // a smoother panel, only a busier one.
+    Q_EMIT geometryChanged();
 }
 
 void MacNotchPresenter::setDevices(const AudioDeviceList &devices, const QString &current)
 {
-    if (m_impl->view)
-        [m_impl->view setDevices:devices current:current];
+    // Nothing to fill. The panel used to carry a source popup in the expanded
+    // state; it was a second copy of a list the right-click menu already has,
+    // and it cost the panel a 32pt row that pushed the strip further from the
+    // housing. The menu is one right-click away on the panel itself, which is
+    // the same gesture that reaches it on the status item.
+    //
+    // The override stays because PanelPresenter declares it for the Windows
+    // panel, which does have a picker.
+    Q_UNUSED(devices);
+    Q_UNUSED(current);
 }
 
 void MacNotchPresenter::emitFrameDue()
@@ -676,6 +735,11 @@ void MacNotchPresenter::emitGeometryChanged()
 {
     m_impl->geometry = notchGeometry();
     Q_EMIT geometryChanged();
+}
+
+void MacNotchPresenter::emitScreenConfigurationChanged()
+{
+    Q_EMIT screenConfigurationChanged();
 }
 
 void MacNotchPresenter::emitClicked()

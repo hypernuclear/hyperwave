@@ -77,6 +77,20 @@ public:
     bool notchAutoHide() const;
     void setNotchAutoHide(bool enabled);
 
+    // Which single surface draws on a display that has a camera housing.
+    //
+    // One or the other, never both. The two used to run together -- the panel
+    // was added as insurance against the status item being crowded under the
+    // notch, and nothing ever turned the insured thing off -- which left two
+    // copies of the same strip competing for the same corner of the screen.
+    //
+    // Defaults to the panel. On the hardware where the question arises it is
+    // the surface that cannot be crowded out: a status item can be pushed under
+    // the housing while macOS still reports it as visible, and the panel is the
+    // one place on that display no other app competes for.
+    bool useNotchPanel() const;
+    void setUseNotchPanel(bool enabled);
+
 Q_SIGNALS:
     void gradientIdChanged(const QString &id);
     void visualiserParametersChanged();
@@ -84,6 +98,7 @@ Q_SIGNALS:
     void compactChanged(bool compact);
     void sourceDeviceUidChanged(const QString &uid);
     void notchAutoHideChanged(bool enabled);
+    void useNotchPanelChanged(bool enabled);
 
 private:
     QSettings m_store;

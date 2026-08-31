@@ -176,10 +176,29 @@ right, hyperwave's strip gets pushed underneath the camera housing and becomes
 invisible — while macOS still reports `statusItem.visible == true`. The app is
 running, the tap is working, and you see nothing.
 
-So on those Macs hyperwave also draws a panel anchored to the housing. The
+So on those Macs hyperwave draws a panel anchored to the housing instead. The
 space directly below the notch is the one part of that region no other app
-competes for. It is additional, never a replacement: the status item is still
-what people expect to find and what they can drag.
+competes for, which is what makes it a fix rather than another contender.
+
+**One or the other, never both.** On a Mac with a housing the panel is the
+default, because it is the surface that cannot be crowded out. Uncheck
+*Appearance → Draw in the notch* and the strip moves back to the menu bar as an
+ordinary status item; the choice is remembered, and it applies the moment you
+pick it. On a display with no housing there is no choice to make and the status
+item is all there is — including when you close the lid on a docked MacBook,
+which takes the housing away mid-session and hands the strip back to the bar.
+
+Asking for the menu bar on a notched Mac does not always get it. macOS lays
+status items out right-to-left and steps straight over the housing, so on a
+crowded bar the slot hyperwave is given can fall underneath it — where there
+are no pixels and nothing to click, while `NSStatusItem.visible` still reports
+`YES`. hyperwave measures the item against the housing after installing it and
+goes back to the panel if they overlap, because the alternative is a running app
+with no surface anyone can reach and no menu to fix it from. The menu entry then
+reads *menu bar is full*; choose it again once you have made room and it retries.
+If you ever do get stuck with nothing on screen,
+`defaults write com.hypernuclear.hyperwave "notch.usePanel" -bool true` and
+relaunch.
 
 ![collapsed](docs/notch-collapsed.png)
 
@@ -189,9 +208,13 @@ too crowded for more than 14.
 
 ![expanded](docs/notch-expanded.png)
 
-Hover and it drops down: bigger bars and a dropdown for the audio source. The
-screenshot is the panel alone -- on a notched Mac the strip above the picker
-sits behind the camera housing itself.
+Hover and it eases down into a taller panel: bigger bars, more room. The
+screenshot is the panel alone -- on a notched Mac its top row sits behind the
+camera housing itself.
+
+There is deliberately nothing in it but the strip. It used to carry a dropdown
+for the audio source, which was a second copy of a list the right-click menu
+already has and cost the panel a row it did not need.
 
 **Right-click the panel for the menu.** That is not a convenience; it is the
 only way in on the display this panel exists for. If the status item has been
@@ -458,7 +481,9 @@ the *same* renderer; the moment the platforms run different DSP you get to chase
 `platform/` holds that seam in three interfaces: `AudioSource` for capture,
 `BarPresenter` for a surface that draws a QImage and nothing else, and
 `PanelPresenter` for the richer surfaces -- the notch panel, the appbar -- that
-also retract when idle and carry their own source picker.
+also retract when idle and can carry their own source picker. Exactly one
+presenter is installed at a time; `App::reviewSurfaces()` picks it and re-picks
+it whenever the displays or the preference change.
 
 ## Three things that are load-bearing
 
