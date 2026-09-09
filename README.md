@@ -15,6 +15,15 @@ pixel ratio at paint time, so a 3pt stride is 3px at 1x, 6px at 2x and 9px at
 non-Retina display, which looks fine on a laptop and blurry on someone's
 external monitor.
 
+## Download & docs
+
+Grab the newest build from [hypernuclear.com/docs/hyperwave](https://hypernuclear.com/docs/hyperwave) —
+the docs page links the downloads and walks through the one permission
+macOS asks for. (Direct links: [Apple
+Silicon](https://hypernuclear.com/hyperwave/download/mac) /
+[Intel](https://hypernuclear.com/hyperwave/download/mac/x64) /
+[Windows](https://hypernuclear.com/hyperwave/download/windows).)
+
 ## Six looks, and one thing that happens to all of them
 
 Switch in `Appearance`, or `--viz <name>` for one run.
