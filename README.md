@@ -455,6 +455,12 @@ task for checking the other side of that.
 
 ## Flags and env
 
+For marketing footage, [Hyperwave Studio](docs/studio.md) is a separate windowed
+capture app with live visualizer controls, system audio or soundtrack input, menu-bar and notch
+layouts, and transparent PNG-sequence export at exact pixel dimensions and
+60 fps. In VS Code, choose **hyperwave: Studio (PNG capture)** and press F5.
+
+
 | | |
 |---|---|
 | `--verify-audio` | Print capture levels for five seconds and exit. The fastest answer to "can it hear the system?" |

@@ -61,6 +61,11 @@ public:
     bool setSourceDeviceUid(const QString &uid) override;
     QString sourceDeviceUid() const override { return m_sourceDeviceUid; }
 
+    // Authoring tools only need the system mix. Set before start(): avoids
+    // per-process metering and uses a distinct tap name with no orphan sweep,
+    // so Studio and the menu-bar app can run together.
+    void setCaptureOnly(bool enabled) { m_captureOnly = enabled; }
+
     // True when the aggregate had to include the default output device, which
     // makes us an output client of the user's speakers. Surfaced because it
     // changes the risk profile enough to be worth seeing in the HUD.
@@ -101,6 +106,7 @@ private:
     // Not part of the tap: a process tap cannot hear a microphone.
     InputCapture m_input;
     bool m_inputEnabled = false;
+    bool m_captureOnly = false;
 
     struct Impl;
     std::unique_ptr<Impl> m_impl;

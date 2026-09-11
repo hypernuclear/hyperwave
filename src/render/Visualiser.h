@@ -57,6 +57,10 @@ public:
     // was accumulating is no longer the same one -- a source change, a format
     // change, a surface resize. The default is to have nothing to forget.
     virtual void reset() {}
+
+    // Offline capture supplies a frame time; ordinary presenters keep using
+    // the renderer's clock. Negative values restore the live clock.
+    virtual void setAnimationTime(qreal seconds) { Q_UNUSED(seconds); }
 };
 
 } // namespace hyperwave

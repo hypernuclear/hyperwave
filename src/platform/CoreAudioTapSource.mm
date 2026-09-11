@@ -202,7 +202,8 @@ bool CoreAudioTapSource::start()
         return true;
 
     m_shuttingDown.store(false, std::memory_order_release);
-    sweepOrphanedTaps();
+    if (!m_captureOnly)
+        sweepOrphanedTaps();
 
     if (!createTap()) {
         // Whether a missing grant fails here or succeeds and delivers silence
@@ -263,12 +264,13 @@ bool CoreAudioTapSource::start()
         m_statusDetail += QStringLiteral(" — device ") + m_sourceDeviceUid;
 
     installListeners();
-    m_meter.setEnabled(true);   // stop() latches it off; this is the other half
+    m_meter.setEnabled(!m_captureOnly);   // stop() latches it off; this is the other half
     // Dispatched rather than called: the first build is the expensive one --
     // every tap in the set rather than the handful that moved -- and there is
     // no reason for launch to wait on it.
     dispatchMeterRefresh();
-    m_meterFallback.start();
+    if (!m_captureOnly)
+        m_meterFallback.start();
     m_running = true;
     setPermissionState(PermissionState::Probing);
     return true;
@@ -348,7 +350,7 @@ bool CoreAudioTapSource::createTap()
                                                    andDeviceUID:m_sourceDeviceUid.toNSString()
                                                      withStream:0];
     }
-    desc.name = @(kTapName);
+    desc.name = m_captureOnly ? @"Studio System Audio" : @(kTapName);
     desc.UUID = [NSUUID UUID];
     desc.privateTap = YES;      // invisible to other apps and to Audio MIDI Setup
     desc.muteBehavior = CATapUnmuted;   // never, ever mute what the user is listening to
@@ -701,6 +703,8 @@ bool CoreAudioTapSource::restartCapture()
 
 void CoreAudioTapSource::dispatchMeterRefresh()
 {
+    if (m_captureOnly)
+        return;
     if (m_shuttingDown.load(std::memory_order_acquire))
         return;
     // Queued onto the meter thread. The pool is explicit because this is not a

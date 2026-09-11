@@ -16,6 +16,7 @@ if(APPLE)
 endif()
 
 option(HYPERWAVE_BUILD_TESTS "Build the headless test suite" ON)
+option(HYPERWAVE_BUILD_STUDIO "Build the local transparent-animation capture app" OFF)
 
 # --- versions ---------------------------------------------------------------
 #
@@ -514,4 +515,8 @@ endif()
 if(HYPERWAVE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(HYPERWAVE_BUILD_STUDIO)
+    add_subdirectory(src/studio)
 endif()
