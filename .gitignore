@@ -13,3 +13,6 @@ CMakeLists.txt.user*
 __pycache__/
 *.pyc
 .serena/
+
+# agent workspace (plans, scratch)
+.hermes/
