@@ -41,6 +41,7 @@ public:
     void render(const FrameState &state, const RenderStyle &style, qreal heightPt, qreal dpr,
                 QImage &target) override;
     void reset() override;
+    void setAnimationTime(qreal seconds) override;
 
     // Whether a GPU is actually available. Checked once; a machine that cannot
     // create a QRhi has to fall back to a look that does not need one rather

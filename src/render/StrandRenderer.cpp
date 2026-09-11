@@ -59,6 +59,7 @@ struct StrandRenderer::Impl
     bool failed = false;
 
     QElapsedTimer clock;
+    qreal animationTime = -1.0;
     QImage staging;
 
     void releaseSizeDependent()
@@ -321,7 +322,7 @@ void StrandRenderer::render(const FrameState &state, const RenderStyle &style, q
     }
 
     {
-        const qreal seconds = d.clock.elapsed() / 1000.0;
+        const qreal seconds = d.animationTime >= 0.0 ? d.animationTime : d.clock.elapsed() / 1000.0;
         const float aspect = static_cast<float>(w) / static_cast<float>(h);
 
         // Straight to clip space, no ortho.
@@ -412,6 +413,11 @@ void StrandRenderer::render(const FrameState &state, const RenderStyle &style, q
     QPainter p(&target);
     p.setCompositionMode(QPainter::CompositionMode_Source);
     p.drawImage(0, 0, view);
+}
+
+void StrandRenderer::setAnimationTime(qreal seconds)
+{
+    m_impl->animationTime = seconds;
 }
 
 } // namespace hyperwave

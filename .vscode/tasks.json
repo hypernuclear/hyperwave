@@ -2,7 +2,24 @@
   "version": "2.0.0",
   "tasks": [
     {
-      // Every launch config depends on this, and it is not housekeeping.
+      "label": "Configure Hyperwave Studio",
+      "type": "process",
+      "command": "cmake",
+      "args": ["-S", "${workspaceFolder}", "-B", "${command:cmake.buildDirectory}", "-DHYPERWAVE_BUILD_STUDIO=ON"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      "label": "Build Hyperwave Studio",
+      "type": "process",
+      "command": "cmake",
+      "args": ["--build", "${command:cmake.buildDirectory}", "--target", "hyperwave_studio"],
+      "dependsOn": "Configure Hyperwave Studio",
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "silent", "panel": "shared" }
+    },
+    {
+      // Main-app launch configs depend on this, and it is not housekeeping.
       //
       // hyperwave is a background agent with no window and no Dock icon, so a
       // previous debug session that was stopped rather than quit leaves an

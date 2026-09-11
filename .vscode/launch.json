@@ -16,9 +16,29 @@
   //     LaunchServices instead: `open build/hyperwave.app`.
   //
   // Everything else -- rendering, the DSP, the menu, the notch panel -- behaves
-  // identically either way.
+  // identically either way. Studio's System audio option uses the same VS Code
+  // grant; its demo and file sources do not need a recording grant.
   "version": "0.2.0",
   "configurations": [
+    {
+      "name": "hyperwave: Studio (PNG capture)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${command:cmake.buildDirectory}/hyperwave_studio",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build Hyperwave Studio",
+      "args": [],
+      "environment": [],
+      "osx": {
+        "program": "${command:cmake.buildDirectory}/hyperwave_studio.app/Contents/MacOS/hyperwave_studio",
+        "MIMode": "lldb",
+        "targetArchitecture": "arm64",
+        "logging": { "moduleLoad": false }
+      },
+      "windows": {
+        "program": "${command:cmake.buildDirectory}/hyperwave_studio.exe"
+      }
+    },
     {
       // The everyday one: the real menu bar item, exactly as it ships.
       "name": "hyperwave: Menu bar",
