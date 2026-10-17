@@ -89,7 +89,9 @@ inline constexpr const char *kSettings = "settings";
 inline constexpr const char *kCheckForUpdates = "check-for-updates";
 inline constexpr const char *kToggleAnalytics = "toggle-analytics";
 inline constexpr const char *kShowSplash = "show-splash";
-inline constexpr const char *kAbout = "about";
+inline constexpr const char *kToggleLogin = "toggle-login";
+inline constexpr const char *kToggleWelcomeAtStartup = "toggle-welcome-at-startup";
+inline constexpr const char *kWelcome = "welcome";
 inline constexpr const char *kQuit = "quit";
 inline constexpr const char *kToggleAutoHide = "toggle-auto-hide";
 } // namespace MenuAction

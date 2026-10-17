@@ -91,7 +91,20 @@ public:
     bool useNotchPanel() const;
     void setUseNotchPanel(bool enabled);
 
+    // Whether the welcome window (qml/Welcome.qml) has ever opened on its own.
+    // Only tells the first showing from the ones after it (what analytics
+    // counts); an install that predates the window still gets a first.
+    bool welcomeShown() const;
+    void setWelcomeShown();
+
+    // Whether the welcome window opens by itself after the splash at each
+    // launch. On until the user unticks it, in the window or in the menu
+    // ("Show Welcome at Startup"); "Welcome to hyperwave..." opens it either way.
+    bool welcomeAtStartup() const;
+    void setWelcomeAtStartup(bool on);
+
 Q_SIGNALS:
+    void welcomeAtStartupChanged(bool on);
     void gradientIdChanged(const QString &id);
     void visualiserParametersChanged();
     void vizStyleChanged(const QString &id);

@@ -1,8 +1,11 @@
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QDir>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QPointer>
 #include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickWindow>
 #include <QScreen>
@@ -11,6 +14,7 @@
 
 #include "app/App.h"
 #include "app/Shell.h"
+#include "app/WelcomeBridge.h"
 
 #ifdef Q_OS_WIN
 #include <cstdio>
@@ -61,6 +65,14 @@ int main(int argc, char **argv)
     // The status item IS the app. Nothing here should die because a window
     // closed, and most of the time there are no windows at all.
     QApplication::setQuitOnLastWindowClosed(false);
+
+    // Satoshi, the app's one typeface, compiled in from the build's own
+    // Fontshare download (CMakeLists.txt). Registered before any QML loads, so
+    // every window names "Satoshi" and picks a cut by font.weight.
+    for (const QString &cut : QDir(QStringLiteral(":/fonts")).entryList({QStringLiteral("*.otf")})) {
+        if (QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/") + cut) < 0)
+            qWarning("hyperwave: could not load font %s", qPrintable(cut));
+    }
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
@@ -209,8 +221,88 @@ int main(int argc, char **argv)
         activateApp();
     };
 
-    if (options.shotPath.isEmpty() && !options.verifyAudio)
+    // The welcome window (qml/Welcome.qml): shown by itself after the splash at
+    // each launch, until the user unticks "Show at startup" (in the window, or
+    // the menu's Show Welcome at Startup), and on demand from the menu's
+    // "Welcome to hyperwave...". It carries the version and licence, the
+    // capture line, the newsletter sign-up, the studio's other apps, and the
+    // Open at Login and usage-data switches. Same engine as the splash.
+    WelcomeBridge welcomeBridge;
+    welcomeBridge.setAnalytics(hyperwaveApp.analytics());
+    welcomeBridge.setSettings(&hyperwaveApp.settings());
+    splashEngine.rootContext()->setContextProperty(QStringLiteral("welcome"), &welcomeBridge);
+    QQmlComponent welcomeComponent(&splashEngine,
+                                   QUrl(QStringLiteral("qrc:/qt/qml/hyperwave/qml/Welcome.qml")));
+    QPointer<QQuickWindow> welcomeWindow;
+    // `how` is only what analytics counts: "first_run", "startup" or "menu".
+    // The window is the same every time.
+    auto showWelcome = [&](const QString &how) {
+        if (!welcomeWindow) {
+            welcomeWindow = qobject_cast<QQuickWindow *>(welcomeComponent.create());
+            hideWindowTitle(welcomeWindow);
+        }
+        if (!welcomeWindow) {
+            qWarning("hyperwave: welcome window failed to load: %s",
+                     qPrintable(welcomeComponent.errorString()));
+            return;
+        }
+        welcomeBridge.setCaptureStatus(hyperwaveApp.captureStatus());
+        // The login item may have changed in System Settings since the window
+        // was last up.
+        welcomeBridge.refreshOpenAtLogin();
+        welcomeWindow->show();
+        welcomeWindow->raise();
+        welcomeWindow->requestActivate();
+        // An accessory app is not in the activation order: see the splash.
+        activateApp();
+        welcomeBridge.shown(how);
+    };
+    QObject::connect(&hyperwaveApp, &App::welcomeRequested, &app,
+                     [&] { showWelcome(QStringLiteral("menu")); });
+    // Open at Login flipped in the menu: the window's switch follows. (The
+    // other way needs nothing: the menu reads the system each time it opens.)
+    QObject::connect(&hyperwaveApp, &App::loginItemToggled, &welcomeBridge,
+                     [&] { welcomeBridge.refreshOpenAtLogin(); });
+    // The window goes before the bridge its bindings read: left alone, it
+    // outlives the bridge and every binding fails on the way out.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [&] { delete welcomeWindow; });
+
+    // A way to see the welcome window without photographing the screen, like
+    // HYPERWAVE_SPLASH_SHOT: open it straight away, grab it from the scene
+    // graph after HYPERWAVE_WELCOME_SHOT_MS (default 4000, time for the store
+    // and its loops to arrive), write it out and quit.
+    if (qEnvironmentVariableIsSet("HYPERWAVE_WELCOME_SHOT")) {
+        const QString path = qEnvironmentVariable("HYPERWAVE_WELCOME_SHOT");
+        const int at = qEnvironmentVariableIntValue("HYPERWAVE_WELCOME_SHOT_MS");
+        showWelcome(QStringLiteral("menu"));
+        QTimer::singleShot(at > 0 ? at : 4000, &app, [&welcomeWindow, path] {
+            if (!welcomeWindow)
+                return;
+            const QImage shot = welcomeWindow->grabWindow();
+            if (shot.save(path))
+                qInfo("hyperwave: wrote %s (%dx%d px)", qPrintable(path), shot.width(),
+                      shot.height());
+            else
+                qWarning("hyperwave: could not write %s", qPrintable(path));
+            qApp->quit();
+        });
+        return QApplication::exec();
+    }
+
+    if (options.shotPath.isEmpty() && !options.verifyAudio) {
         showSplash(4000);
+        // After the splash leaves. The first showing is told apart from the
+        // rest only for the count; it is recorded when shown, so quitting while
+        // it is up does not make the next one a first again.
+        if (hyperwaveApp.settings().welcomeAtStartup() && splashWindow)
+            QObject::connect(splashWindow, &QWindow::visibleChanged, &app, [&](bool visible) {
+                if (visible || !hyperwaveApp.settings().welcomeAtStartup())
+                    return;
+                const bool first = !hyperwaveApp.settings().welcomeShown();
+                hyperwaveApp.settings().setWelcomeShown();
+                showWelcome(first ? QStringLiteral("first_run") : QStringLiteral("startup"));
+            });
+    }
     QObject::connect(&hyperwaveApp, &App::splashRequested, &app, [&] { showSplash(0); });
 
     return QApplication::exec();

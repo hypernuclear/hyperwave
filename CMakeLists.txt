@@ -172,6 +172,9 @@ qt_add_executable(hyperwave
     src/app/DspWorker.h
     src/app/Settings.cpp
     src/app/Settings.h
+    src/app/WebsiteLinks.h
+    src/app/WelcomeBridge.cpp
+    src/app/WelcomeBridge.h
     src/app/DebugHud.cpp
     src/app/VisualiserControls.cpp
     src/app/DebugHud.h
@@ -180,6 +183,10 @@ qt_add_executable(hyperwave
     $<$<NOT:$<PLATFORM_ID:Darwin>>:src/app/ShellStub.cpp>
     src/platform/BarPresenter.h
     src/platform/PanelPresenter.h
+    src/platform/LaunchAtLogin.h
+    $<$<PLATFORM_ID:Darwin>:src/platform/LaunchAtLoginMac.mm>
+    $<$<PLATFORM_ID:Windows>:src/platform/LaunchAtLoginWin.cpp>
+    $<$<NOT:$<OR:$<PLATFORM_ID:Darwin>,$<PLATFORM_ID:Windows>>>:src/platform/LaunchAtLoginStub.cpp>
     # Per-platform files are selected here rather than in if() blocks so the
     # source list stays readable as one thing.
     $<$<PLATFORM_ID:Darwin>:src/platform/CoreAudioTapSource.h>
@@ -394,31 +401,90 @@ if(HYPERWAVE_AUTO_UPDATE)
     endif()
 endif()
 
+# The welcome window's fire button (qml/Welcome.qml, FillButton). On the app
+# rather than hyperwave_core: it is UI, not the visualiser.
+qt_add_shaders(hyperwave "hyperwave_ui_shaders"
+    PREFIX "/shaders"
+    BASE "src/render/shaders"
+    FILES
+        src/render/shaders/buttonfire.frag
+        src/render/shaders/buttonface.frag)
+
 qt_add_qml_module(hyperwave
     URI hyperwave
     VERSION 1.0
     QML_FILES
         qml/Settings.qml
         qml/Splash.qml
+        qml/Welcome.qml
+        qml/PlatformMarks.qml
         qml/HypernuclearWordmark.qml
         qml/HyperwaveMark.qml
         qml/HyperwaveLogotype.qml
 )
 
-# The splash's artwork, the mark it draws, and the face it sets them in.
+# The splash's artwork, which the welcome window's header shares.
 #
 # Bundled rather than loaded from disk: a splash that depends on files beside
 # the binary is one that shows a grey rectangle the first time somebody moves
-# the app. The font is bundled for the same reason -- a missing family falls
-# back to the system UI face silently, and the panel goes generic without
-# anything reporting it.
+# the app.
 qt_add_resources(hyperwave "hyperwave_icons"
     PREFIX "/icons"
     BASE "resources"
     FILES
         resources/splash.jpg
-        resources/Inter-SemiBold.ttf
 )
+
+# Satoshi, hypernuclear's brand face: the app's only typeface (the splash and
+# the welcome window). Its licence (the ITF Free Font License, from Fontshare)
+# lets an app embed it but not a repository redistribute it, and forbids
+# modifying it, so it is not committed: each build fetches its own unmodified
+# copy from Fontshare, the way the updaters above are fetched. There is no
+# fallback face, so a build that can't fetch it stops here. The first configure
+# needs the network; after that the copy in the build tree is reused.
+set(_satoshi_dir "${CMAKE_BINARY_DIR}/_deps/satoshi")
+# The zip's layout is Fontshare's (Satoshi_Complete/Fonts/OTF/...): found by
+# name rather than by path, so a renamed top folder doesn't matter.
+file(GLOB_RECURSE _satoshi_black "${_satoshi_dir}/*.otf")
+list(FILTER _satoshi_black INCLUDE REGEX "/Satoshi-Black\\.otf$")
+if(NOT _satoshi_black)
+    # A few tries: one dropped connection shouldn't fail a CI build.
+    foreach(_attempt RANGE 1 3)
+        file(DOWNLOAD "https://api.fontshare.com/v2/fonts/download/satoshi"
+             "${_satoshi_dir}/satoshi.zip" STATUS _satoshi_status TIMEOUT 60)
+        list(GET _satoshi_status 0 _satoshi_code)
+        list(GET _satoshi_status 1 _satoshi_error)
+        if(_satoshi_code EQUAL 0)
+            break()
+        endif()
+        message(STATUS "hyperwave: Satoshi download attempt ${_attempt} failed (${_satoshi_error})")
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep 5)
+    endforeach()
+    if(NOT _satoshi_code EQUAL 0)
+        message(FATAL_ERROR "hyperwave: could not download Satoshi from Fontshare "
+                            "(${_satoshi_error}). The app's typeface is fetched at "
+                            "configure time; check the network and configure again.")
+    endif()
+    file(ARCHIVE_EXTRACT INPUT "${_satoshi_dir}/satoshi.zip" DESTINATION "${_satoshi_dir}")
+    file(GLOB_RECURSE _satoshi_black "${_satoshi_dir}/*.otf")
+    list(FILTER _satoshi_black INCLUDE REGEX "/Satoshi-Black\\.otf$")
+    if(NOT _satoshi_black)
+        message(FATAL_ERROR "hyperwave: Fontshare's Satoshi zip has no Satoshi-Black.otf; "
+                            "its layout has changed (see ${_satoshi_dir})")
+    endif()
+endif()
+get_filename_component(HYPERWAVE_SATOSHI_DIR "${_satoshi_black}" DIRECTORY)
+set(HYPERWAVE_SATOSHI_FILES "")
+foreach(_weight Regular Medium Bold Black)
+    list(APPEND HYPERWAVE_SATOSHI_FILES "${HYPERWAVE_SATOSHI_DIR}/Satoshi-${_weight}.otf")
+endforeach()
+# Compiled into the binary, the embedding the licence allows, never copied into
+# the source tree. Registered with the font database at startup (main.cpp), so
+# QML just names "Satoshi".
+qt_add_resources(hyperwave "hyperwave_satoshi"
+    PREFIX "/fonts"
+    BASE "${HYPERWAVE_SATOSHI_DIR}"
+    FILES ${HYPERWAVE_SATOSHI_FILES})
 
 # The mark, from assets/ where it is authored rather than from a copy.
 #
@@ -509,7 +575,8 @@ if(WIN32)
     # shell32 SHQueryUserNotificationState, for hiding over fullscreen apps
     # user32  window and message plumbing for the panel
     # version FileDescription lookups, for the Playing list's app names
-    target_link_libraries(hyperwave PRIVATE ole32 shell32 user32 version)
+    # uuid    the ShellLink CLSID/IIDs, for Open at Login's Startup shortcut
+    target_link_libraries(hyperwave PRIVATE ole32 shell32 user32 version uuid)
 endif()
 
 if(HYPERWAVE_BUILD_TESTS)

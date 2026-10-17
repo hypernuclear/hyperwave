@@ -1,5 +1,7 @@
 #pragma once
 
+class QWindow;
+
 namespace hyperwave {
 
 // The handful of questions this app has to ask the operating system that Qt
@@ -26,5 +28,11 @@ void activateApp();
 // aggregate and then the tap have both failed, a restart is the only thing left
 // that is guaranteed to work.
 void relaunchApp();
+
+// Keep a window's title (for Mission Control, the Window menu and VoiceOver)
+// but don't draw it in the title bar: for the welcome window, whose artwork
+// runs up under the bar, where the text sat on the illustration. Nothing to do
+// off macOS, where the title bar is the system's own and readable.
+void hideWindowTitle(QWindow *window);
 
 } // namespace hyperwave

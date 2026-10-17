@@ -12,6 +12,8 @@ constexpr const char *kHalfRateKey = "power/halfRateOnBattery";
 constexpr const char *kSourceKey = "audio/sourceDeviceUid";
 constexpr const char *kNotchAutoHideKey = "notch/autoHide";
 constexpr const char *kUseNotchPanelKey = "notch/usePanel";
+constexpr const char *kWelcomeShownKey = "app/welcomeShown";
+constexpr const char *kWelcomeAtStartupKey = "app/welcomeAtStartup";
 } // namespace
 
 Settings::Settings(QObject *parent, const QString &application)
@@ -312,6 +314,34 @@ void Settings::setUseNotchPanel(bool enabled)
         return;
     m_store.setValue(QLatin1String(kUseNotchPanelKey), enabled);
     Q_EMIT useNotchPanelChanged(enabled);
+}
+
+bool Settings::welcomeShown() const
+{
+    return m_store.value(QLatin1String(kWelcomeShownKey), false).toBool();
+}
+
+void Settings::setWelcomeShown()
+{
+    m_store.setValue(QLatin1String(kWelcomeShownKey), true);
+    // Written through now: a menu-bar app is killed far more often than it is
+    // quit, and a lost write here means the next welcome counts as a first.
+    m_store.sync();
+}
+
+bool Settings::welcomeAtStartup() const
+{
+    return m_store.value(QLatin1String(kWelcomeAtStartupKey), true).toBool();
+}
+
+void Settings::setWelcomeAtStartup(bool on)
+{
+    if (welcomeAtStartup() == on)
+        return;
+    m_store.setValue(QLatin1String(kWelcomeAtStartupKey), on);
+    // Written through, for the same reason as welcomeShown.
+    m_store.sync();
+    Q_EMIT welcomeAtStartupChanged(on);
 }
 
 } // namespace hyperwave
