@@ -46,8 +46,18 @@ void buildInto(NSMenu *menu, const MenuModel &model, id target, SEL action,
         }
 
         entry.enabled = item.enabled;
-        if (NSImage *icon = appIconForBundle(item.iconBundleId, 16.0))
+        if (NSImage *icon = appIconForBundle(item.iconBundleId, 16.0)) {
             entry.image = icon;
+            // macOS 27 decides for itself whether a menu item's image shows,
+            // and typically hides it. The Playing list's app icons are the
+            // point of the list, so ask for them to stay (HYP-304; hypershot
+            // hit the same with its Open Recent thumbnails, HYP-289). The SDK
+            // check keeps an older SDK, as on a CI runner, building.
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
+            if (@available(macOS 27.0, *))
+                entry.preferredImageVisibility = NSMenuItemImageVisibilityVisible;
+#endif
+        }
 
         // The dimmed trailing text ("playing") rides along as an attributed
         // title, since NSMenuItem has no second label of its own.

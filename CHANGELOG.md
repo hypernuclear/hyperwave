@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The glow is blurred both ways now.** Its five passes shared one uniform
+  block that was rewritten before each pass, but the GPU runs them all after
+  the last write, so every pass read the composite's settings: both blurs ran
+  vertically, the rays marched with the wrong step, and the glow's radius did
+  nothing. Each pass has its own block now. Lines, Ring, and any look with the
+  glow switched on will look softer and wider than before.
+- **The Playing list shows its app icons on macOS 27,** which hides menu item
+  images unless an app asks for them.
+
 ## [0.2.0] - 2026-08-31
 
 The notch panel stops being an extra and becomes a choice.
