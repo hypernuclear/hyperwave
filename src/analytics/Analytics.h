@@ -81,6 +81,16 @@ inline constexpr auto kPermission = "permission_granted";
 // Whether a source OTHER than the whole system mix is in use -- not which one.
 // The device's name is the user's business and never leaves the machine.
 inline constexpr auto kSourcePicked = "source_picked";
+// Open at Login, from the menu or the welcome window: what the system ended
+// up doing, not what was asked.
+inline constexpr auto kLoginItem = "login_item_toggled";
+// The welcome window (qml/Welcome.qml). The sign-up is counted, the
+// address never: it goes to hypernuclear.com and nowhere else.
+inline constexpr auto kWelcomeShown = "welcome_shown";
+inline constexpr auto kWelcomeAtStartup = "welcome_at_startup_toggled";
+inline constexpr auto kNewsletter = "newsletter_submitted";
+inline constexpr auto kPromoClicked = "promo_clicked";
+inline constexpr auto kLinkOpened = "website_link_opened";
 } // namespace Ev
 
 /// User-property keys, same reasoning as the event names.

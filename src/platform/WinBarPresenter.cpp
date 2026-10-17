@@ -322,7 +322,7 @@ public:
         // menuAboutToShow first and pop up afterwards, so any rebuild the app
         // does in response has already finished before anything is shown.
         auto menu = std::make_unique<QMenu>();
-        m_aboutAction = nullptr;
+        m_settingsAction = nullptr;
         m_quitAction = nullptr;
         populate(menu.get(), model);
         insertWindowsItems(menu.get());
@@ -445,8 +445,8 @@ private:
                                  [this, id] { Q_EMIT menuActionTriggered(id); });
                 // Remembered so the platform items below can be inserted
                 // above them rather than dangling after Quit.
-                if (id == QLatin1String(MenuAction::kAbout))
-                    m_aboutAction = action;
+                if (id == QLatin1String(MenuAction::kSettings))
+                    m_settingsAction = action;
                 else if (id == QLatin1String(MenuAction::kQuit))
                     m_quitAction = action;
                 break;
@@ -501,11 +501,19 @@ private:
             rescale();
         });
 
-        // Above About, so the order reads Settings, Position, About, Quit --
-        // the two rows that change things together, the two that do not below
-        // them. Quit is the fallback anchor; nothing belongs below Quit.
-        if (QAction *anchor = m_aboutAction ? m_aboutAction : m_quitAction) {
-            menu->insertMenu(anchor, position);
+        // Straight under Settings, in the group of rows that open something:
+        // Settings, Position, Show Splash, ... (the shared menu's grouping,
+        // App::buildMenu). Quit is the fallback anchor; nothing belongs below
+        // Quit.
+        QAction *before = m_quitAction;
+        if (m_settingsAction) {
+            const QList<QAction *> actions = menu->actions();
+            const qsizetype at = actions.indexOf(m_settingsAction);
+            if (at >= 0 && at + 1 < actions.size())
+                before = actions.at(at + 1);
+        }
+        if (before) {
+            menu->insertMenu(before, position);
         } else {
             menu->addSeparator();
             menu->addMenu(position);
@@ -649,7 +657,7 @@ private:
     std::unique_ptr<ThemeWatchFilter> m_filter;
     QTimer m_clock;
     QTimer m_fullscreenTimer;
-    QAction *m_aboutAction = nullptr;
+    QAction *m_settingsAction = nullptr;
     QAction *m_quitAction = nullptr;
 
     int m_widthPt = kDefaultWidthPt;

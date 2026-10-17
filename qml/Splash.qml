@@ -26,11 +26,6 @@ Window {
     readonly property color brandBlue: "#267ac8"
     readonly property color brandInk: "#ffffff"
 
-    // Bundled, not requested by name: the system UI face is what a missing font
-    // quietly becomes, and it looks close enough to Inter that nobody would
-    // notice the panel had gone generic.
-    FontLoader { id: inter; source: "qrc:/icons/Inter-SemiBold.ttf" }
-
     // Sized from the artwork's own aspect so it is never letterboxed or
     // cropped, at roughly half its pixel size -- the source is 1448x1086, so
     // this lands near 1:1 on a Retina display and stays sharp.
@@ -161,8 +156,10 @@ Window {
                 // below the name; at this size it just looked like it had not
                 // finished loading.
                 color: root.brandInk
-                font.family: inter.name
-                font.weight: Font.DemiBold
+                // Compiled in and registered by main.cpp; the build fails
+                // without it, so this never quietly becomes the system face.
+                font.family: "Satoshi"
+                font.weight: Font.Bold
                 font.pixelSize: panel.height * 0.155
                 // Right-aligned to the logotype's own edge -- it is the
                 // last item in the row, so lockup.right is its right -- and

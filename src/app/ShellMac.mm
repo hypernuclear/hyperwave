@@ -1,5 +1,7 @@
 #include "app/Shell.h"
 
+#include <QWindow>
+
 #import <AppKit/AppKit.h>
 
 namespace hyperwave {
@@ -36,6 +38,17 @@ void relaunchApp()
                    [NSApp terminate:nil];
                });
            }];
+}
+
+void hideWindowTitle(QWindow *window)
+{
+    if (!window)
+        return;
+    window->create();
+    // A bridged cast: this file is ARC, and the view is Qt's, not ours to own.
+    NSView *view = (__bridge NSView *)reinterpret_cast<void *>(window->winId());
+    if (NSWindow *nsWindow = view.window)
+        nsWindow.titleVisibility = NSWindowTitleHidden;
 }
 
 } // namespace hyperwave

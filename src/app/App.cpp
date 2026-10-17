@@ -10,13 +10,13 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QGuiApplication>
-#include <QMessageBox>
 #include <QPalette>
 #include <QVBoxLayout>
 #include <QTimer>
 
 #include "app/DebugHud.h"
 #include "app/Shell.h"
+#include "platform/LaunchAtLogin.h"
 #include "render/Palette.h"
 
 #include "platform/PanelPresenter.h"
@@ -345,6 +345,16 @@ bool App::start()
         m_analytics->property(Prop::kGradient, m_settings.gradientId());
         m_analytics->event(Ev::kLaunch);
     }
+    // The welcome window flips the same switch as the menu, so the menu's
+    // tick follows it there.
+    if (m_analytics)
+        connect(m_analytics, &Analytics::enabledChanged, this, &App::refreshMenu);
+    // Same for "Show at startup", from the window's box or the menu's tick.
+    connect(&m_settings, &Settings::welcomeAtStartupChanged, this, [this](bool on) {
+        if (m_analytics)
+            m_analytics->event(Ev::kWelcomeAtStartup, {{QStringLiteral("on"), on ? "1" : "0"}});
+        refreshMenu();
+    });
 
     // Null on every platform without an updater, and on any build made without
     // a signing key. The menu asks before it offers the entry.
@@ -1034,27 +1044,53 @@ MenuModel App::buildMenu() const
         menu.append(MenuItem::action(QLatin1String(MenuAction::kRestart),
                                      QStringLiteral("Restart hyperwave")));
     }
+    // --- things that open a window ----------------------------------------
+    // Grouped by what they do rather than by subject: each puts something on
+    // screen and gets out of the way. The same grouping as hyperbin's menu.
+    // On Windows the presenter adds Position here too, under Settings.
     menu.append(MenuItem::separator());
     menu.append(MenuItem::action(QLatin1String(MenuAction::kSettings),
                                 QStringLiteral("Settings…")));
     menu.append(MenuItem::action(QLatin1String(MenuAction::kShowSplash),
                                  QStringLiteral("Show Splash")));
+    if (m_updater) {
+        // Only when there is something behind it. A build with no updater
+        // compiled in -- Linux, or any build without a signing key -- shows no
+        // entry at all rather than a greyed-out one that can never be used.
+        menu.append(MenuItem::action(QLatin1String(MenuAction::kCheckForUpdates),
+                                     QStringLiteral("Check for Updates…"))
+                        .withEnabled(m_updater->canCheckForUpdates()));
+    }
+    menu.append(MenuItem::action(QLatin1String(MenuAction::kWelcome),
+                                 QStringLiteral("Welcome to hyperwave…")));
+
+    // --- switches that outlive this session --------------------------------
+    // Each changes what the app does when nobody is looking -- at login, at
+    // launch, over the network -- so they sit together above Quit, where a
+    // settings group is conventionally found.
+    menu.append(MenuItem::separator());
+    // Open at login. Absent where there is no implementation, rather than a
+    // switch that does nothing. Read from the system each time the menu is
+    // built: the user can turn it off in System Settings or delete the
+    // Startup shortcut, and a cached copy would then be a lie.
+    if (launchAtLogin::supported()) {
+        menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleLogin),
+                                     QStringLiteral("Open at Login"))
+                        .withCheck(launchAtLogin::isEnabled()));
+    }
+    // Whether the welcome window opens after the splash at each launch. The
+    // window's own "Show at startup" box is the same setting.
+    menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleWelcomeAtStartup),
+                                 QStringLiteral("Show Welcome at Startup"))
+                    .withCheck(m_settings.welcomeAtStartup()));
     if (m_analytics) {
         // Absent, not greyed out, in a build that has nothing to send to.
         menu.append(MenuItem::action(QLatin1String(MenuAction::kToggleAnalytics),
                                      QStringLiteral("Send Anonymous Usage Data"))
                         .withCheck(m_analytics->enabled()));
     }
-    if (m_updater) {
-        // Only when there is something behind it. A build with no updater
-        // compiled in -- Linux, or any build without a signing key -- shows no
-        // entry at all rather than a greyed-out one that can never be used.
-        menu.append(MenuItem::action(QLatin1String(MenuAction::kCheckForUpdates),
-                                     QStringLiteral("Check for Updates..."))
-                        .withEnabled(m_updater->canCheckForUpdates()));
-    }
-    menu.append(
-        MenuItem::action(QLatin1String(MenuAction::kAbout), QStringLiteral("About hyperwave")));
+
+    menu.append(MenuItem::separator());
     menu.append(
         MenuItem::action(QLatin1String(MenuAction::kQuit), QStringLiteral("Quit hyperwave")));
     return menu;
@@ -1188,8 +1224,26 @@ void App::onMenuAction(const QString &actionId)
             m_updater->checkForUpdates();
         return;
     }
-    if (actionId == QLatin1String(MenuAction::kAbout)) {
-        showAbout();
+    if (actionId == QLatin1String(MenuAction::kToggleLogin)) {
+        // Reflect what the SYSTEM ended up doing, not what was asked:
+        // registering can fail (an unsigned or relocated bundle on macOS, an
+        // unwritable Startup folder on Windows), and the tick is rebuilt from
+        // the system's answer the next time the menu opens.
+        const bool actual = launchAtLogin::setEnabled(!launchAtLogin::isEnabled());
+        if (m_analytics)
+            m_analytics->event(Ev::kLoginItem, {{QStringLiteral("on"), actual ? "1" : "0"}});
+        Q_EMIT loginItemToggled(actual);
+        refreshMenu();
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kToggleWelcomeAtStartup)) {
+        m_settings.setWelcomeAtStartup(!m_settings.welcomeAtStartup());
+        return;
+    }
+    if (actionId == QLatin1String(MenuAction::kWelcome)) {
+        // The window itself is main()'s (qml/Welcome.qml): it carries the
+        // version, the capture line, the newsletter and the other apps.
+        Q_EMIT welcomeRequested();
         return;
     }
     if (actionId == QLatin1String(MenuAction::kQuit)) {
@@ -1212,38 +1266,13 @@ void App::applyFrameRate()
     }
 }
 
-void App::showAbout()
+QString App::captureStatus() const
 {
-    QMessageBox box;
-    box.setWindowTitle(QStringLiteral("hyperwave"));
-    box.setText(QStringLiteral("<b>hyperwave</b> %1").arg(QStringLiteral(HYPERWAVE_VERSION)));
-    // Rich text, for the sake of the one link.
-    //
-    // Which costs two things worth naming. QMessageBox decides plain or rich by
-    // sniffing the string, so adding an anchor silently reformats the whole
-    // block: the newlines that used to separate these lines stop separating
-    // anything and have to be <br>. And the status detail is interpolated into
-    // markup now, so it is escaped -- it carries the output device's name, and
-    // there is nothing stopping someone owning a pair of headphones with an
-    // ampersand in the name.
-    //
-    // Nothing else is needed to make the link work: QMessageBox builds the
-    // informative label with openExternalLinks set and links reachable by
-    // mouse, so it opens in the browser on its own.
-    box.setInformativeText(QStringLiteral("A system audio visualiser that lives in the menu bar."
-                                          "<br><br>Capture: %1<br>Rate: %2 Hz<br><br>"
-                                          "<a href=\"https://hypernuclear.com\">hypernuclear.com</a>"
-                                          "<br>© 2026 hypernuclear LLC")
-                               .arg(m_audio->source()->statusDetail().toHtmlEscaped())
-                               .arg(m_audio->source()->sampleRate(), 0, 'f', 0));
-    box.setStandardButtons(QMessageBox::Ok);
-
-    // An LSUIElement app has no Dock icon and no application menu, so a dialog
-    // opens behind whatever is frontmost unless the app takes focus first.
-    activateApp();
-    box.raise();
-    box.activateWindow();
-    box.exec();
+    if (!m_audio || !m_audio->source())
+        return {};
+    return QStringLiteral("Capture: %1 · Rate: %2 Hz")
+        .arg(m_audio->source()->statusDetail())
+        .arg(m_audio->source()->sampleRate(), 0, 'f', 0);
 }
 
 void App::relaunch()

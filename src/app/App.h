@@ -76,6 +76,19 @@ Q_SIGNALS:
     // component and its engine outlive any one window, and there is no reason
     // for the audio and rendering layer to know about either.
     void splashRequested();
+    // "Welcome to hyperwave..." was chosen. main() owns that window too
+    // (qml/Welcome.qml), for the same reason.
+    void welcomeRequested();
+    // "Open at Login" was toggled, carrying what the SYSTEM ended up doing
+    // rather than what was asked: registering can fail.
+    void loginItemToggled(bool on);
+
+public:
+    // What main() needs for the welcome window: the usage-data switch, the
+    // welcome settings, and the capture line the old About box showed.
+    Analytics *analytics() const { return m_analytics; }
+    Settings &settings() { return m_settings; }
+    QString captureStatus() const;
 
 private:
     // One thing that shows bars. There are up to two: the status item, and on a
@@ -163,7 +176,6 @@ private:
     // presenter being taken away.
     void retireSurface(Surface *&slot);
     MenuModel buildMenu() const;
-    void showAbout();
     void relaunch();
     void runVerifyTick();
 

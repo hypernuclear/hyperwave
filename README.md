@@ -346,6 +346,30 @@ one-way, the raw id never leaves the machine, and it is computed the same way in
 the sibling products -- so the same machine reports the same id to each of them,
 which is a correlation worth knowing about and a reason the switch exists.
 
+The same switch sits in the welcome window (`qml/Welcome.qml`), which opens by
+itself after the splash until "Show at startup" is unticked (there, or in the
+menu as Show Welcome at Startup), and from the menu's "Welcome to hyperwave..."
+at any time -- it is where first run discloses analytics. From there, analytics
+also records how the window was opened (first run, startup or the menu), that a
+newsletter sign-up was accepted, which product card was opened, which place in
+the app a website link was opened from, and when Open at Login or Show at
+startup is switched. Never an address, never a URL.
+
+Separate from analytics, and whatever the switch says, the welcome window sends:
+
+- **Your email, only if you press Subscribe**, to
+  `hypernuclear.com/api/newsletter/signup` with `source=hyperwave_app`. The site's
+  double opt-in sends one confirmation email and stores nothing until its link is
+  clicked.
+- **The store request**, `hypernuclear.com/api/v1/store?app=hyperwave`, each time
+  the window opens, with the app version and platform. It returns the other apps'
+  words and any running sale; offline, the window uses built-in copy.
+- **Tagged website links.** Links to hypernuclear.com carry
+  `utm_source=hyperwave&utm_medium=app&utm_campaign=welcome`
+  (`src/app/WebsiteLinks.h`, the same rules as hypershot's). Anything that could
+  carry something private -- `/activate`, `/api/`, checkout, other hosts -- opens
+  untouched.
+
 ## Permission
 
 The system-audio grant is **required and silently enforced**. Without it
@@ -396,6 +420,11 @@ open build/hyperwave.app
 Qt is found automatically: `QT_ROOT` if set, otherwise the newest
 `~/Qt/6.*/macos`. Override with `-DCMAKE_PREFIX_PATH=...`, or keep a local
 `CMakeUserPresets.json` (git-ignored) with a preset inheriting `dev`.
+
+The first configure needs the network. The app's typeface, Satoshi, can't
+be committed under its licence, so CMake downloads it from Fontshare into
+the build tree and compiles it in; without it the configure fails. Later
+configures of the same build tree reuse the copy (`THIRD-PARTY-NOTICES.md`).
 
 Every build is code-signed with the hypernuclear Developer ID. That is not about
 distribution — an ad-hoc signature is keyed by the code hash, so each rebuild

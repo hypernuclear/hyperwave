@@ -70,7 +70,9 @@ jobs:
           # that looks like a build break. Quick 3D is GPLv3-only under
           # open-source Qt; installing it here changes nothing, linking it
           # would.
-          modules: qtshadertools qtquick3d
+          # qtimageformats for its WebP plugin: the welcome window plays the
+          # studio's product loops, which are animated WebP.
+          modules: qtshadertools qtquick3d qtimageformats
           # Qt 6.11+ uses a repo layout that aqtinstall 3.3.0 -- the action's
           # default, and the newest on PyPI -- cannot parse; it fails with
           # "Failed to locate XML data for Qt version". Fixed on aqt master but
@@ -89,6 +91,17 @@ jobs:
       # that are not installs. Analytics::create() returns null without a key,
       # so this path is exercised too -- it is the same one every contributor's
       # local build takes.
+      # Satoshi is downloaded from Fontshare at configure time and never
+      # committed (THIRD-PARTY-NOTICES.md). Cached here so builds don't depend
+      # on Fontshare being up: CMake finds the copy and skips the download.
+      # The cache is private to this repo's workflows, so the font isn't
+      # redistributed. Bump the key to fetch a fresh copy.
+      - name: Cache Satoshi
+        uses: actions/cache@v4
+        with:
+          path: build/_deps/satoshi
+          key: satoshi-v1
+
       - name: Configure
         # install-qt-action exports QT_ROOT_DIR and puts qmake on PATH;
         # CMakeLists.txt reads QT_ROOT, so hand it across explicitly rather
@@ -146,9 +159,22 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           arch: win64_msvc2022_64
-          modules: qtshadertools qtquick3d
+          # qtimageformats for its WebP plugin: the welcome window plays the
+          # studio's product loops, which are animated WebP.
+          modules: qtshadertools qtquick3d qtimageformats
           aqtsource: "git+https://github.com/miurahr/aqtinstall.git@75ea7944aeac985e226df0a882cd5b3470e51a97"
           cache: true
+
+      # Satoshi is downloaded from Fontshare at configure time and never
+      # committed (THIRD-PARTY-NOTICES.md). Cached here so builds don't depend
+      # on Fontshare being up: CMake finds the copy and skips the download.
+      # The cache is private to this repo's workflows, so the font isn't
+      # redistributed. Bump the key to fetch a fresh copy.
+      - name: Cache Satoshi
+        uses: actions/cache@v4
+        with:
+          path: build/_deps/satoshi
+          key: satoshi-v1
 
       - name: Configure
         shell: bash

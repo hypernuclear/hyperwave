@@ -26,4 +26,8 @@ void relaunchApp()
     QCoreApplication::quit();
 }
 
+void hideWindowTitle(QWindow *)
+{
+}
+
 } // namespace hyperwave

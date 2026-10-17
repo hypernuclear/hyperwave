@@ -94,7 +94,9 @@ jobs:
           # qtshadertools bakes the strand and glow shaders; qtquick3d is NOT
           # requested, and must not be -- it is GPLv3-only, so linking it would
           # make an open-source-Qt binary GPLv3. See the licence note in README.
-          modules: qtshadertools
+          # qtimageformats for its WebP plugin: the welcome window plays the
+          # studio's product loops, which are animated WebP.
+          modules: qtshadertools qtimageformats
           # Qt 6.11+ on Windows uses a flattened per-arch repo layout that
           # aqtinstall 3.3.0 -- the action's default -- cannot parse. Pinned to
           # the same SHA the sibling products use so they move together.
@@ -104,6 +106,17 @@ jobs:
       - name: Install Ninja
         if: runner.os == 'macOS'
         run: brew list ninja >/dev/null 2>&1 || brew install ninja
+
+      # Satoshi is downloaded from Fontshare at configure time and never
+      # committed (THIRD-PARTY-NOTICES.md). Cached here so builds don't depend
+      # on Fontshare being up: CMake finds the copy and skips the download.
+      # The cache is private to this repo's workflows, so the font isn't
+      # redistributed. Bump the key to fetch a fresh copy.
+      - name: Cache Satoshi
+        uses: actions/cache@v4
+        with:
+          path: build/_deps/satoshi
+          key: satoshi-v1
 
       - name: Configure
         shell: bash
