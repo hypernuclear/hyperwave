@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-18
+
+A welcome window, Open at Login, and a microphone that works on a MacBook.
+
+### Added
+- **A welcome window.** It says what hyperwave does, takes an email for the
+  hypernuclear newsletter if you want it, and shows the studio's other apps. It
+  opens when the app starts until you untick `Show at startup`, and
+  `Welcome to hyperwave…` in the menu brings it back. Updating from 0.2.0
+  shows it once on the next launch.
+- **Open at Login,** on macOS (a login item) and Windows (a Startup shortcut),
+  as a menu item and as a switch in the welcome window.
+
+### Changed
+- **The menu is regrouped:** the app's own items, then the three switches
+  (Open at Login, Show Welcome at Startup, Send Anonymous Usage Data), then
+  Quit.
+- **The interface typeface is Satoshi.** Its licence does not allow it in the
+  repository, so CMake downloads it from Fontshare at build time and the build
+  fails if it cannot. Inter is gone.
+
 ### Fixed
 - **The glow is blurred both ways now.** Its five passes shared one uniform
   block that was rewritten before each pass, but the GPU runs them all after
@@ -323,6 +344,7 @@ rather than assuming one is installed.
   entitlement-gated since macOS 15.4 -- cost a permission prompt per controlled
   app and worked for two of them.
 
-[Unreleased]: https://github.com/hypernuclear/hyperwave/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hypernuclear/hyperwave/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hypernuclear/hyperwave/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hypernuclear/hyperwave/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hypernuclear/hyperwave/releases/tag/v0.1.0
