@@ -134,6 +134,7 @@ add_library(hyperwave_core STATIC
     src/audio/AudioSource.h
     src/audio/Downmix.cpp
     src/audio/Downmix.h
+    src/audio/Resample.h
     src/render/BarRenderer.cpp
     src/render/StrandRenderer.cpp
     src/render/LineRenderer.cpp

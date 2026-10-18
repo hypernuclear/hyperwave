@@ -10,6 +10,7 @@ function(hyperwave_test name)
 endfunction()
 
 hyperwave_test(tst_ring)
+hyperwave_test(tst_resample)
 hyperwave_test(tst_fft)
 hyperwave_test(tst_spectrum)
 hyperwave_test(tst_ballistics)

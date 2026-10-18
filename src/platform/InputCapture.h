@@ -29,18 +29,20 @@ public:
     InputCapture(const InputCapture &) = delete;
     InputCapture &operator=(const InputCapture &) = delete;
 
+    // Listens to the default input, and keeps following it -- AirPods
+    // connecting, an interface unplugged -- until stop().
     bool start();
     void stop();
     bool isRunning() const;
 
     // The rate the input device is actually delivering at, or 0 when stopped.
-    //
-    // Worth reading rather than assuming: the analysis is configured from the
-    // *output* rate, so if an interface is running its input at 44.1k while the
-    // output is at 48k, the mixed-in signal lands about a semitone out. Both
-    // devices are usually at the same rate and it does not arise, but "usually"
-    // is why this is exposed instead of hidden.
     double sampleRate() const;
+
+    // The analysis rate. The ring is written at this rate, not the device's:
+    // the DSP sums input and output sample for sample, and the two devices
+    // need not agree. A MacBook Pro's own mic runs at 96k, and mixed raw into
+    // a 48k analysis it landed an octave low. Safe to call at any time.
+    void setTargetRate(double rate);
 
     MonoRing *ring();
     std::uint64_t backlogFrames() const;
@@ -50,6 +52,12 @@ public:
     struct Impl;
 
 private:
+    bool open();
+    void close();
+    void reopen();
+    void follow(bool on);
+    void watchRate();
+
     std::unique_ptr<Impl> m_impl;
 };
 

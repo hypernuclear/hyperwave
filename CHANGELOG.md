@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **The glow is blurred both ways now.** Its five passes shared one uniform
+  block that was rewritten before each pass, but the GPU runs them all after
+  the last write, so every pass read the composite's settings: both blurs ran
+  vertically, the rays marched with the wrong step, and the glow's radius did
+  nothing. Each pass has its own block now. Lines, Ring, and any look with the
+  glow switched on will look softer and wider than before.
+- **The Playing list shows its app icons on macOS 27,** which hides menu item
+  images unless an app asks for them.
+- **Include microphone input hears a MacBook's built-in mic.** Releases are
+  signed with the hardened runtime, which silently hands an app without the
+  audio-input entitlement nothing but zeros from the built-in mic -- no prompt,
+  no error. USB mics were never affected, which is why it looked like one
+  device's problem. Packaging now refuses to sign a release without it.
+- **The microphone lands at the right pitch.** It was mixed in at its own
+  sample rate rather than the analysis rate, so a MacBook Pro's mic, which runs
+  at 96 kHz, showed up an octave low. It is resampled now.
+- **The microphone follows the default input.** It used to stay on whichever
+  device was the default when it was switched on, so connecting AirPods or
+  unplugging an interface left it listening to the wrong thing, or to nothing,
+  until it was toggled off and on.
+
 ## [0.2.0] - 2026-08-31
 
 The notch panel stops being an extra and becomes a choice.

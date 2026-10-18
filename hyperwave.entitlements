@@ -21,10 +21,17 @@
 	     the one feature it has.
 	     The two below are development conveniences so a debugger can attach
 	     to a Developer-ID-signed build. They should come out of the release
-	     entitlements when there is a release. -->
+	     entitlements when there is a release.
+
+	     audio-input is here only to match the release file. A local build is
+	     not signed with the hardened runtime, so it hears the built-in mic
+	     either way; a release is, and without the key it hears nothing from
+	     it. See hyperwave-release.entitlements. -->
 	<key>com.apple.security.cs.debugger</key>
 	<true/>
 	<key>com.apple.security.get-task-allow</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
 	<true/>
 </dict>
 </plist>

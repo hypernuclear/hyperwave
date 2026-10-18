@@ -57,6 +57,9 @@ struct Uniforms
 // whatever follows.
 static_assert(sizeof(Uniforms) == 48);
 
+// The passes, in order, each with its own uniform block (see Impl::uniforms).
+enum Pass : quint32 { kBright, kBlurH, kBlurV, kRays, kComposite, kPassCount };
+
 } // namespace
 
 struct GpuPost::Impl
@@ -80,7 +83,15 @@ struct GpuPost::Impl
         outputPass;
 
     std::unique_ptr<QRhiSampler> sampler;
-    std::unique_ptr<QRhiBuffer> uniforms;   // one block, rewritten per pass
+    // One block PER PASS, each at its own aligned offset in one buffer.
+    //
+    // Not one block rewritten before each pass: a Dynamic buffer has a copy
+    // per frame in flight, not per pass, so every write lands before the GPU
+    // runs any of the five and all of them read the last one -- the
+    // composite's. That made both blurs vertical and the radius a dead
+    // control (HYP-304).
+    std::unique_ptr<QRhiBuffer> uniforms;
+    quint32 blockStride = 0;   // sizeof(Uniforms) rounded up to ubufAlignment()
 
     std::unique_ptr<QRhiShaderResourceBindings> brightSrb, blurTmpSrb, bloomSrb, raysSrb,
         outputSrb;
@@ -203,8 +214,9 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
         }
     }
     if (!d.uniforms) {
-        d.uniforms.reset(
-            rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(Uniforms)));
+        d.blockStride = quint32(rhi->ubufAligned(int(sizeof(Uniforms))));
+        d.uniforms.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
+                                        d.blockStride * kPassCount));
         if (!d.uniforms->create()) {
             d.failed = true;
             return;
@@ -224,12 +236,13 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
             return;
         }
 
-        const auto makeSrb = [&](std::unique_ptr<QRhiShaderResourceBindings> &srb,
+        const auto makeSrb = [&](std::unique_ptr<QRhiShaderResourceBindings> &srb, Pass pass,
                                  QRhiTexture *first, QRhiTexture *second,
                                  QRhiTexture *third = nullptr) {
             QVarLengthArray<QRhiShaderResourceBinding, 4> bindings;
             bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-                0, QRhiShaderResourceBinding::FragmentStage, d.uniforms.get()));
+                0, QRhiShaderResourceBinding::FragmentStage, d.uniforms.get(),
+                pass * d.blockStride, sizeof(Uniforms)));
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
                 1, QRhiShaderResourceBinding::FragmentStage, first, d.sampler.get()));
             if (second) {
@@ -245,11 +258,11 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
             return srb->create();
         };
 
-        if (!makeSrb(d.brightSrb, d.source.get(), nullptr)
-            || !makeSrb(d.blurTmpSrb, d.bright.get(), nullptr)
-            || !makeSrb(d.bloomSrb, d.blurTmp.get(), nullptr)
-            || !makeSrb(d.raysSrb, d.bright.get(), nullptr)
-            || !makeSrb(d.outputSrb, d.source.get(), d.bloom.get(), d.rays.get())) {
+        if (!makeSrb(d.brightSrb, kBright, d.source.get(), nullptr)
+            || !makeSrb(d.blurTmpSrb, kBlurH, d.bright.get(), nullptr)
+            || !makeSrb(d.bloomSrb, kBlurV, d.blurTmp.get(), nullptr)
+            || !makeSrb(d.raysSrb, kRays, d.bright.get(), nullptr)
+            || !makeSrb(d.outputSrb, kComposite, d.source.get(), d.bloom.get(), d.rays.get())) {
             d.failed = true;
             return;
         }
@@ -299,11 +312,40 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
     u.rayLength = static_cast<float>(params.rayLength);
     u.rayDecay = static_cast<float>(params.rayDecay);
 
+    // Every pass's block, written up front into its own slot. The first pass
+    // carries the upload; the GPU then runs the five passes in order, each
+    // reading only its own block.
+    const auto setBlock = [&](Pass pass, const Uniforms &block) {
+        upload->updateDynamicBuffer(d.uniforms.get(), pass * d.blockStride, sizeof(Uniforms),
+                                    &block);
+    };
+
+    // 1. What is bright enough to glow, at half resolution.
+    u.texelSize[0] = 1.0f / float(w);
+    u.texelSize[1] = 1.0f / float(h);
+    setBlock(kBright, u);
+
+    // 2 and 3. Separable blur, horizontal then vertical.
+    const float radius = static_cast<float>(std::max<qreal>(params.radius, 0.1));
+    u.texelSize[0] = radius / float(d.bloomSize.width());
+    u.texelSize[1] = radius / float(d.bloomSize.height());
+    u.direction = 0.0f;
+    setBlock(kBlurH, u);
+    u.direction = 1.0f;
+    setBlock(kBlurV, u);
+
+    // 4. Rays, marched from the bright pass towards the centre, at the
+    // blur's texel size.
+    setBlock(kRays, u);
+
+    // 5. Back over the original, with the channels pulled apart radially.
+    u.texelSize[0] = 1.0f / float(w);
+    u.texelSize[1] = 1.0f / float(h);
+    setBlock(kComposite, u);
+
     const auto runPass = [&](QRhiTextureRenderTarget *rt, QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb, const QSize &viewport,
-                             const Uniforms &block, QRhiResourceUpdateBatch *extra) {
-        QRhiResourceUpdateBatch *batch = extra ? extra : rhi->nextResourceUpdateBatch();
-        batch->updateDynamicBuffer(d.uniforms.get(), 0, sizeof(Uniforms), &block);
+                             QRhiResourceUpdateBatch *batch) {
         cb->beginPass(rt, QColor(0, 0, 0, 0), {1.0f, 0}, batch);
         cb->setGraphicsPipeline(ps);
         cb->setViewport({0, 0, float(viewport.width()), float(viewport.height())});
@@ -311,32 +353,11 @@ void GpuPost::apply(QImage &image, const RenderStyle::Bloom &params)
         cb->draw(3);
         cb->endPass();
     };
-
-    // 1. What is bright enough to glow, at half resolution.
-    u.texelSize[0] = 1.0f / float(w);
-    u.texelSize[1] = 1.0f / float(h);
-    runPass(d.brightTarget.get(), d.brightPipeline.get(), d.brightSrb.get(), d.bloomSize, u,
-            upload);
-
-    // 2 and 3. Separable blur, horizontal then vertical.
-    const float radius = static_cast<float>(std::max<qreal>(params.radius, 0.1));
-    u.texelSize[0] = radius / float(d.bloomSize.width());
-    u.texelSize[1] = radius / float(d.bloomSize.height());
-    u.direction = 0.0f;
-    runPass(d.blurTmpTarget.get(), d.blurPipeline.get(), d.blurTmpSrb.get(), d.bloomSize, u,
-            nullptr);
-    u.direction = 1.0f;
-    runPass(d.bloomTarget.get(), d.blurPipeline.get(), d.bloomSrb.get(), d.bloomSize, u,
-            nullptr);
-
-    // 4. Rays, marched from the bright pass towards the centre.
-    runPass(d.raysTarget.get(), d.raysPipeline.get(), d.raysSrb.get(), d.bloomSize, u, nullptr);
-
-    // 5. Back over the original, with the channels pulled apart radially.
-    u.texelSize[0] = 1.0f / float(w);
-    u.texelSize[1] = 1.0f / float(h);
-    runPass(d.outputTarget.get(), d.compositePipeline.get(), d.outputSrb.get(), d.size, u,
-            nullptr);
+    runPass(d.brightTarget.get(), d.brightPipeline.get(), d.brightSrb.get(), d.bloomSize, upload);
+    runPass(d.blurTmpTarget.get(), d.blurPipeline.get(), d.blurTmpSrb.get(), d.bloomSize, nullptr);
+    runPass(d.bloomTarget.get(), d.blurPipeline.get(), d.bloomSrb.get(), d.bloomSize, nullptr);
+    runPass(d.raysTarget.get(), d.raysPipeline.get(), d.raysSrb.get(), d.bloomSize, nullptr);
+    runPass(d.outputTarget.get(), d.compositePipeline.get(), d.outputSrb.get(), d.size, nullptr);
 
     QRhiReadbackResult rb;
     QRhiResourceUpdateBatch *readback = rhi->nextResourceUpdateBatch();
