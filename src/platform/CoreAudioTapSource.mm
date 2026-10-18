@@ -424,6 +424,8 @@ bool CoreAudioTapSource::buildAggregate(bool includeOutputDevice)
     m_sampleRate = (rate > 0.0) ? rate : nominalSampleRate(m_impl->outputDevice);
     if (m_sampleRate <= 0.0)
         m_sampleRate = 48000.0;
+    // The mic is resampled to this, whether or not it is on yet.
+    m_input.setTargetRate(m_sampleRate);
 
     return true;
 }

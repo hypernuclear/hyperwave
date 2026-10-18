@@ -21,12 +21,22 @@
 	     at all. Sandboxing would buy nothing and might cost the one feature
 	     this app has.
 
-	     The single entitlement below exists for Sparkle. A hardened-runtime
-	     app has to be allowed to relaunch itself after the updater swaps the
-	     binary, and that relaunch is an Apple Event to itself. Without it the
-	     update installs and the app never comes back, which looks like the
-	     update broke it. -->
+	     apple-events exists for Sparkle. A hardened-runtime app has to be
+	     allowed to relaunch itself after the updater swaps the binary, and
+	     that relaunch is an Apple Event to itself. Without it the update
+	     installs and the app never comes back, which looks like the update
+	     broke it.
+
+	     audio-input is what lets "Include microphone input" hear the
+	     built-in microphone. The hardened runtime refuses the built-in mic to
+	     any app without it, and refuses it silently: no prompt, no error, an
+	     IO proc that runs and delivers zeros. USB mics and interfaces are not
+	     gated the same way, so v0.2.0 worked with those and heard nothing
+	     from a MacBook's own mic. Local builds are not hardened and never
+	     showed it. package-macos.sh refuses to sign without this key. -->
 	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
 	<true/>
 </dict>
 </plist>

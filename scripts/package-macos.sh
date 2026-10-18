@@ -56,6 +56,19 @@ if command -v xmllint >/dev/null; then
     rm -f /tmp/hw-ent-err
 fi
 
+# --- and they have to let the built-in mic through -------------------------
+#
+# The hardened runtime silently refuses the built-in microphone to an app
+# without com.apple.security.device.audio-input: the IO proc runs and delivers
+# zeros, with no prompt and no error. USB mics are not gated the same way, and
+# local builds are not hardened, so nothing short of a released build on a
+# MacBook shows it. v0.2.0 shipped that way.
+if ! grep -q "<key>com.apple.security.device.audio-input</key>" "$ENTITLEMENTS"; then
+    echo "ERROR: $ENTITLEMENTS is missing com.apple.security.device.audio-input." >&2
+    echo "       A release signed without it never hears the built-in mic." >&2
+    exit 1
+fi
+
 # --- is the bundle actually current? ---------------------------------------
 #
 # This script signs and packages; it does NOT compile. Refuse to package a
@@ -291,6 +304,11 @@ if [ -n "$IDENTITY" ]; then
         echo "ERROR: $APP is signed with get-task-allow." >&2
         echo "       Notarization will fail. Check which entitlements file" >&2
         echo "       was used -- it must be hyperwave-release.entitlements." >&2
+        exit 1
+    fi
+    if ! codesign -d --entitlements - "$APP" 2>/dev/null | grep -q "device.audio-input"; then
+        echo "ERROR: $APP is signed without com.apple.security.device.audio-input." >&2
+        echo "       The built-in mic would deliver silence. Check the entitlements." >&2
         exit 1
     fi
     codesign --verify --deep --strict --verbose=2 "$APP"
