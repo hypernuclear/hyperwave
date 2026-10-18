@@ -2,7 +2,8 @@ name: tag on release merge
 
 # Merging a `release/vX.Y.Z` pull request into main tags the merge commit
 # vX.Y.Z, and the tag push starts release.yml. The same arrangement as
-# hypershot's, without its beta channel: there is only main here.
+# hypershot's, without its beta channel: there is only main here. hyperbin
+# has the same file.
 #
 # The version is read from `project(... VERSION x.y.z)` in CMakeLists.txt and
 # has to agree with the branch name and have a CHANGELOG entry; anything else
