@@ -133,9 +133,12 @@ latest/win/appcast.xml
 1. Bump `project(hyperwave VERSION x.y.z)` in `CMakeLists.txt` on a
    `release/vx.y.z` branch, with a CHANGELOG entry. It gets `ci`'s build like
    any other pull request; the tag build right after it is the real one.
-2. Merge it.
-3. Tag and push: `git tag vx.y.z && git push origin vx.y.z`.
-4. Watch the run. The publish job uploads artifacts first and the feeds last: a
+2. Merge it. `tag-on-merge.yml` tags the merge commit `vx.y.z`, which starts
+   the release. It checks that the branch name, the CMake version and the
+   CHANGELOG agree first, and needs the `RELEASE_TAG_PAT` secret (a token with
+   contents: write on this repo; `GITHUB_TOKEN` cannot start another
+   workflow). If it fails, tag by hand: `git tag vx.y.z && git push origin vx.y.z`.
+3. Watch the run. The publish job uploads artifacts first and the feeds last: a
    feed naming a file nobody has uploaded sends every running copy of the app to
    a 404, and they will already have told the user an update is waiting.
 

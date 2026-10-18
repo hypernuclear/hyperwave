@@ -1,0 +1,73 @@
+name: tag on release merge
+
+# Merging a `release/vX.Y.Z` pull request into main tags the merge commit
+# vX.Y.Z, and the tag push starts release.yml. The same arrangement as
+# hypershot's, without its beta channel: there is only main here.
+#
+# The version is read from `project(... VERSION x.y.z)` in CMakeLists.txt and
+# has to agree with the branch name and have a CHANGELOG entry; anything else
+# fails here rather than publishing a release nobody meant.
+#
+# Pushed with the RELEASE_TAG_PAT secret, not GITHUB_TOKEN: GitHub does not
+# start workflow runs from GITHUB_TOKEN pushes, so that tag would exist and
+# release.yml would never run. The token needs contents: write on this repo.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: The tag token is set
+        env:
+          PAT: ${{ secrets.RELEASE_TAG_PAT }}
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "::error::RELEASE_TAG_PAT is not set, so nothing can start the release. Add it, or tag by hand: git tag vX.Y.Z && git push origin vX.Y.Z"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TAG_PAT }}
+
+      - name: Tag the merge commit
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^project([A-Za-z_]* VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1)
+          if [ -z "$version" ]; then
+            echo "::error::No project(... VERSION x.y.z) in CMakeLists.txt"
+            exit 1
+          fi
+          tag="v$version"
+          if [ "$BRANCH" != "release/$tag" ]; then
+            echo "::error::Branch $BRANCH does not match CMakeLists.txt's version ($version). Expected release/$tag."
+            exit 1
+          fi
+          if ! grep -q "^## \[$version\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$version]' section."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists."
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$tag" -m "$tag" "$SHA"
+          git push origin "$tag"
+          echo "Tagged $SHA as $tag; release.yml takes it from here."
