@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.16)
 # virtual audio driver.
 set(CMAKE_OSX_DEPLOYMENT_TARGET "14.2" CACHE STRING "Minimum macOS version")
 
-project(hyperwave VERSION 0.2.0 LANGUAGES CXX)
+project(hyperwave VERSION 0.3.0 LANGUAGES CXX)
 
 if(APPLE)
     enable_language(OBJC)
